@@ -16,7 +16,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/tasks/rules.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/tasks/rules.test.ts src/lib/meals/rules.test.ts src/lib/access/policy.test.ts tests/postgres-access.integration.test.mjs tests/postgres-meals.integration.test.mjs"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.6",

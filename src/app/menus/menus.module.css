@@ -1,0 +1,64 @@
+.page { max-width: 1180px; min-height: 100dvh; padding: 0 34px; margin: 0 auto; color: #2f3b33; }
+.header { height: 72px; display: flex; align-items: center; gap: 28px; border-bottom: 1px solid #e6e9e2; }
+.brand { display: inline-flex; align-items: center; gap: 9px; color: #27372d; font: 700 16px Manrope,sans-serif; letter-spacing: -.5px; }
+.brand > span:last-child { margin-left: -9px; color: #7b8d7d; font-weight: 400; }
+.mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; background: #dce9d9; color: #55745e; font: 700 17px Georgia,serif; }
+.headerLinks { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.headerLinks a { padding: 8px 12px; border-radius: 7px; color: #738075; font-size: 11px; font-weight: 600; }
+.headerLinks a:hover,.activeLink { background: #edf3eb; color: #4d6d54 !important; }
+.exitButton { border: 0; background: transparent; color: #819085; font-size: 11px; cursor: pointer; }
+.intro { padding: 38px 0 22px; }
+.eyebrow { margin: 0 0 9px; color: #8b9b8c; font: 700 9px Manrope,sans-serif; letter-spacing: 1.45px; }
+.titleRow { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
+.titleRow h1 { margin: 0; color: #2d3a31; font: 500 clamp(34px,5vw,48px)/1.06 Georgia,serif; letter-spacing: -1.2px; }
+.titleRow h1 span { color: #6d8a70; }
+.titleRow p { margin: 9px 0 0; color: #879188; font-size: 12px; }
+.weekControls { display: flex; align-items: center; gap: 7px; padding-bottom: 2px; }
+.weekControls button { min-width: 35px; height: 35px; border: 1px solid #e1e7de; border-radius: 8px; background: white; color: #617965; font-size: 15px; cursor: pointer; }
+.weekControls .todayButton { padding: 0 12px; font-size: 10px; font-weight: 700; }
+.weekControls button:disabled { opacity: .4; cursor: default; }
+.range { margin: 14px 0 0; color: #89938b; font-size: 10px; text-transform: capitalize; }
+.error,.notice { margin: 16px 0 0; padding: 11px 13px; border-radius: 8px; font-size: 11px; }
+.error { background: #fbefec; color: #9c5246; }.notice { background: #edf5eb; color: #55755b; }
+.week { display: grid; gap: 12px; padding-bottom: 38px; }
+.dayCard { overflow: hidden; border: 1px solid #e5e9e2; border-radius: 12px; background: #fff; box-shadow: 0 3px 10px #374a3510; }
+.dayHeading { display: flex; align-items: center; gap: 10px; padding: 13px 17px; border-bottom: 1px solid #edf0eb; background: #fafbf8; }
+.dayHeading h2 { margin: 0; color: #46574a; font: 600 14px Georgia,serif; text-transform: capitalize; }
+.dayHeading span { padding: 4px 7px; border-radius: 20px; background: #e8f0e5; color: #607c64; font: 700 8px Manrope,sans-serif; letter-spacing: .7px; }
+.pastDay { background: #fcfcfa; }.pastDay .dayHeading { background: #f7f8f5; }
+.mealGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.mealCard { min-width: 0; padding: 15px 17px 16px; }
+.mealCard + .mealCard { border-left: 1px solid #edf0eb; }
+.mealHeading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.mealHeading h3 { margin: 0; color: #35463a; font: 700 12px Manrope,sans-serif; }
+.mealHeading > span { color: #94a095; font-size: 9px; }
+.confirmed { display: grid; gap: 4px; margin-top: 11px; padding: 11px 12px; border: 1px solid #dbe8d8; border-radius: 9px; background: #f3f8f1; }
+.confirmedLabel { color: #809682; font: 700 8px Manrope,sans-serif; letter-spacing: 1px; }
+.confirmed strong { color: #405c45; font: 600 14px Georgia,serif; }
+.confirmed small { color: #839087; font-size: 9px; }
+.removeButton { justify-self: start; margin-top: 3px; padding: 0; border: 0; background: transparent; color: #997366; font-size: 9px; text-decoration: underline; cursor: pointer; }
+.attendance,.suggestionArea { margin-top: 13px; }
+.subheading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; color: #68776b; font: 700 9px Manrope,sans-serif; }
+.subheading small { color: #9aa49b; font: 500 9px 'DM Sans',sans-serif; }
+.people { display: flex; flex-wrap: wrap; gap: 6px; }
+.person { display: grid; grid-template-columns: 13px auto; column-gap: 4px; align-items: center; padding: 5px 8px 5px 6px; border: 1px solid #e7ebe5; border-radius: 7px; background: #fafbf9; text-align: left; cursor: pointer; }
+.person i { grid-row: span 2; width: 13px; height: 13px; display: grid; place-items: center; border-radius: 50%; font: normal 9px Manrope,sans-serif; }
+.person span { color: #556458; font: 600 9px Manrope,sans-serif; }.person small { color: #929c93; font-size: 8px; }
+.person_present i { background: #e3f0e1; color: #4e7a54; }.person_absent i { background: #f5e9e5; color: #a46f61; }.person_unknown i { background: #eff1ed; color: #8b958d; }
+.person:disabled { cursor: default; opacity: .83; }
+.suggestions { display: grid; gap: 6px; }
+.suggestion { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 9px; border: 1px solid #edf0eb; border-radius: 8px; }
+.selectedSuggestion { border-color: #ccdec9; background: #f6faf4; }
+.suggestionText { min-width: 0; display: grid; gap: 3px; }.suggestionText strong { overflow-wrap: anywhere; color: #425347; font: 600 10px Manrope,sans-serif; }.suggestionText p { margin: 0; color: #77847a; font-size: 9px; }.suggestionText small { color: #99a199; font-size: 8px; }
+.suggestionActions { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; }.suggestionActions button { padding: 5px 6px; border: 0; border-radius: 5px; background: transparent; color: #829083; font-size: 8px; cursor: pointer; }.suggestionActions .chooseButton { border: 1px solid #dbe7d7; background: #f0f6ee; color: #58755b; font-weight: 700; }.chooseButton:disabled { opacity: .45; cursor: not-allowed; }
+.empty,.loading { margin: 0; color: #9aa39b; font-size: 9px; }.warning { margin: 7px 0 0; color: #a1764e; font-size: 9px; }
+.suggestForm,.directForm { display: grid; grid-template-columns: 1.25fr 1fr auto; gap: 6px; margin-top: 10px; }
+.suggestForm input,.directForm input { width: 100%; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid #e4e9e2; border-radius: 6px; background: #fff; color: #465449; font: 10px 'DM Sans',sans-serif; }
+.suggestForm button,.directForm button { padding: 0 10px; border: 1px solid #dbe6d9; border-radius: 6px; background: #f1f6ef; color: #57735b; font: 700 9px Manrope,sans-serif; white-space: nowrap; cursor: pointer; }
+.suggestForm button:disabled,.directForm button:disabled { opacity: .5; cursor: wait; }
+.directForm { grid-template-columns: 1fr 1fr auto; padding-top: 9px; border-top: 1px solid #f0f2ef; }
+.directForm button { border-color: #59745d; background: #58765f; color: white; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.footer { display: flex; justify-content: space-between; gap: 10px; padding: 19px 0 26px; border-top: 1px solid #e6e9e2; color: #98a198; font-size: 9px; }.footer a { color: #6d826e; font-weight: 700; }
+@media(max-width:760px) { .page { padding: 0 18px; }.header { gap: 12px; }.headerLinks { gap: 0; }.headerLinks a { padding: 8px 7px; font-size: 10px; }.mealGrid { grid-template-columns: 1fr; }.mealCard + .mealCard { border-top: 1px solid #edf0eb; border-left: 0; }.intro { padding-top: 28px; }.mealCard { padding: 13px 14px; } }
+@media(max-width:520px) { .header { height: auto; min-height: 62px; padding: 10px 0; flex-wrap: wrap; }.brand { font-size: 14px; }.headerLinks { order: 3; width: 100%; display: flex; justify-content: center; margin: 0; }.exitButton { margin-left: auto; }.titleRow { align-items: flex-start; flex-direction: column; }.titleRow h1 { font-size: 37px; }.weekControls { align-self: stretch; }.weekControls button:first-child,.weekControls button:last-child { flex: 0 0 40px; }.weekControls .todayButton { flex: 1; }.suggestion { align-items: flex-start; }.suggestForm { grid-template-columns: 1fr auto; }.suggestForm label:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }.suggestForm button { grid-column: 2; grid-row: 1; }.directForm { grid-template-columns: 1fr; }.directForm button { min-height: 34px; }.footer { flex-direction: column; } }

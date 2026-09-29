@@ -81,12 +81,16 @@ export const carryPolicyEnum = pgEnum("carry_policy", ["expires_daily", "carry_f
 export const presenceRuleKindEnum = pgEnum("presence_rule_kind", ["weekly", "period", "exception"]);
 export const accessCodePurposeEnum = pgEnum("access_code_purpose", ["invitation", "recovery"]);
 export const assignmentModeEnum = pgEnum("assignment_mode", ["shared", "individual"]);
+export const accessMethodEnum = pgEnum("access_method", ["google", "code"]);
+export const mealTypeEnum = pgEnum("meal_type", ["lunch", "dinner"]);
+export const mealAttendanceStatusEnum = pgEnum("meal_attendance_status", ["present", "absent"]);
 
 export const families = pgTable("families", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   timeZone: text("time_zone").notNull().default(FAMILY_TIME_ZONE),
   revision: bigint("revision", { mode: "number" }).notNull().default(0),
+  menusRevision: bigint("menus_revision", { mode: "number" }).notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -96,10 +100,16 @@ export const members = pgTable("members", {
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   role: familyRoleEnum("role").notNull().default("member").$type<FamilyRole>(),
+  accessMethod: accessMethodEnum("access_method").notNull().default("code"),
+  googleEmail: text("google_email"),
+  version: integer("version").notNull().default(1),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (table) => [index("members_family_id_idx").on(table.familyId)]);
+}, (table) => [
+  index("members_family_id_idx").on(table.familyId),
+  uniqueIndex("members_google_email_unique_idx").on(sql`lower(${table.googleEmail})`).where(sql`${table.googleEmail} IS NOT NULL`),
+]);
 
 export const memberDevices = pgTable("member_devices", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -185,6 +195,50 @@ export const presenceRules = pgTable("presence_rules", {
   updatedAt: updatedAt(),
 }, (table) => [index("presence_member_dates_idx").on(table.memberId, table.startDate, table.endDate)]);
 
+export const mealSlots = pgTable("meal_slots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  mealDate: date("meal_date", { mode: "string" }).notNull(),
+  mealType: mealTypeEnum("meal_type").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  uniqueIndex("meal_slots_family_date_type_unique").on(table.familyId, table.mealDate, table.mealType),
+  index("meal_slots_family_date_idx").on(table.familyId, table.mealDate),
+]);
+
+export const mealSuggestions = pgTable("meal_suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slotId: uuid("slot_id").notNull().references(() => mealSlots.id, { onDelete: "cascade" }),
+  authorMemberId: uuid("author_member_id").notNull().references(() => members.id),
+  title: varchar("title", { length: 160 }).notNull(),
+  note: varchar("note", { length: 1000 }),
+  version: integer("version").notNull().default(1),
+  withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [index("meal_suggestions_slot_created_idx").on(table.slotId, table.createdAt)]);
+
+export const mealAttendance = pgTable("meal_attendance", {
+  slotId: uuid("slot_id").notNull().references(() => mealSlots.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => members.id),
+  status: mealAttendanceStatusEnum("status"),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  version: integer("version").notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [uniqueIndex("meal_attendance_pk").on(table.slotId, table.memberId), index("meal_attendance_member_idx").on(table.memberId)]);
+
+export const mealSelections = pgTable("meal_selections", {
+  slotId: uuid("slot_id").primaryKey().references(() => mealSlots.id, { onDelete: "cascade" }),
+  suggestionId: uuid("suggestion_id").references(() => mealSuggestions.id),
+  confirmedByMemberId: uuid("confirmed_by_member_id").notNull().references(() => members.id),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }).notNull().defaultNow(),
+  version: integer("version").notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const accessCodes = pgTable("access_codes", {
   id: uuid("id").primaryKey().defaultRandom(),
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
@@ -195,6 +249,7 @@ export const accessCodes = pgTable("access_codes", {
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
+  consumedByAuthUserId: text("consumed_by_auth_user_id"),
   createdAt: createdAt(),
 });
 

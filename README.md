@@ -6,9 +6,9 @@ iPhone.
 
 ## Estado
 
-El proyecto está en la etapa de preparación del repositorio y la base de Next.js.
-La aplicación todavía no está desplegada y no tiene servicios remotos
-configurados.
+La plataforma incluye una portada, acceso con Google o código, una aplicación de
+tareas y administración familiar. La base de datos requiere aplicar las
+migraciones antes de desplegar cambios que alteren su esquema.
 
 ## Requisitos locales
 
@@ -33,6 +33,10 @@ npm run typecheck
 npm run test
 npm run build
 ```
+
+Las pruebas de invariantes PostgreSQL usan `FAMILY_UTILS_TEST_DATABASE_URL`,
+una base aislada PostgreSQL 17. CI prepara un servicio temporal para ellas;
+no apuntes esa variable a la base de datos de producción.
 
 ## Documentación
 
