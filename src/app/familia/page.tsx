@@ -8,5 +8,5 @@ export const runtime = "nodejs";
 export default async function FamilyPage() {
   const member = await getMemberContext(await headers());
   if (!member) redirect("/acceso");
-  return <FamilyManager currentMemberId={member.memberId} currentRole={member.role} />;
+  return <FamilyManager currentMemberId={member.memberId} currentRole={member.role} googleAutoLinkEnabled={process.env.GOOGLE_AUTO_LINK_ENABLED === "true"} />;
 }

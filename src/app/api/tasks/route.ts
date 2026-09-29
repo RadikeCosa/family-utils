@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
@@ -48,13 +48,20 @@ export async function GET(request: Request) {
     .select({
       id: occurrences.id,
       taskId: tasks.id,
-      title: tasks.title,
-      description: tasks.description,
+      title: occurrences.titleSnapshot,
+      description: occurrences.descriptionSnapshot,
       taskStatus: tasks.status,
       taskVersion: tasks.version,
+      taskTitle: tasks.title,
+      taskDescription: tasks.description,
+      taskScheduledDate: tasks.scheduledDate,
+      taskScheduledTime: tasks.scheduledTime,
+      taskAssignmentMode: tasks.assignmentMode,
       repeatWeekdays: tasks.repeatWeekdays,
-      carryPolicy: tasks.carryPolicy,
-      scheduledTime: tasks.scheduledTime,
+      carryPolicy: occurrences.carryPolicySnapshot,
+      assignmentMode: occurrences.assignmentModeSnapshot,
+      assigneeIdsSnapshot: occurrences.assigneeIdsSnapshot,
+      scheduledTime: occurrences.scheduledTimeSnapshot,
       editedByMemberId: tasks.editedByMemberId,
       editedByName: editor.name,
       updatedAt: tasks.updatedAt,
@@ -75,22 +82,27 @@ export async function GET(request: Request) {
       ne(occurrences.status, "archived"),
       or(eq(occurrences.status, "open"), and(eq(occurrences.status, "completed"), gte(occurrences.completedAt, recentSince))),
     ))
-    .orderBy(asc(occurrences.dueDate))
+    .orderBy(sql`CASE WHEN ${occurrences.status} = 'open' THEN 0 ELSE 1 END`, asc(occurrences.dueDate), asc(occurrences.id))
     .limit(150);
 
+  const snapshotMemberIds = [...new Set(data.flatMap((item) => item.assigneeIdsSnapshot ?? []))];
   const taskIds = [...new Set(data.map((item) => item.taskId))];
-  const assignments = taskIds.length
+  const people = snapshotMemberIds.length
+    ? await getDb().select({ id: members.id, name: members.name }).from(members)
+      .where(and(eq(members.familyId, member.familyId), inArray(members.id, snapshotMemberIds)))
+    : [];
+  const peopleById = new Map(people.map((person) => [person.id, person.name]));
+  const configuredAssignments = taskIds.length
     ? await getDb().select({ taskId: taskAssignees.taskId, memberId: members.id, name: members.name })
       .from(taskAssignees)
       .innerJoin(members, eq(taskAssignees.memberId, members.id))
-      .where(and(eq(members.familyId, member.familyId), isNull(members.archivedAt)))
+      .where(and(eq(members.familyId, member.familyId), isNull(members.archivedAt), inArray(taskAssignees.taskId, taskIds)))
     : [];
-  const byTask = new Map<string, { memberId: string; name: string }[]>();
-  for (const assignment of assignments) {
-    if (!taskIds.includes(assignment.taskId)) continue;
-    const current = byTask.get(assignment.taskId) ?? [];
+  const configuredByTask = new Map<string, { memberId: string; name: string }[]>();
+  for (const assignment of configuredAssignments) {
+    const current = configuredByTask.get(assignment.taskId) ?? [];
     current.push({ memberId: assignment.memberId, name: assignment.name });
-    byTask.set(assignment.taskId, current);
+    configuredByTask.set(assignment.taskId, current);
   }
 
   return NextResponse.json({
@@ -98,7 +110,14 @@ export async function GET(request: Request) {
     timeZone: FAMILY_TIME_ZONE,
     memberId: member.memberId,
     revision,
-    tasks: data.map((item) => ({ ...item, assignees: byTask.get(item.taskId) ?? [] })),
+    tasks: data.map(({ assigneeIdsSnapshot, ...item }) => ({
+      ...item,
+      taskAssignees: configuredByTask.get(item.taskId) ?? [],
+      assignees: (assigneeIdsSnapshot ?? []).flatMap((memberId) => {
+        const name = peopleById.get(memberId);
+        return name ? [{ memberId, name }] : [];
+      }),
+    })),
   }, { headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
 }
 
@@ -160,19 +179,29 @@ export async function POST(request: Request) {
       assignmentMode,
       repeatWeekdays: weekdays.length ? weekdays : null,
       carryPolicy,
-      scheduledDate: validDate(dueDate) ? dueDate : weekdays.length ? nextScheduledDay(getFamilyDay(), weekdays) : null,
+      scheduledDate: weekdays.length ? nextScheduledDay(validDate(dueDate) ? dueDate : getFamilyDay(), weekdays) : validDate(dueDate) ? dueDate : null,
       scheduledTime,
       createdByMemberId: member.memberId,
       editedByMemberId: member.memberId,
     }).returning();
 
     if (assigneeIds.length) await tx.insert(taskAssignees).values(assigneeIds.map((assigneeId) => ({ taskId: task.id, memberId: assigneeId })));
-    const firstDueDate = validDate(dueDate) ? dueDate : weekdays.length ? task.scheduledDate : null;
-    const responsibilities = assignmentMode === "individual" ? assigneeIds : [null];
+    const firstDueDate = weekdays.length ? task.scheduledDate : validDate(dueDate) ? dueDate : null;
+    const validAssignmentMode = assignmentMode as "shared" | "individual";
+    const validCarryPolicy = carryPolicy as "expires_daily" | "carry_forward";
+    const responsibilities = validAssignmentMode === "individual" ? assigneeIds : [null];
     const firstOccurrences = await tx.insert(occurrences).values(responsibilities.map((responsibilityMemberId) => ({
       taskId: task.id,
       familyId: member.familyId,
       dueDate: firstDueDate,
+      generationDate: firstDueDate,
+      titleSnapshot: task.title,
+      descriptionSnapshot: task.description,
+      scheduledTimeSnapshot: task.scheduledTime,
+      assignmentModeSnapshot: validAssignmentMode,
+      assigneeIdsSnapshot: assigneeIds,
+      carryPolicySnapshot: validCarryPolicy,
+      carryForward: validCarryPolicy === "carry_forward",
       responsibilityMemberId,
     }))).returning();
 

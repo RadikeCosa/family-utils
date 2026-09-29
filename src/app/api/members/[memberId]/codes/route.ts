@@ -5,7 +5,7 @@ import { accessCodes, auditEvents, families, memberDevices, members } from "@/db
 import { getMemberContext } from "@/lib/auth/context";
 import { createAccessCode, digestAccessCode, formatAccessCode } from "@/lib/tasks/rules";
 import { accessPepper } from "@/lib/access/rate-limit";
-import { accessCodeLifetimeMs, canGenerateMemberCode } from "@/lib/access/policy";
+import { accessCodeLifetimeMs, canGenerateMemberCode, isGoogleAutoLinkEnabled } from "@/lib/access/policy";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ memberId: string }> };
@@ -51,7 +51,7 @@ export async function POST(request: Request, context: RouteContext) {
       googleEmail: target.googleEmail,
       hasActiveDevice: activeDevices.length > 0,
       purpose,
-    })) return { kind: "wrong-method" as const };
+    }) || (isGoogleAutoLinkEnabled() && target.accessMethod === "google" && purpose === "invitation")) return { kind: "wrong-method" as const };
 
     const now = new Date();
     await tx.update(accessCodes).set({ revokedAt: now })

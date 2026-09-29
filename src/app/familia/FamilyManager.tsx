@@ -11,7 +11,7 @@ type Member = {
   accessMethod: "google" | "code"; googleEmail?: string | null;
   version: number; hasAccess: boolean;
 };
-type CodeCard = { memberName: string; purpose: "invitation" | "recovery"; code: string; expiresAt: string };
+type CodeCard = { memberName: string; memberRole: Member["role"]; googleEmail?: string | null; purpose: "invitation" | "recovery"; code: string; expiresAt: string };
 const authClient = createAuthClient();
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -28,7 +28,7 @@ function expiresLabel(value: string) {
   return new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" }).format(new Date(value));
 }
 
-export default function FamilyManager({ currentMemberId, currentRole }: { currentMemberId: string; currentRole: Member["role"] }) {
+export default function FamilyManager({ currentMemberId, currentRole, googleAutoLinkEnabled }: { currentMemberId: string; currentRole: Member["role"]; googleAutoLinkEnabled: boolean }) {
   const router = useRouter();
   const [familyName, setFamilyName] = useState("Mi familia");
   const [members, setMembers] = useState<Member[]>([]);
@@ -79,14 +79,17 @@ export default function FamilyManager({ currentMemberId, currentRole }: { curren
     setBusy(true); setError(""); setMessage(""); setCodeCard(null); setCopied(false);
     try {
       const result = await request<{ code: string; expiresAt: string; purpose: CodeCard["purpose"] }>(`/api/members/${member.id}/codes`, { method: "POST", body: JSON.stringify({ purpose }) });
-      setCodeCard({ memberName: member.name, purpose: result.purpose, code: result.code, expiresAt: result.expiresAt });
+      setCodeCard({ memberName: member.name, memberRole: member.role, googleEmail: member.googleEmail, purpose: result.purpose, code: result.code, expiresAt: result.expiresAt });
       await refresh();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo generar el código."); }
     finally { setBusy(false); }
   }
 
+  const accessUrl = typeof window === "undefined" ? "Family Utils" : `${window.location.origin}/acceso`;
   const sharingText = codeCard
-    ? `Para entrar a Family Utils como ${codeCard.memberName}: instalá la app en el teléfono, abrila desde el icono y entrá en ${typeof window === "undefined" ? "Family Utils" : `${window.location.origin}/acceso`}. Usá este código: ${codeCard.code}. Vence ${expiresLabel(codeCard.expiresAt)}. Compartilo solo en privado; puede quedar en el historial del chat y deja de servir después de usarse o vencer.`
+    ? codeCard.memberRole === "administrator"
+      ? `Para entrar a Family Utils como ${codeCard.memberName}: instalá la app y abrila desde el icono. En ${accessUrl}, iniciá sesión con Google usando ${codeCard.googleEmail ?? "el correo Google indicado"} y después ingresá esta invitación: ${codeCard.code}. Vence ${expiresLabel(codeCard.expiresAt)}. Compartila solo en privado; puede quedar en el historial del chat y deja de servir después de usarse o vencer.`
+      : `Para entrar a Family Utils como ${codeCard.memberName}: instalá la app, abrila desde el icono y entrá en ${accessUrl}. Usá este código: ${codeCard.code}. Vence ${expiresLabel(codeCard.expiresAt)}. Compartilo solo en privado; puede quedar en el historial del chat y deja de servir después de usarse o vencer.`
     : "";
 
   async function shareCode() {
@@ -126,7 +129,7 @@ export default function FamilyManager({ currentMemberId, currentRole }: { curren
               return <article className={styles.profileCard} key={member.id}>
                 <div className={styles.profileTop}><span className={styles.profileAvatar}>{member.name.slice(0,1).toLocaleUpperCase()}</span><div className={styles.profileIdentity}><strong>{member.name}</strong><span>{member.role === "administrator" ? "Administrador" : "Integrante"} · {member.hasAccess ? "Acceso vinculado" : "Sin acceso"}</span></div>
                   {isAdmin && member.id !== currentMemberId && <div className={styles.profileActions}>{isGoogle
-                    ? member.hasAccess ? <span className={styles.statusPill}>Entra con Google</span> : <button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "invitation")}>Generar invitación</button>
+                    ? member.hasAccess ? <span className={styles.statusPill}>Entra con Google</span> : googleAutoLinkEnabled ? <span className={styles.statusPill}>Iniciá con Google para vincular</span> : <button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "invitation")}>Generar invitación</button>
                     : <><button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "invitation")}>Dar acceso a otro dispositivo</button><button className={styles.smallButtonSecondary} disabled={busy || !member.hasAccess} onClick={() => void generateCode(member, "recovery")}>Reemplazar accesos anteriores</button></>}
                   </div>}
                 </div>

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { codeRateLimits } from "@/db/schema";
 import { getDb } from "@/db";
+import { accessAttemptBuckets, resolveAccessDevice, trustedClientIp } from "@/lib/access/device-limit";
 
 export function accessPepper(): string {
   const secret = process.env.CODE_PEPPER;
@@ -27,4 +28,26 @@ export async function recordCodeAttempt(bucketKey: string, maximum: number, wind
     })
     .returning({ attempts: codeRateLimits.attempts });
   return row.attempts <= maximum;
+}
+
+export async function enforceAccessAttemptLimit(input: {
+  headers: Headers;
+  endpoint: "prepare" | "redeem";
+  secret: string;
+  codeValue?: string;
+}) {
+  const device = resolveAccessDevice(input.headers, input.secret);
+  const buckets = accessAttemptBuckets({
+    secret: input.secret,
+    endpoint: input.endpoint,
+    deviceId: device.id,
+    clientIp: trustedClientIp(input.headers),
+    codeValue: input.codeValue,
+  });
+  const results = await Promise.all(buckets.map(({ key, maximum }) => recordCodeAttempt(key, maximum, 15)));
+  return {
+    allowed: results.every(Boolean),
+    deviceCookie: device.cookie,
+    shouldSetCookie: device.isNew,
+  };
 }

@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { authUser, memberDevices } from "@/db/schema";
 import { createAuth } from "@/lib/auth/server";
-import { accessPepper, opaqueBucketKey, recordCodeAttempt } from "@/lib/access/rate-limit";
+import { accessPepper, enforceAccessAttemptLimit, opaqueBucketKey, recordCodeAttempt } from "@/lib/access/rate-limit";
+import { accessDeviceSetCookie } from "@/lib/access/device-limit";
 import { getMemberContext } from "@/lib/auth/context";
 
 export const runtime = "nodejs";
@@ -37,19 +38,22 @@ export async function POST(request: Request) {
   try { pepper = accessPepper(); }
   catch { return NextResponse.json({ error: "El acceso no está configurado." }, { status: 503 }); }
 
+  const limit = await enforceAccessAttemptLimit({ headers: request.headers, endpoint: "prepare", secret: pepper });
+  const respond = (body: unknown, status = 200) => {
+    const response = NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+    if (limit.shouldSetCookie) response.headers.append("Set-Cookie", accessDeviceSetCookie(limit.deviceCookie));
+    return response;
+  };
+  if (!limit.allowed) return respond(genericError, 429);
+
   const auth = createAuth();
   const existingSession = await auth.api.getSession({ headers: request.headers });
   if (existingSession) {
     if (!existingSession.user.isAnonymous || await getMemberContext(request.headers)) {
-      return NextResponse.json({ error: "Cerrá la sesión actual antes de preparar el acceso de otro integrante." }, { status: 409 });
+      return respond({ error: "Cerrá la sesión actual antes de preparar el acceso de otro integrante." }, 409);
     }
-    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+    return respond({ ok: true });
   }
-
-  const trustedOrigin = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ?? "unknown-origin";
-  const originAllowed = await recordCodeAttempt(opaqueBucketKey(pepper, "prepare-origin", trustedOrigin), 10);
-  const globalAllowed = await recordCodeAttempt(opaqueBucketKey(pepper, "prepare-global", "all"), 100);
-  if (!originAllowed || !globalAllowed) return NextResponse.json(genericError, { status: 429 });
 
   try { await cleanupAbandonedIdentities(pepper); }
   catch { /* Session preparation still works if the bounded cleanup is temporarily unavailable. */ }
@@ -61,7 +65,7 @@ export async function POST(request: Request) {
   const signInRequest = new Request(new URL("/api/auth/sign-in/anonymous", request.url), { method: "POST", headers, body: "{}" });
   const response = await auth.handler(signInRequest);
   if (!response.ok) return NextResponse.json(genericError, { status: 503 });
-  const result = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  const result = respond({ ok: true });
   for (const cookie of response.headers.getSetCookie()) result.headers.append("Set-Cookie", cookie);
   return result;
 }

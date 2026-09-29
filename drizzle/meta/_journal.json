@@ -50,6 +50,13 @@
       "when": 1790677047415,
       "tag": "0006_swift_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790703626099,
+      "tag": "0007_task_edit_integrity",
+      "breakpoints": true
     }
   ]
 }

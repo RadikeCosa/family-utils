@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { accessCodes, auditEvents, authSession, authUser, families, memberDevices, members } from "@/db/schema";
+import { accessCodes, auditEvents, authAccount, authSession, authUser, families, memberDevices, members } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 
 export const runtime = "nodejs";
@@ -31,8 +31,20 @@ export async function PATCH(request: Request, context: RouteContext) {
       .for("update")
       .limit(1);
     if (!target) return { kind: "missing" as const };
-    const activeAdmins = await tx.select({ id: members.id }).from(members)
-      .where(and(eq(members.familyId, actor.familyId), eq(members.role, "administrator"), isNull(members.archivedAt)));
+    const recoverableAdmins = await tx.selectDistinct({ id: members.id }).from(members)
+      .innerJoin(memberDevices, eq(memberDevices.memberId, members.id))
+      .innerJoin(authUser, eq(authUser.id, memberDevices.authUserId))
+      .innerJoin(authAccount, eq(authAccount.userId, authUser.id))
+      .where(and(
+        eq(members.familyId, actor.familyId),
+        eq(members.role, "administrator"),
+        isNull(members.archivedAt),
+        isNull(memberDevices.revokedAt),
+        eq(authUser.isAnonymous, false),
+        eq(authUser.emailVerified, true),
+        eq(authAccount.providerId, "google"),
+      ));
+    const recoverableAdminIds = new Set(recoverableAdmins.map(({ id }) => id));
 
     if (action === "configure") {
       const expectedVersion = input.expectedVersion;
@@ -40,6 +52,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (target.id === actor.memberId) return { kind: "self-config" as const };
       const role = input.role === "administrator" ? "administrator" : input.role === "member" ? "member" : null;
       if (!role) return { kind: "invalid" as const };
+      if (target.role === "administrator" && role !== "administrator" && (recoverableAdminIds.size === 0 || (recoverableAdminIds.has(target.id) && recoverableAdminIds.size <= 1))) return { kind: "last-admin" as const };
       const suppliedEmail = typeof input.googleEmail === "string" ? input.googleEmail.trim().toLowerCase() : "";
       if (role === "administrator" && (!validEmail.test(suppliedEmail) || suppliedEmail.length > 254)) return { kind: "invalid-email" as const };
       const email = role === "administrator" ? suppliedEmail : null;
@@ -50,7 +63,6 @@ export async function PATCH(request: Request, context: RouteContext) {
         if (linkedGoogleIdentities.length > 0) return { kind: "email-change" as const };
       }
       if (target.role !== role) {
-        if (target.role === "administrator" && activeAdmins.length <= 1) return { kind: "last-admin" as const };
         const linked = await tx.select({ authUserId: memberDevices.authUserId }).from(memberDevices)
           .innerJoin(authUser, eq(memberDevices.authUserId, authUser.id))
           .where(and(eq(memberDevices.memberId, target.id), isNull(memberDevices.revokedAt), eq(authUser.isAnonymous, role === "administrator")));
@@ -87,7 +99,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     if (action === "archive" && target.archivedAt) return { kind: "conflict" as const };
     if (action === "restore" && !target.archivedAt) return { kind: "conflict" as const };
-    if (action === "archive" && target.role === "administrator" && activeAdmins.length <= 1) return { kind: "last-admin" as const };
+    const expectedVersion = input.expectedVersion;
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion !== target.version) return { kind: "conflict" as const };
+    if (action === "archive" && target.role === "administrator" && (recoverableAdminIds.size === 0 || (recoverableAdminIds.has(target.id) && recoverableAdminIds.size <= 1))) return { kind: "last-admin" as const };
 
     const now = new Date();
     const [updated] = await tx.update(members)

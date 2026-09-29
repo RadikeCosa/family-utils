@@ -2,7 +2,8 @@ import { and, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { accessCodes, auditEvents, authAccount, authSession, families, memberDevices, members } from "@/db/schema";
-import { accessPepper, opaqueBucketKey, recordCodeAttempt } from "@/lib/access/rate-limit";
+import { accessPepper, enforceAccessAttemptLimit } from "@/lib/access/rate-limit";
+import { accessDeviceSetCookie } from "@/lib/access/device-limit";
 import { digestAccessCode, normalizeAccessCode, secureDigestEqual } from "@/lib/tasks/rules";
 import { isAccessCodeCurrent, matchesVerifiedGoogleIdentity } from "@/lib/access/policy";
 
@@ -12,31 +13,38 @@ const dummyDigest = "00000000000000000000000000000000000000000000000000000000000
 
 export async function POST(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json(invalidCode, { status: 403, headers: { "Cache-Control": "no-store" } });
-  let input: Record<string, unknown>;
-  try { input = await request.json() as Record<string, unknown>; }
-  catch { return NextResponse.json(invalidCode, { status: 400, headers: { "Cache-Control": "no-store" } }); }
-  if (typeof input.code !== "string" || input.code.length > 80) return NextResponse.json(invalidCode, { status: 400 });
-
-  const auth = await import("@/lib/auth/server").then(({ createAuth }) => createAuth());
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) return NextResponse.json(invalidCode, { status: 400, headers: { "Cache-Control": "no-store" } });
-
   let pepper: string;
   try { pepper = accessPepper(); }
   catch { return NextResponse.json({ error: "El acceso no está configurado." }, { status: 503 }); }
+
+  let input: Record<string, unknown>;
+  try { input = await request.json() as Record<string, unknown>; }
+  catch { input = {}; }
+  if (!input || typeof input !== "object") input = {};
+  const rawCode = typeof input.code === "string" ? input.code.trim() : "";
+  let rateCodeValue = rawCode;
+  if (typeof input.code === "string") {
+    try { rateCodeValue = normalizeAccessCode(input.code); }
+    catch { /* Invalid values are still counted under a keyed digest. */ }
+  }
+  const limit = await enforceAccessAttemptLimit({ headers: request.headers, endpoint: "redeem", secret: pepper, codeValue: rateCodeValue });
+  const respond = (body: unknown, status = 200) => {
+    const response = NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+    if (limit.shouldSetCookie) response.headers.append("Set-Cookie", accessDeviceSetCookie(limit.deviceCookie));
+    return response;
+  };
+  if (!limit.allowed || typeof input.code !== "string" || input.code.length > 80) return respond(invalidCode, 400);
+
+  const auth = await import("@/lib/auth/server").then(({ createAuth }) => createAuth());
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return respond(invalidCode, 400);
 
   let code: string;
   try { code = normalizeAccessCode(input.code); }
   catch {
     secureDigestEqual(dummyDigest, dummyDigest);
-    return NextResponse.json(invalidCode, { status: 400, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+    return respond(invalidCode, 400);
   }
-
-  const trustedOrigin = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ?? "unknown-origin";
-  const originAllowed = await recordCodeAttempt(opaqueBucketKey(pepper, "redeem-origin", trustedOrigin), 10);
-  const codeAllowed = await recordCodeAttempt(opaqueBucketKey(pepper, "redeem-code", code), 5);
-  const globalAllowed = await recordCodeAttempt(opaqueBucketKey(pepper, "redeem-global", "all"), 100);
-  if (!originAllowed || !codeAllowed || !globalAllowed) return NextResponse.json(invalidCode, { status: 400, headers: { "Cache-Control": "no-store" } });
 
   const invitationDigest = digestAccessCode(code, pepper, "invitation");
   const recoveryDigest = digestAccessCode(code, pepper, "recovery");
@@ -54,7 +62,7 @@ export async function POST(request: Request) {
     secureDigestEqual(dummyDigest, invitationDigest);
     secureDigestEqual(dummyDigest, recoveryDigest);
   }
-  if (!candidate) return NextResponse.json(invalidCode, { status: 400, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  if (!candidate) return respond(invalidCode, 400);
 
   const now = new Date();
   const result = await getDb().transaction(async (tx) => {
@@ -103,6 +111,7 @@ export async function POST(request: Request) {
       .limit(1);
     if (priorIdentity && priorIdentity.memberId !== target.id) return { kind: "invalid" as const };
     if (priorIdentity && priorIdentity.revokedAt) return { kind: "invalid" as const };
+    if (stored.purpose === "recovery" && priorIdentity) return { kind: "invalid" as const };
 
     if (stored.purpose === "recovery") {
       if (target.accessMethod !== "code" || session.user.isAnonymous !== true) return { kind: "invalid" as const };
@@ -118,7 +127,12 @@ export async function POST(request: Request) {
     }
 
     if (!priorIdentity) {
-      await tx.insert(memberDevices).values({ memberId: target.id, authUserId: session.user.id, label: "Dispositivo familiar" });
+      await tx.insert(memberDevices).values({
+        memberId: target.id,
+        authUserId: session.user.id,
+        identityKind: target.accessMethod === "google" ? "google" : "anonymous",
+        label: target.accessMethod === "google" ? "Cuenta Google" : "Dispositivo familiar",
+      });
     }
     const [consumed] = await tx.update(accessCodes)
       .set({ consumedAt: now, consumedByAuthUserId: session.user.id })
@@ -138,6 +152,6 @@ export async function POST(request: Request) {
     return { kind: "ok" as const, memberId: target.id };
   });
 
-  if (result.kind === "invalid") return NextResponse.json(invalidCode, { status: 400, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
-  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  if (result.kind === "invalid") return respond(invalidCode, 400);
+  return respond({ ok: true });
 }

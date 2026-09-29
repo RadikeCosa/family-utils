@@ -30,21 +30,49 @@ export default function AccessPage() {
   const [membershipSessionId, setMembershipSessionId] = useState<string | null>(null);
   const [bootstrapSessionId, setBootstrapSessionId] = useState<string | null>(null);
   const sessionUserId = session?.user?.id;
+  const sessionEmailVerified = session?.user?.emailVerified;
+  const sessionIsAnonymous = session?.user?.email.endsWith("@anonymous.family-utils.invalid") ?? false;
   const hasMembership = !!sessionUserId && membershipSessionId === sessionUserId;
   const canBootstrap = !!sessionUserId && bootstrapSessionId === sessionUserId;
 
   useEffect(() => {
     let active = true;
-    if (!sessionUserId) return () => { active = false; };
-    void fetch("/api/family", { cache: "no-store" }).then((response) => {
-      if (active) setMembershipSessionId(response.ok ? sessionUserId : null);
-    }).catch(() => { if (active) setMembershipSessionId(null); });
-    void fetch("/api/family/bootstrap", { cache: "no-store" }).then((response) => response.json()).then((data) => {
-      if (active && data.canBootstrap === true) setBootstrapSessionId(sessionUserId);
-      else if (active) setBootstrapSessionId(null);
-    }).catch(() => { if (active) setBootstrapSessionId(null); });
+    const userId = sessionUserId;
+    if (!userId) return () => { active = false; };
+    async function resolveAccess() {
+      try {
+        let familyResponse = await fetch("/api/family", { cache: "no-store" });
+        if (familyResponse.ok) {
+          if (active) { setMembershipSessionId(userId!); setBootstrapSessionId(null); }
+          return;
+        }
+        if (active) setMembershipSessionId(null);
+
+        if (!sessionIsAnonymous && sessionEmailVerified) {
+          const linkResponse = await fetch("/api/access/link-google", { method: "POST", cache: "no-store" });
+          const linkResult = await linkResponse.json().catch(() => ({}));
+          if (linkResponse.ok && linkResult.linked === true) {
+            familyResponse = await fetch("/api/family", { cache: "no-store" });
+            if (familyResponse.ok) {
+              if (active) { setMembershipSessionId(userId!); setBootstrapSessionId(null); }
+              router.replace("/");
+              return;
+            }
+          } else if (!linkResponse.ok && typeof linkResult.requestId === "string" && active) {
+            setError(`${linkResult.error ?? "No se pudo vincular el perfil."} Referencia: ${linkResult.requestId}`);
+          }
+        }
+
+        const bootstrapResponse = await fetch("/api/family/bootstrap", { cache: "no-store" });
+        const bootstrap = await bootstrapResponse.json().catch(() => ({}));
+        if (active) setBootstrapSessionId(bootstrap.canBootstrap === true ? userId! : null);
+      } catch {
+        if (active) { setMembershipSessionId(null); setBootstrapSessionId(null); }
+      }
+    }
+    void resolveAccess();
     return () => { active = false; };
-  }, [sessionUserId]);
+  }, [sessionUserId, sessionEmailVerified, sessionIsAnonymous, router]);
 
   async function signIn() {
     setBusy(true); setError("");
@@ -77,7 +105,7 @@ export default function AccessPage() {
     finally { setBusy(false); }
   }
 
-  const hasGoogleSession = !!session?.user && !session.user.email.endsWith("@anonymous.family-utils.invalid");
+  const hasGoogleSession = !!session?.user && !sessionIsAnonymous && !!session.user.emailVerified;
   return (
     <main className={styles.page}>
       <header className={styles.header}><Link className={styles.brand} href="/"><span className={styles.mark}>f</span>family<span>utils</span></Link><Link className={styles.signIn} href="/">Volver al inicio</Link></header>
@@ -95,8 +123,9 @@ export default function AccessPage() {
           </> : <>
             {canBootstrap && <><h2>Primera persona administradora</h2><p>Tu cuenta autorizada puede iniciar la familia y vincular su perfil adulto.</p><button className={styles.primaryButton} onClick={() => void bootstrap()} disabled={busy}>Crear o abrir mi familia</button><div className={styles.separator}><span>o</span></div></>}
             <h2>Adultos</h2>
-            <p>Iniciá con la cuenta Google vinculada a tu perfil familiar. Si todavía no está vinculada, usá el código de invitación que te compartió un administrador.</p>
+            <p>Iniciá con la cuenta Google asignada a tu perfil familiar. Si la vinculación automática todavía no está habilitada, ingresá la invitación que te compartió un administrador.</p>
             <button className={styles.googleButton} onClick={() => void signIn()} disabled={busy || isPending}>Continuar con Google</button>
+            {hasGoogleSession && <p className={styles.intro}>Sesión Google abierta: <strong>{session?.user?.email}</strong></p>}
             <div className={styles.separator}><span>o, si ya tenés un código</span></div>
             <h2>{hasGoogleSession ? "Vincular perfil adulto" : "Integrantes sin correo"}</h2>
             <p>{hasGoogleSession ? "Con tu sesión Google abierta, ingresá la invitación destinada a tu perfil adulto." : "Instalá la app, abrila desde el icono y escribí el código que te compartieron."}</p>
@@ -109,7 +138,7 @@ export default function AccessPage() {
           {error && <p className={styles.error} role="alert">{error}</p>}
           {message && <p className={styles.success} role="status">{message}</p>}
         </div>
-        {hasGoogleSession && !hasMembership && !canBootstrap && <p className={styles.sessionNotice}>Sesión de Google activa. Escribí el código de invitación asociado a tu perfil para vincularlo.</p>}
+        {hasGoogleSession && !hasMembership && !canBootstrap && <p className={styles.sessionNotice}>Sesión Google activa para {session?.user.email}. Si tu perfil está autorizado, se vinculará automáticamente; si todavía no, ingresá la invitación que te compartió un administrador.</p>}
         {session?.user && !hasMembership && <button className={styles.logoutLink} onClick={() => void authClient.signOut().then(() => { void refetch(); router.refresh(); })}>Cerrar sesión para cambiar el tipo de acceso</button>}
       </section>
       <section className={styles.installGuide} id="instalar" aria-labelledby="install-heading">

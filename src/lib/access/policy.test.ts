@@ -4,6 +4,7 @@ import {
   accessCodeLifetimeMs,
   canGenerateMemberCode,
   isAccessCodeCurrent,
+  isGoogleAutoLinkEnabled,
   matchesVerifiedGoogleIdentity,
   normalizeGoogleEmail,
 } from "./policy.ts";
@@ -25,6 +26,12 @@ test("Google email matching trims spaces and case but does not fold Gmail aliase
   assert.equal(matchesVerifiedGoogleIdentity({ configuredEmail: "parent.name@gmail.com", actualEmail: "parentname@gmail.com", emailVerified: true, providerIsGoogle: true }), false);
   assert.equal(matchesVerifiedGoogleIdentity({ configuredEmail: "parent@gmail.com", actualEmail: "parent@gmail.com", emailVerified: false, providerIsGoogle: true }), false);
   assert.equal(matchesVerifiedGoogleIdentity({ configuredEmail: "parent@gmail.com", actualEmail: "parent@gmail.com", emailVerified: true, providerIsGoogle: false }), false);
+});
+
+test("Google auto-link is disabled unless the rollout flag is explicitly enabled", () => {
+  assert.equal(isGoogleAutoLinkEnabled(undefined), false);
+  assert.equal(isGoogleAutoLinkEnabled("false"), false);
+  assert.equal(isGoogleAutoLinkEnabled("true"), true);
 });
 
 test("only administrators can invite another profile and recovery applies to code profiles with an active device", () => {

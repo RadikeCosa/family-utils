@@ -106,7 +106,7 @@ offline se pospone sin frenar el uso conectado.
 
 ## Tecnología y operación
 
-Next.js App Router, React, TypeScript, CSS Modules, PostgreSQL 17 en Neon,
+Next.js App Router, React, TypeScript, CSS Modules, PostgreSQL 18 en Neon,
 Drizzle y `node-postgres`. La app usa la conexión agrupada con runtime Node y
 transacciones sobre una única conexión. Migraciones y respaldos usan conexión
 directa. Vercel hospeda la aplicación.
@@ -114,7 +114,7 @@ directa. Vercel hospeda la aplicación.
 La provisión remota debe mantenerse en planes gratuitos. No se activa consumo
 pago ni se elige un plan pago. Un respaldo diario cifrado con `age` se conserva
 30 días como artefacto de un repositorio privado independiente. Se usa un rol
-de base de datos de solo lectura y `pg_dump` de versión mayor 17. La clave
+de base de datos de solo lectura y `pg_dump` de versión mayor 18. La clave
 privada se conserva fuera de Git y tiene una copia protegida adicional.
 
 ## Fuera de la primera versión

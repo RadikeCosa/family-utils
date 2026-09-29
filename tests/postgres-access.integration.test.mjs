@@ -6,7 +6,7 @@ import pg from "pg";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 
-test("PostgreSQL access and family transaction invariants", { skip: !connectionString && "requires an isolated PostgreSQL 17 test service" }, async (t) => {
+test("PostgreSQL access and family transaction invariants", { skip: !connectionString && "requires an isolated PostgreSQL 18 test service" }, async (t) => {
   const pool = new pg.Pool({ connectionString });
   const suffix = randomUUID();
   const emailA = `it-${suffix}-a@family-utils.invalid`;

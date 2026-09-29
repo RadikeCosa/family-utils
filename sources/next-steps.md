@@ -13,7 +13,7 @@
 
 - Preparar Next.js App Router, React, TypeScript, CSS Modules y npm.
 - Usar Node 24.13.1 en local/CI (`.nvmrc`) y `24.x` en Vercel.
-- Configurar lint, tipos, build y PostgreSQL 17 en un servicio temporal de
+- Configurar lint, tipos, build y PostgreSQL 18 en un servicio temporal de
   GitHub Actions.
 
 ## 3. Servicios y conexiones
@@ -24,6 +24,10 @@
   de sesión ni de prepared statements con nombre en el pooler.
 - Configurar Google OAuth con scopes básicos y Better Auth autogestionado.
 - Añadir logs estructurados sin texto de tareas, nombres, códigos ni secretos.
+- El vínculo automático del perfil adulto queda detrás de `GOOGLE_AUTO_LINK_ENABLED=false`;
+  para activar la transición tras desplegar, cambiarlo a `true` en Production y
+  hacer un nuevo deployment. Los códigos adultos existentes siguen funcionando
+  mientras la bandera permanece apagada.
 
 ## 4. Plataforma y prueba temprana de acceso
 

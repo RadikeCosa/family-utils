@@ -6,6 +6,10 @@ export function normalizeGoogleEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+export function isGoogleAutoLinkEnabled(value = process.env.GOOGLE_AUTO_LINK_ENABLED): boolean {
+  return value === "true";
+}
+
 export function matchesVerifiedGoogleIdentity(input: {
   configuredEmail: string | null | undefined;
   actualEmail: string;
