@@ -45,7 +45,12 @@ export function createAuth() {
               .split(",")
               .map((email) => email.trim().toLowerCase())
               .filter(Boolean));
-            if (!allowedEmails.has(user.email.toLowerCase())) {
+            const isBootstrapEmailAllowed = allowedEmails.has(user.email.toLowerCase());
+            console.info("AUTH_BOOTSTRAP_EMAIL_CHECK", {
+              allowed: isBootstrapEmailAllowed,
+              configuredEmailCount: allowedEmails.size,
+            });
+            if (!isBootstrapEmailAllowed) {
               throw new APIError("FORBIDDEN", { message: "Access is not available for this account" });
             }
           },
