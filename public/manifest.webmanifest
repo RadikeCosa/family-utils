@@ -1,0 +1,11 @@
+{
+  "name": "Family Utils",
+  "short_name": "Family Utils",
+  "description": "Aplicaciones útiles para organizar la vida familiar.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfbf8",
+  "theme_color": "#f6f5f0",
+  "lang": "es-AR",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

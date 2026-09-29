@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+coverage/
+.vercel/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+*.age
+*.dump
+*.sql.gz
+playwright-report/
+test-results/
+
+.agents/
