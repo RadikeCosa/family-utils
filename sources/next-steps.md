@@ -127,3 +127,14 @@ copia completa solo ante corrupción confirmada y con una decisión explícita.
 - La consulta offline puede posponerse según el límite del paso 11.
 - Si algún servicio requiere plan pago o consumo pago, se detiene esa
   provisión hasta elegir una alternativa gratuita.
+
+## Planificador de menús
+
+- La primera versión permite sugerencias familiares para almuerzo y cena,
+  asistencia manual y confirmación adulta con control de concurrencia.
+- Validar migraciones en una rama aislada de Neon antes de producción; usar la
+  conexión directa para migraciones.
+- Pilotear autenticación y flujos familiares en producción solo tras revisar el
+  destino de despliegue, la migración y la sesión OAuth.
+- Posponer la lectura automática desde calendarios de presencia a una etapa
+  posterior.

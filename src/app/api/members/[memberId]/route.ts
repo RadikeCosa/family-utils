@@ -93,7 +93,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         before: { name: target.name, role: target.role, accessMethod: target.accessMethod },
         after: { name: updated.name, role: updated.role, accessMethod: updated.accessMethod },
       });
-      await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${actor.familyId}`);
+      await tx.execute(sql`UPDATE families SET revision = revision + 1, menus_revision = menus_revision + 1, updated_at = now() WHERE id = ${actor.familyId}`);
       return { kind: "ok" as const, member: updated };
     }
 
@@ -130,7 +130,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       before: target,
       after: updated,
     });
-    await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${actor.familyId}`);
+    await tx.execute(sql`UPDATE families SET revision = revision + 1, menus_revision = menus_revision + 1, updated_at = now() WHERE id = ${actor.familyId}`);
     return { kind: "ok" as const, member: updated };
   });
 

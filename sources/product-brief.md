@@ -103,6 +103,18 @@ reciente, y se pausa tras dos minutos de inactividad. Volver a la app, recuperar
 conexión o pedir actualización inicia una consulta. Se muestra la última
 actualización.
 
+## Planificador de menús (primera versión)
+
+Cada integrante activo puede indicar si estará en casa y sugerir comidas para
+almuerzo o cena por día. Un administrador confirma una sugerencia o escribe y
+confirma una comida directamente. No se puede confirmar si todos figuran
+ausentes; la asistencia sin respuesta se muestra como pendiente y se advierte al
+confirmar. Los días pasados son de solo lectura. La vista semanal se actualiza
+con una revisión propia de menús para no refrescar por cambios de tareas.
+
+La primera versión registra asistencia manual. La integración con calendarios
+de presencia queda para una etapa posterior.
+
 La experiencia offline se limita a consultar datos ya cargados; no escribe ni
 sincroniza cambios. Si el aislamiento por usuario, la limpieza al salir y la
 recuperación del almacenamiento no se verifican en dos jornadas, la consulta

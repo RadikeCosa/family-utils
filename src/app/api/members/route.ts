@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       action: "created",
       after: { id: created.id, name: created.name, role: created.role, accessMethod: created.accessMethod },
     });
-    await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${actor.familyId}`);
+    await tx.execute(sql`UPDATE families SET revision = revision + 1, menus_revision = menus_revision + 1, updated_at = now() WHERE id = ${actor.familyId}`);
     return created;
   });
   if (!result) return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
