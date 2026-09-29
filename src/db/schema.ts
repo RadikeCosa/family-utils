@@ -59,7 +59,7 @@ export const authAccount = pgTable("account", {
 }, (table) => [index("account_user_id_idx").on(table.userId)]);
 
 export const authVerification = pgTable("verification", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
