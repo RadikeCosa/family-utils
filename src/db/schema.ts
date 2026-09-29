@@ -21,7 +21,7 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
 export const authUser = pgTable("user", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
@@ -32,7 +32,7 @@ export const authUser = pgTable("user", {
 });
 
 export const authSession = pgTable("session", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   token: text("token").notNull().unique(),
   createdAt: createdAt(),
@@ -43,7 +43,7 @@ export const authSession = pgTable("session", {
 }, (table) => [index("session_user_id_idx").on(table.userId)]);
 
 export const authAccount = pgTable("account", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
   accountId: text("account_id").notNull(),
   providerId: text("provider_id").notNull(),
   userId: text("user_id").notNull().references(() => authUser.id, { onDelete: "cascade" }),

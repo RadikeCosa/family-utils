@@ -36,6 +36,13 @@
       "when": 1790660756876,
       "tag": "0004_auth_verification_id_default",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790661864043,
+      "tag": "0005_auth_entity_id_defaults",
+      "breakpoints": true
     }
   ]
 }
