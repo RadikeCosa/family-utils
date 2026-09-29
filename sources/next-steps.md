@@ -13,7 +13,7 @@
 
 - Preparar Next.js App Router, React, TypeScript, CSS Modules y npm.
 - Usar Node 24.13.1 en local/CI (`.nvmrc`) y `24.x` en Vercel.
-- Configurar lint, tipos, build y PostgreSQL 17 en un servicio temporal de
+- Configurar lint, tipos, build y PostgreSQL 18 en un servicio temporal de
   GitHub Actions.
 
 ## 3. Servicios y conexiones
@@ -24,23 +24,43 @@
   de sesión ni de prepared statements con nombre en el pooler.
 - Configurar Google OAuth con scopes básicos y Better Auth autogestionado.
 - Añadir logs estructurados sin texto de tareas, nombres, códigos ni secretos.
+- El vínculo automático del perfil adulto queda detrás de `GOOGLE_AUTO_LINK_ENABLED=false`;
+  para activar la transición tras desplegar, cambiarlo a `true` en Production y
+  hacer un nuevo deployment. Los códigos adultos existentes siguen funcionando
+  mientras la bandera permanece apagada.
 
 ## 4. Plataforma y prueba temprana de acceso
 
-- Crear familia, perfiles, roles, identidades, dispositivos y bootstrap
-  privado del primer administrador.
-- Implementar invitación y recuperación con códigos dentro de la PWA, HMAC,
-  vencimientos, uso único, rate limit persistente y revocación.
-- Validar instalación, sesión, renovación, recuperación y reemplazo de
-  dispositivo en un iPhone real y Android.
+- Abrir primero la plataforma; separar `/`, `/tareas`, `/familia` y `/acceso`.
+- Mantener una identidad Google verificada por perfil adulto y una identidad
+  anónima por dispositivo joven; exigir instalación antes de comenzar OAuth en
+  iPhone.
+- Usar invitaciones de 24 horas y recuperación joven de 30 minutos, códigos
+  Crockford con HMAC y rate limits persistentes; `prepare` no recibe códigos.
+- Probar callback OAuth desde la PWA instalada en un iPhone real y Android
+  antes de aceptar el vínculo adulto.
 
 ## 5. Respaldo y restauración
 
 - Automatizar dump diario cifrado a un artefacto privado de GitHub, con
   retención de 30 días y ejecución manual.
-- Usar rol de solo lectura, conexión directa y `pg_dump` mayor 17.
+- Usar rol de solo lectura, conexión directa y `pg_dump` mayor 18.
 - Probar restauración aislada e invalidar sesiones restauradas antes del
   piloto adulto.
+
+El respaldo manual de producción se ejecutó y restauró correctamente en un
+PostgreSQL 18 aislado el 2026-09-29. El artefacto cifrado queda en el repositorio
+privado de respaldos por 30 días. La clave privada debe conservarse además en
+un gestor de contraseñas o en una copia física protegida.
+
+### Reversión de la migración de producción
+
+Las migraciones de acceso son aditivas. Si el despliegue nuevo falla, volver a
+la versión anterior de la aplicación y dejar las columnas, el tipo y el índice
+añadidos en la base; la versión anterior los ignora. No restaurar un dump
+completo como primera medida, porque descartaría cambios posteriores al
+respaldo. Corregir y volver a aplicar la migración hacia delante; restaurar la
+copia completa solo ante corrupción confirmada y con una decisión explícita.
 
 ## 6. Tareas y piloto adulto
 

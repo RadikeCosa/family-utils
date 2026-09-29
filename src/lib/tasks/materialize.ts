@@ -17,7 +17,8 @@ export async function materializeOccurrences(familyId: string): Promise<void> {
   const today = getFamilyDay();
   await getDb().transaction(async (tx) => {
     const scheduledTasks = await tx.select().from(tasks)
-      .where(and(eq(tasks.familyId, familyId), eq(tasks.status, "active"), isNull(tasks.archivedAt), isNull(tasks.finalizedAt)));
+      .where(and(eq(tasks.familyId, familyId), eq(tasks.status, "active"), isNull(tasks.archivedAt), isNull(tasks.finalizedAt)))
+      .for("update");
     let changed = false;
 
     for (const task of scheduledTasks) {
@@ -89,6 +90,14 @@ export async function materializeOccurrences(familyId: string): Promise<void> {
             taskId: task.id,
             familyId,
             dueDate,
+            generationDate: dueDate,
+            titleSnapshot: task.title,
+            descriptionSnapshot: task.description,
+            scheduledTimeSnapshot: task.scheduledTime,
+            assignmentModeSnapshot: task.assignmentMode,
+            assigneeIdsSnapshot: activeAssigneeIds,
+            carryPolicySnapshot: task.carryPolicy,
+            carryForward: task.carryPolicy === "carry_forward",
             responsibilityMemberId,
           }).onConflictDoNothing().returning({ id: occurrences.id });
           changed ||= inserted.length > 0;

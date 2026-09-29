@@ -6,15 +6,15 @@ iPhone.
 
 ## Estado
 
-El proyecto está en la etapa de preparación del repositorio y la base de Next.js.
-La aplicación todavía no está desplegada y no tiene servicios remotos
-configurados.
+La plataforma incluye una portada, acceso con Google o código, una aplicación de
+tareas y administración familiar. La base de datos requiere aplicar las
+migraciones antes de desplegar cambios que alteren su esquema.
 
 ## Requisitos locales
 
 - Node.js 24.13.1
 - npm 11.8.0 o compatible con el lockfile
-- Docker y PostgreSQL 17 para desarrollo e integración
+- Docker y PostgreSQL 18 para desarrollo e integración
 
 ```sh
 npm ci
@@ -33,6 +33,12 @@ npm run typecheck
 npm run test
 npm run build
 ```
+
+Las pruebas de invariantes PostgreSQL usan `FAMILY_UTILS_TEST_DATABASE_URL`,
+una base aislada PostgreSQL 18. CI prepara un servicio temporal para ellas;
+`npm run test:routes` levanta el build y verifica los handlers de invitación,
+recuperación y edición contra ese servicio;
+no apuntes esa variable a la base de datos de producción.
 
 ## Documentación
 

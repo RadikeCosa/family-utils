@@ -56,7 +56,11 @@ export const authAccount = pgTable("account", {
   password: text("password"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (table) => [index("account_user_id_idx").on(table.userId)]);
+}, (table) => [
+  index("account_user_id_idx").on(table.userId),
+  uniqueIndex("account_google_identity_unique_idx").on(table.providerId, table.accountId)
+    .where(sql`${table.providerId} = 'google'`),
+]);
 
 export const authVerification = pgTable("verification", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
@@ -78,9 +82,11 @@ export const familyRoleEnum = pgEnum("family_role", ["administrator", "member"])
 export const taskStatusEnum = pgEnum("task_status", ["active", "finalized", "archived"]);
 export const occurrenceStatusEnum = pgEnum("occurrence_status", ["open", "completed", "missed", "archived"]);
 export const carryPolicyEnum = pgEnum("carry_policy", ["expires_daily", "carry_forward"]);
+export const identityKindEnum = pgEnum("identity_kind", ["google", "anonymous"]);
 export const presenceRuleKindEnum = pgEnum("presence_rule_kind", ["weekly", "period", "exception"]);
 export const accessCodePurposeEnum = pgEnum("access_code_purpose", ["invitation", "recovery"]);
 export const assignmentModeEnum = pgEnum("assignment_mode", ["shared", "individual"]);
+export const accessMethodEnum = pgEnum("access_method", ["google", "code"]);
 
 export const families = pgTable("families", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -96,20 +102,31 @@ export const members = pgTable("members", {
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   role: familyRoleEnum("role").notNull().default("member").$type<FamilyRole>(),
+  accessMethod: accessMethodEnum("access_method").notNull().default("code"),
+  googleEmail: text("google_email"),
+  version: integer("version").notNull().default(1),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (table) => [index("members_family_id_idx").on(table.familyId)]);
+}, (table) => [
+  index("members_family_id_idx").on(table.familyId),
+  uniqueIndex("members_google_email_unique_idx").on(sql`lower(${table.googleEmail})`).where(sql`${table.googleEmail} IS NOT NULL`),
+]);
 
 export const memberDevices = pgTable("member_devices", {
   id: uuid("id").primaryKey().defaultRandom(),
   memberId: uuid("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   authUserId: text("auth_user_id").notNull().unique().references(() => authUser.id, { onDelete: "cascade" }),
+  identityKind: identityKindEnum("identity_kind").notNull().default("anonymous"),
   label: varchar("label", { length: 100 }),
   createdAt: createdAt(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
-}, (table) => [index("member_devices_member_id_idx").on(table.memberId)]);
+}, (table) => [
+  index("member_devices_member_id_idx").on(table.memberId),
+  uniqueIndex("member_devices_one_google_identity_per_member_idx").on(table.memberId)
+    .where(sql`${table.identityKind} = 'google' AND ${table.revokedAt} IS NULL`),
+]);
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -142,6 +159,14 @@ export const occurrences = pgTable("task_occurrences", {
   taskId: uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   dueDate: date("due_date", { mode: "string" }),
+  generationDate: date("generation_date", { mode: "string" }),
+  titleSnapshot: varchar("title_snapshot", { length: 160 }).notNull(),
+  descriptionSnapshot: text("description_snapshot"),
+  scheduledTimeSnapshot: time("scheduled_time_snapshot"),
+  assignmentModeSnapshot: assignmentModeEnum("assignment_mode_snapshot").notNull(),
+  assigneeIdsSnapshot: jsonb("assignee_ids_snapshot").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  carryPolicySnapshot: carryPolicyEnum("carry_policy_snapshot").notNull().default("expires_daily"),
+  carryForward: boolean("carry_forward").notNull().default(false),
   responsibilityMemberId: uuid("responsibility_member_id").references(() => members.id),
   claimedByMemberId: uuid("claimed_by_member_id").references(() => members.id),
   status: occurrenceStatusEnum("status").notNull().default("open").$type<OccurrenceStatus>(),
@@ -152,10 +177,18 @@ export const occurrences = pgTable("task_occurrences", {
   createdAt: createdAt(),
 }, (table) => [
   index("occurrences_family_status_date_idx").on(table.familyId, table.status, table.dueDate),
-  uniqueIndex("occurrences_shared_once_idx").on(table.taskId, table.dueDate).where(sql`${table.responsibilityMemberId} IS NULL AND ${table.dueDate} IS NOT NULL`),
-  uniqueIndex("occurrences_individual_once_idx").on(table.taskId, table.dueDate, table.responsibilityMemberId).where(sql`${table.responsibilityMemberId} IS NOT NULL AND ${table.dueDate} IS NOT NULL`),
-  uniqueIndex("occurrences_shared_no_date_once_idx").on(table.taskId).where(sql`${table.responsibilityMemberId} IS NULL AND ${table.dueDate} IS NULL`),
-  uniqueIndex("occurrences_individual_no_date_once_idx").on(table.taskId, table.responsibilityMemberId).where(sql`${table.responsibilityMemberId} IS NOT NULL AND ${table.dueDate} IS NULL`),
+  uniqueIndex("occurrences_shared_generation_once_idx").on(table.taskId, table.generationDate)
+    .where(sql`${table.responsibilityMemberId} IS NULL AND ${table.generationDate} IS NOT NULL AND ${table.status} <> 'archived'`),
+  uniqueIndex("occurrences_individual_generation_once_idx").on(table.taskId, table.generationDate, table.responsibilityMemberId)
+    .where(sql`${table.responsibilityMemberId} IS NOT NULL AND ${table.generationDate} IS NOT NULL AND ${table.status} <> 'archived'`),
+  uniqueIndex("occurrences_shared_no_date_once_idx").on(table.taskId)
+    .where(sql`${table.responsibilityMemberId} IS NULL AND ${table.generationDate} IS NULL AND ${table.status} <> 'archived'`),
+  uniqueIndex("occurrences_individual_no_date_once_idx").on(table.taskId, table.responsibilityMemberId)
+    .where(sql`${table.responsibilityMemberId} IS NOT NULL AND ${table.generationDate} IS NULL AND ${table.status} <> 'archived'`),
+  uniqueIndex("occurrences_shared_open_carry_once_idx").on(table.taskId)
+    .where(sql`${table.responsibilityMemberId} IS NULL AND ${table.status} = 'open' AND ${table.carryForward} = true`),
+  uniqueIndex("occurrences_individual_open_carry_once_idx").on(table.taskId, table.responsibilityMemberId)
+    .where(sql`${table.responsibilityMemberId} IS NOT NULL AND ${table.status} = 'open' AND ${table.carryForward} = true`),
 ]);
 
 export const auditEvents = pgTable("audit_events", {
@@ -195,6 +228,7 @@ export const accessCodes = pgTable("access_codes", {
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
+  consumedByAuthUserId: text("consumed_by_auth_user_id"),
   createdAt: createdAt(),
 });
 
