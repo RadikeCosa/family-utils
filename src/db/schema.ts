@@ -68,7 +68,7 @@ export const authVerification = pgTable("verification", {
 }, (table) => [index("verification_identifier_idx").on(table.identifier)]);
 
 export const authRateLimit = pgTable("rateLimit", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
   key: text("key").notNull().unique(),
   count: integer("count").notNull(),
   lastRequest: bigint("last_request", { mode: "number" }).notNull(),
