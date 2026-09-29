@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { families } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
+import { getFamilyDay, taskListEtag } from "@/lib/tasks/family-day";
 
 export const runtime = "nodejs";
 
@@ -12,8 +13,9 @@ export async function GET(request: Request) {
   const [family] = await getDb().select({ revision: families.revision }).from(families)
     .where(eq(families.id, member.familyId)).limit(1);
   const revision = family?.revision ?? member.familyRevision;
-  const etag = `"family-${member.familyId}-r${revision}"`;
+  const familyDay = getFamilyDay();
+  const etag = taskListEtag(member.familyId, revision, familyDay);
   const headers = { ETag: etag, "Cache-Control": "private, no-cache" };
   if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
-  return NextResponse.json({ revision }, { headers });
+  return NextResponse.json({ revision, familyDay }, { headers });
 }

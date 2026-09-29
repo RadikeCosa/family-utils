@@ -69,13 +69,13 @@ export async function GET(request: Request) {
   const peopleById = new Map(people.map((person) => [person.id, person.name]));
   const last = page.at(-1);
   const nextCursor = hasMore && last
-    ? Buffer.from(JSON.stringify({ at: last.activityAt.toISOString(), id: last.id })).toString("base64url")
+    ? Buffer.from(JSON.stringify({ at: new Date(last.activityAt).toISOString(), id: last.id })).toString("base64url")
     : null;
 
   return NextResponse.json({
     items: page.map(({ assigneeIds, activityAt: at, ...item }) => ({
       ...item,
-      activityAt: at.toISOString(),
+      activityAt: new Date(at).toISOString(),
       assignees: (assigneeIds ?? []).flatMap((id) => peopleById.has(id) ? [{ memberId: id, name: peopleById.get(id)! }] : []),
       responsibleName: item.responsibilityMemberId ? peopleById.get(item.responsibilityMemberId) ?? "Integrante archivado" : null,
       completedByName: item.completedByMemberId ? peopleById.get(item.completedByMemberId) ?? "Integrante archivado" : null,

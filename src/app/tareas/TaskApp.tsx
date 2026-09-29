@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "better-auth/react";
+import { FAMILY_TIME_ZONE, getFamilyDay } from "@/lib/tasks/family-day";
 import styles from "../page.module.css";
 
 const authClient = createAuthClient();
@@ -50,14 +51,15 @@ type HistoryItem = {
 };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, cache: "no-store", headers: { "Content-Type": "application/json", ...init?.headers } });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, cache: "no-store", headers: { "Content-Type": "application/json", ...init?.headers } });
+  } catch {
+    throw new Error("No se pudo conectar. Revisá tu conexión e intentá otra vez.");
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "No se pudo completar la acción.");
   return body as T;
-}
-
-function familyDate(date = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
 export default function Home() {
@@ -67,6 +69,7 @@ export default function Home() {
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [familyDay, setFamilyDay] = useState(() => getFamilyDay());
   const [syncState, setSyncState] = useState<"idle" | "loading" | "synced" | "error">("idle");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -91,6 +94,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const etagRef = useRef<string | null>(null);
   const lastActivityAt = useRef(0);
+  const occurrenceBusy = useRef(false);
 
   const refresh = useCallback(async (force = false) => {
     if (!session?.user?.id) return;
@@ -124,6 +128,7 @@ export default function Home() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "No se pudieron cargar las tareas.");
       etagRef.current = response.headers.get("ETag");
+      setFamilyDay(body.familyDay as string);
       setTasks(body.tasks as Task[]);
       setSyncState("synced");
       setLastUpdated(new Date());
@@ -178,23 +183,28 @@ export default function Home() {
     };
   }, [refresh, session?.user?.id]);
 
-  const familyDay = familyDate();
   const visibleTasks = useMemo(() => {
-    return tasks.filter((task) => task.status === "open" ? !task.dueDate || task.dueDate <= familyDay : true);
+    return tasks.filter((task) => task.status === "open"
+      ? !task.dueDate || task.dueDate <= familyDay
+      : !!task.completedAt && getFamilyDay(new Date(task.completedAt)) === familyDay);
   }, [familyDay, tasks]);
   const openCount = visibleTasks.filter((task) => task.status === "open").length;
   const completeCount = visibleTasks.filter((task) => task.status === "completed").length;
 
   async function performOccurrence(task: Task, action: "claim" | "complete" | "undo" | "skip") {
+    if (occurrenceBusy.current) return;
+    occurrenceBusy.current = true;
     setBusy(true); setError("");
     try {
       await requestJson(`/api/tasks/${task.taskId}/occurrences/${task.id}`, {
         method: "PATCH",
         body: JSON.stringify({ action, expectedVersion: task.version }),
       });
-      await refresh();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "La tarea cambió. Actualizá y probá otra vez."); await refresh(); }
-    finally { setBusy(false); }
+      await refresh(true);
+    } catch (caught) {
+      await refresh(true);
+      setError(caught instanceof Error ? caught.message : "La tarea cambió. Actualizá y probá otra vez.");
+    } finally { occurrenceBusy.current = false; setBusy(false); }
   }
 
   async function createTask(event: FormEvent<HTMLFormElement>) {
@@ -313,7 +323,7 @@ export default function Home() {
     });
   }
 
-  const dateLabel = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", weekday: "long", day: "numeric", month: "long" }).format(new Date()).toLocaleUpperCase("es-AR");
+  const dateLabel = new Intl.DateTimeFormat("es-AR", { timeZone: FAMILY_TIME_ZONE, weekday: "long", day: "numeric", month: "long" }).format(new Date()).toLocaleUpperCase("es-AR");
   const currentMemberName = members.find((person) => person.id === currentMemberId)?.name ?? "Integrante";
   const currentRole = members.find((person) => person.id === currentMemberId)?.role ?? "member";
   const weekdayOptions = [[0, "Do"], [1, "Lu"], [2, "Ma"], [3, "Mi"], [4, "Ju"], [5, "Vi"], [6, "Sá"]] as const;
@@ -357,7 +367,7 @@ export default function Home() {
             <div className={`${styles.summaryCard} ${styles.summaryQuote}`}><span className={styles.quoteMark}>“</span><p>Las pequeñas cosas<br />también cuentan.</p><span className={styles.quoteBy}>— para hoy</span></div>
           </div>
 
-          <div className={styles.tasksHeader}><div><h2>{showHistory ? "Historial" : "Hoy en casa"}</h2><span>{showHistory ? "Completadas y ocasiones omitidas" : "Pendientes y completadas recientes"}</span></div><div className={styles.topActions}><button className={styles.filterButton} onClick={() => showHistory ? void loadHistory(true) : void refresh(true)}>{showHistory ? historyLoading ? "Cargando…" : "Actualizar historial" : syncState === "loading" ? "Actualizando…" : "Actualizar"} <span>↻</span></button><button className={styles.filterButton} onClick={() => showHistory ? setShowHistory(false) : void loadHistory(true)}>{showHistory ? "Volver a tareas" : "Historial"}</button></div></div>
+          <div className={styles.tasksHeader}><div><h2>{showHistory ? "Historial" : "Hoy en casa"}</h2><span>{showHistory ? "Completadas y ocasiones omitidas" : "Pendientes y completadas de hoy"}</span></div><div className={styles.topActions}><button className={styles.filterButton} onClick={() => showHistory ? void loadHistory(true) : void refresh(true)}>{showHistory ? historyLoading ? "Cargando…" : "Actualizar historial" : syncState === "loading" ? "Actualizando…" : "Actualizar"} <span>↻</span></button><button className={styles.filterButton} onClick={() => showHistory ? setShowHistory(false) : void loadHistory(true)}>{showHistory ? "Volver a tareas" : "Historial"}</button></div></div>
 
           {showHistory ? <><div className={styles.topActions} aria-label="Filtrar historial"><button className={styles.filterButton} aria-pressed={historyFilter === "all"} onClick={() => { setHistoryFilter("all"); void loadHistory(true, "all"); }}>Todo</button><button className={styles.filterButton} aria-pressed={historyFilter === "completed"} onClick={() => { setHistoryFilter("completed"); void loadHistory(true, "completed"); }}>Completadas</button><button className={styles.filterButton} aria-pressed={historyFilter === "archived"} onClick={() => { setHistoryFilter("archived"); void loadHistory(true, "archived"); }}>Omitidas y archivadas</button></div><div className={styles.taskList}>
             {historyItems.length === 0 && !historyLoading && <div className={styles.emptyState}>Todavía no hay actividad en el historial.</div>}
@@ -371,6 +381,7 @@ export default function Home() {
             {visibleTasks.length === 0 && <div className={styles.emptyState}>No hay tareas pendientes. Podés crear una cuando haga falta.</div>}
             {visibleTasks.map((task, index) => {
               const isComplete = task.status === "completed";
+              const canUndo = isComplete && (currentRole === "administrator" || task.completedByMemberId === currentMemberId);
               const available = task.status === "open" && task.assignmentMode === "shared" && task.assignees.length === 0 && !task.claimedByMemberId;
               const individualOwner = task.responsibilityMemberId ? members.find((person) => person.id === task.responsibilityMemberId)?.name : null;
               const people = task.assignmentMode === "individual"
@@ -379,7 +390,10 @@ export default function Home() {
               const meta = task.dueDate ? `${task.dueDate === familyDay ? "Hoy" : task.dueDate}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}` : task.scheduledTime ? `Hoy · ${task.scheduledTime}` : "Sin fecha";
               const tone = ["lavender", "mint", "peach"][index % 3];
               return <article className={`${styles.taskCard} ${isComplete ? styles.taskDone : ""}`} key={task.id}>
-                <button className={`${styles.checkButton} ${isComplete ? styles.checkedButton : ""}`} aria-label={isComplete ? `Deshacer: ${task.title}` : `Marcar ${task.title} como hecha`} disabled={busy} onClick={() => void performOccurrence(task, isComplete ? "undo" : "complete")}>{isComplete ? "✓" : ""}</button>
+                {isComplete ? canUndo
+                  ? <button className={`${styles.completeAction} ${styles.undoAction}`} aria-label={`Deshacer finalización de ${task.title}`} disabled={busy} onClick={() => void performOccurrence(task, "undo")}>Deshacer</button>
+                  : <span className={styles.doneBadge} aria-label={`${task.title}, completada`}>✓ Hecha</span>
+                  : <button className={styles.completeAction} aria-label={`Marcar ${task.title} como hecha`} disabled={busy} onClick={() => void performOccurrence(task, "complete")}>{busy ? "Guardando…" : "Marcar hecha"}</button>}
                 <div className={`${styles.taskIcon} ${styles[tone]}`}>{index % 3 === 0 ? "⌂" : index % 3 === 1 ? "♧" : "✳"}</div>
                 <div className={styles.taskInfo}><h3>{task.title}</h3><p>{meta}</p><span className={styles.taskPeople}>{isComplete ? `Hecha por ${members.find((person) => person.id === task.completedByMemberId)?.name ?? "un integrante"}` : people}</span>{task.editedByName && <small className={styles.editedBy}>Editada por {task.editedByName}</small>}</div>
                 {available && <button className={styles.claimButton} disabled={busy} onClick={() => void performOccurrence(task, "claim")}>Asumir</button>}

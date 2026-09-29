@@ -6,6 +6,7 @@ import {
   digestAccessCode,
   formatAccessCode,
   getFamilyDay,
+  taskListEtag,
   hasPresentAssignee,
   normalizeAccessCode,
   nextScheduledDay,
@@ -50,8 +51,11 @@ test("the next carry-forward occurrence is after the completion date", () => {
 });
 
 test("family day uses Buenos Aires regardless of the device timezone", () => {
-  assert.equal(getFamilyDay(new Date("2026-09-28T02:30:00.000Z")), "2026-09-27");
-  assert.equal(getFamilyDay(new Date("2026-09-28T03:30:00.000Z")), "2026-09-28");
+  const beforeMidnight = getFamilyDay(new Date("2026-09-29T02:59:00.000Z"));
+  const afterMidnight = getFamilyDay(new Date("2026-09-29T03:01:00.000Z"));
+  assert.equal(beforeMidnight, "2026-09-28");
+  assert.equal(afterMidnight, "2026-09-29");
+  assert.notEqual(taskListEtag("family", 3, beforeMidnight), taskListEtag("family", 3, afterMidnight));
 });
 
 test("all members can edit and complete, but only administrators can archive or finalize", () => {

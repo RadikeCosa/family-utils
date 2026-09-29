@@ -1,10 +1,10 @@
-import { and, asc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, families, members, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { FAMILY_TIME_ZONE, getFamilyDay } from "@/lib/tasks/rules";
+import { FAMILY_TIME_ZONE, getFamilyDay, taskListEtag } from "@/lib/tasks/family-day";
 import { materializeOccurrences } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
@@ -31,18 +31,19 @@ export async function GET(request: Request) {
   const member = await getMemberContext(request.headers);
   if (!member) return NextResponse.json({ error: "No family access" }, { status: 403 });
 
-  await materializeOccurrences(member.familyId);
+  const now = new Date();
+  const today = getFamilyDay(now);
+  await materializeOccurrences(member.familyId, now);
   const [familyState] = await getDb().select({ revision: families.revision })
     .from(families)
     .where(eq(families.id, member.familyId))
     .limit(1);
   const revision = familyState?.revision ?? member.familyRevision;
-  const etag = `"family-${member.familyId}-r${revision}"`;
+  const etag = taskListEtag(member.familyId, revision, today);
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
   }
 
-  const recentSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const editor = alias(members, "task_editor");
   const data = await getDb()
     .select({
@@ -80,7 +81,10 @@ export async function GET(request: Request) {
       eq(occurrences.familyId, member.familyId),
       ne(tasks.status, "archived"),
       ne(occurrences.status, "archived"),
-      or(eq(occurrences.status, "open"), and(eq(occurrences.status, "completed"), gte(occurrences.completedAt, recentSince))),
+      or(eq(occurrences.status, "open"), and(
+        eq(occurrences.status, "completed"),
+        eq(sql<string>`(${occurrences.completedAt} AT TIME ZONE ${FAMILY_TIME_ZONE})::date`, today),
+      )),
     ))
     .orderBy(sql`CASE WHEN ${occurrences.status} = 'open' THEN 0 ELSE 1 END`, asc(occurrences.dueDate), asc(occurrences.id))
     .limit(150);
@@ -106,7 +110,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    familyDay: getFamilyDay(),
+    familyDay: today,
     timeZone: FAMILY_TIME_ZONE,
     memberId: member.memberId,
     revision,

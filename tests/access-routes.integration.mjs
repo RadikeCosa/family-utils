@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import test from "node:test";
 import pg from "pg";
+import { getFamilyDay, taskListEtag } from "../src/lib/tasks/family-day.ts";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 const port = Number(process.env.FAMILY_UTILS_TEST_PORT ?? 3317);
@@ -135,6 +136,92 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal(state.version, 2);
       assert.equal(state.edits, "1");
       assert.equal((await update()).status, 409);
+    });
+
+    await t.test("carried routine completes once, can be undone, and waits for the next scheduled day", async () => {
+      const today = getFamilyDay();
+      const previous = new Date(`${today}T00:00:00.000Z`);
+      previous.setUTCDate(previous.getUTCDate() - 1);
+      const previousDay = previous.toISOString().slice(0, 10);
+      const { rows: [task] } = await pool.query(
+        `INSERT INTO tasks (family_id, title, assignment_mode, repeat_weekdays, carry_policy, scheduled_date, created_by_member_id, edited_by_member_id)
+         VALUES ($1, 'Daily carry test', 'shared', ARRAY[0,1,2,3,4,5,6], 'carry_forward', $3, $2, $2) RETURNING id`,
+        [familyId, childId, previousDay],
+      );
+      const { rows: [occurrence] } = await pool.query(
+        `INSERT INTO task_occurrences (task_id, family_id, due_date, generation_date, title_snapshot, assignment_mode_snapshot, carry_policy_snapshot, carry_forward)
+         VALUES ($1, $2, $3, $3, 'Daily carry test', 'shared', 'carry_forward', true) RETURNING id`,
+        [task.id, familyId, previousDay],
+      );
+      const update = (action, expectedVersion) => fetch(`${origin}/api/tasks/${task.id}/occurrences/${occurrence.id}`, {
+        method: "PATCH", headers: { ...headers, Cookie: memberCookie }, body: JSON.stringify({ action, expectedVersion }),
+      });
+      const list = () => fetch(`${origin}/api/tasks`, { headers: { Cookie: memberCookie } });
+      const before = await list();
+      assert.equal(before.status, 200);
+      const beforeBody = await before.json();
+      assert.equal(before.headers.get("etag"), taskListEtag(familyId, beforeBody.revision, today));
+      assert.equal(beforeBody.tasks.filter((item) => item.taskId === task.id && item.status === "open").length, 1);
+      await assert.rejects(
+        pool.query(
+          `INSERT INTO task_occurrences (task_id, family_id, due_date, generation_date, title_snapshot, assignment_mode_snapshot, carry_policy_snapshot, carry_forward)
+           VALUES ($1, $2, $3, $3, 'Duplicate carry test', 'shared', 'carry_forward', true)`,
+          [task.id, familyId, today],
+        ),
+        { code: "23505" },
+        "PostgreSQL must reject a second open carry-forward occasion for the same responsibility",
+      );
+      assert.equal((await update("complete", 1)).status, 200);
+      await list();
+      assert.deepEqual((await pool.query("SELECT status FROM task_occurrences WHERE task_id=$1 ORDER BY generation_date", [task.id])).rows.map(({ status }) => status), ["completed"]);
+      assert.equal((await update("undo", 2)).status, 200);
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1 AND status='open'", [task.id])).rows[0].count, "1");
+      const [first, second] = await Promise.all([update("complete", 3), update("complete", 3)]);
+      assert.deepEqual([first.status, second.status].sort(), [200, 409]);
+      const after = await list();
+      const afterBody = await after.json();
+      assert.equal(afterBody.tasks.filter((item) => item.taskId === task.id && item.status === "completed").length, 1);
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count, "1");
+      const anonymousUndo = await fetch(`${origin}/api/tasks/${task.id}/occurrences/${occurrence.id}`, {
+        method: "PATCH", headers, body: JSON.stringify({ action: "undo", expectedVersion: 4 }),
+      });
+      assert.equal(anonymousUndo.status, 403);
+    });
+
+    await t.test("daily expiry creates today's item and old completions live in history", async () => {
+      const today = getFamilyDay();
+      const yesterday = new Date(`${today}T00:00:00.000Z`);
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const previousDay = yesterday.toISOString().slice(0, 10);
+      const { rows: [task] } = await pool.query(
+        `INSERT INTO tasks (family_id, title, assignment_mode, repeat_weekdays, carry_policy, scheduled_date, created_by_member_id, edited_by_member_id)
+         VALUES ($1, 'Daily expiry test', 'shared', ARRAY[0,1,2,3,4,5,6], 'expires_daily', $3, $2, $2) RETURNING id`,
+        [familyId, childId, previousDay],
+      );
+      await pool.query(
+        `INSERT INTO task_occurrences (task_id, family_id, due_date, generation_date, title_snapshot, assignment_mode_snapshot)
+         VALUES ($1, $2, $3, $3, 'Daily expiry test', 'shared')`, [task.id, familyId, previousDay],
+      );
+      const list = await fetch(`${origin}/api/tasks`, { headers: { Cookie: memberCookie } });
+      assert.equal(list.status, 200, await list.clone().text().then((body) => body.slice(0, 200)));
+      const items = (await list.json()).tasks.filter((item) => item.taskId === task.id);
+      assert.equal(items.filter((item) => item.dueDate === today && item.status === "open").length, 1);
+      assert.equal((await pool.query("SELECT status FROM task_occurrences WHERE task_id=$1 AND due_date=$2", [task.id, previousDay])).rows[0].status, "missed");
+      const { rows: [pastTask] } = await pool.query(
+        `INSERT INTO tasks (family_id, title, created_by_member_id, edited_by_member_id)
+         VALUES ($1, 'Past completion test', $2, $2) RETURNING id`, [familyId, childId],
+      );
+      await pool.query(
+        `INSERT INTO task_occurrences (task_id, family_id, due_date, generation_date, title_snapshot, assignment_mode_snapshot, status, completed_by_member_id, completed_at)
+         VALUES ($1, $2, $3, $3, 'Past completion test', 'shared', 'completed', $4, $5)`,
+        [pastTask.id, familyId, previousDay, childId, new Date(`${previousDay}T15:00:00.000Z`)],
+      );
+      const refreshed = await fetch(`${origin}/api/tasks`, { headers: { Cookie: memberCookie } });
+      assert.equal(refreshed.status, 200, await refreshed.clone().text().then((body) => body.slice(0, 200)));
+      assert.equal((await refreshed.json()).tasks.some((item) => item.taskId === pastTask.id), false);
+      const history = await fetch(`${origin}/api/tasks/history`, { headers: { Cookie: memberCookie } });
+      assert.equal(history.status, 200, await history.clone().text().then((body) => body.slice(0, 200)));
+      assert.equal((await history.json()).items.some((item) => item.taskId === pastTask.id), true);
     });
 
     await t.test("recovery from a new PWA identity revokes the previous session, not the new one", async () => {

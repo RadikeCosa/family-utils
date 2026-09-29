@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const FAMILY_TIME_ZONE = "America/Argentina/Buenos_Aires";
+export { FAMILY_TIME_ZONE, getFamilyDay, taskListEtag } from "./family-day.ts";
 export const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 export type FamilyRole = "administrator" | "member";
@@ -94,15 +94,4 @@ export function nextScheduledDay(completedDay: string, weekdays: readonly number
     }
   }
   return null;
-}
-
-export function getFamilyDay(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: FAMILY_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
 }

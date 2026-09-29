@@ -35,7 +35,10 @@ Las rutinas repiten una tarea diaria o en días elegidos de la semana. Al
 configurarlas se elige si cada ocasión vence al final del día familiar o si
 permanece pendiente hasta completarse. En el segundo caso existe como máximo
 una ocasión abierta por responsabilidad; al completarla, la próxima se agenda
-para el siguiente día programado posterior a la finalización.
+para el siguiente día programado posterior a la finalización y aparece cuando
+llega ese día. Si ayer quedó pendiente, hoy continúa la misma ocasión; no se
+crea una segunda. Una ocasión completada se muestra como hecha durante el día
+familiar de Buenos Aires y después permanece en el historial.
 
 Editar permite distinguir la ocasión actual de la programación futura.
 Finalizar una rutina detiene las ocasiones futuras y conserva los pendientes.
@@ -89,12 +92,13 @@ No se usa GPS ni se requiere registrar movimientos reales.
 ## Experiencia y sincronización
 
 La plataforma abre primero sus aplicaciones y la gestión familiar. Tareas y
-rutinas ofrece la vista diaria y el alta de tareas; las vistas de semana e
-historial paginado se incorporarán en las siguientes entregas. La aplicación
-valida membresía y permisos en el servidor.
+rutinas ofrece la vista diaria, edición, alta e historial paginado. La vista de
+semana se incorporará en una entrega posterior. La aplicación valida membresía
+y permisos en el servidor.
 
-Un endpoint autenticado de revisión/ETag familiar permite refrescar datos solo
-cuando cambian. Se consulta cada 30 segundos con la app visible y actividad
+Un endpoint autenticado de revisión/ETag familiar incluye el día de Buenos
+Aires para refrescar también al pasar la medianoche. Se consulta cada 30
+segundos con la app visible y actividad
 reciente, y se pausa tras dos minutos de inactividad. Volver a la app, recuperar
 conexión o pedir actualización inicia una consulta. Se muestra la última
 actualización.
