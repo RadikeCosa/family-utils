@@ -46,7 +46,7 @@ export function createAuth() {
               .map((email) => email.trim().toLowerCase())
               .filter(Boolean));
             const isBootstrapEmailAllowed = allowedEmails.has(user.email.toLowerCase());
-            console.warn("AUTH_BOOTSTRAP_EMAIL_CHECK", {
+            console.info("AUTH_BOOTSTRAP_EMAIL_CHECK", {
               allowed: isBootstrapEmailAllowed,
               configuredEmailCount: allowedEmails.size,
             });
@@ -65,8 +65,12 @@ export function createAuth() {
     rateLimit: {
       enabled: true,
       storage: "database",
-      window: 60 * 15,
-      max: 10,
+      window: 60,
+      max: 100,
+      customRules: {
+        "/sign-in/social": { window: 60 * 15, max: 10 },
+        "/get-session": false,
+      },
     },
     plugins: [
       anonymous({
