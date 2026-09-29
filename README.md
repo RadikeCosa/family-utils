@@ -32,6 +32,8 @@ npm run lint
 npm run typecheck
 npm run test
 npm run build
+npm run test:routes
+npm run test:e2e
 ```
 
 Las pruebas de invariantes PostgreSQL usan `FAMILY_UTILS_TEST_DATABASE_URL`,
@@ -39,6 +41,9 @@ una base aislada PostgreSQL 18. CI prepara un servicio temporal para ellas;
 `npm run test:routes` levanta el build y verifica los handlers de invitación,
 recuperación y edición contra ese servicio;
 no apuntes esa variable a la base de datos de producción.
+Playwright verifica la acción de completar y el cambio de día con tamaños de
+iPhone y Android. Para ejecutarlo localmente, compilá primero, instalá Chromium
+con `npx playwright install chromium` y usá la misma base aislada.
 
 ## Documentación
 
