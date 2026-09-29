@@ -43,6 +43,13 @@
       "when": 1790661864043,
       "tag": "0005_auth_entity_id_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790677047415,
+      "tag": "0006_swift_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

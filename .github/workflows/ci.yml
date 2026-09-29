@@ -25,6 +25,7 @@ jobs:
     env:
       DATABASE_URL: postgres://family:family@localhost:5432/family_utils
       DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/family_utils
+      FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_utils
       BETTER_AUTH_SECRET: ci-only-secret-not-used-outside-ci
       BETTER_AUTH_URL: http://localhost:3000
       CODE_PEPPER: ci-only-pepper-not-used-outside-ci

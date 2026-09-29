@@ -3,16 +3,21 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { auditEvents, families, memberDevices, members } from "@/db/schema";
 import { getMemberContext, isBootstrapEmail } from "@/lib/auth/context";
+import { createAuth } from "@/lib/auth/server";
 
 export const runtime = "nodejs";
+
+export async function GET(request: Request) {
+  const session = await createAuth().api.getSession({ headers: request.headers });
+  return NextResponse.json({ canBootstrap: !!session && !session.user.isAnonymous && session.user.emailVerified && isBootstrapEmail(session.user.email) }, { headers: { "Cache-Control": "no-store" } });
+}
 
 export async function POST(request: Request) {
   const existing = await getMemberContext(request.headers);
   if (existing) return NextResponse.json({ familyId: existing.familyId, memberId: existing.memberId });
 
-  const auth = await import("@/lib/auth/server").then(({ createAuth }) => createAuth());
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session || session.user.isAnonymous || !isBootstrapEmail(session.user.email)) {
+  const session = await createAuth().api.getSession({ headers: request.headers });
+  if (!session || session.user.isAnonymous || !session.user.emailVerified || !isBootstrapEmail(session.user.email)) {
     return NextResponse.json({ error: "No family access" }, { status: 403 });
   }
 
@@ -35,6 +40,8 @@ export async function POST(request: Request) {
       familyId: family.id,
       name: displayName,
       role: "administrator",
+      accessMethod: "google",
+      googleEmail: session.user.email.trim().toLowerCase(),
     }).returning();
 
     await tx.insert(memberDevices).values({

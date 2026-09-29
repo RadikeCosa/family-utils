@@ -2,10 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "Family Utils — tareas de casa",
-  description: "Una forma simple de coordinar las tareas de la familia.",
+  title: "Family Utils — aplicaciones para tu familia",
+  description: "Aplicaciones útiles para organizar la vida familiar.",
   applicationName: "Family Utils",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon.svg", apple: "/icon-180.png" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

@@ -81,6 +81,7 @@ export const carryPolicyEnum = pgEnum("carry_policy", ["expires_daily", "carry_f
 export const presenceRuleKindEnum = pgEnum("presence_rule_kind", ["weekly", "period", "exception"]);
 export const accessCodePurposeEnum = pgEnum("access_code_purpose", ["invitation", "recovery"]);
 export const assignmentModeEnum = pgEnum("assignment_mode", ["shared", "individual"]);
+export const accessMethodEnum = pgEnum("access_method", ["google", "code"]);
 
 export const families = pgTable("families", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -96,10 +97,16 @@ export const members = pgTable("members", {
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   role: familyRoleEnum("role").notNull().default("member").$type<FamilyRole>(),
+  accessMethod: accessMethodEnum("access_method").notNull().default("code"),
+  googleEmail: text("google_email"),
+  version: integer("version").notNull().default(1),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (table) => [index("members_family_id_idx").on(table.familyId)]);
+}, (table) => [
+  index("members_family_id_idx").on(table.familyId),
+  uniqueIndex("members_google_email_unique_idx").on(sql`lower(${table.googleEmail})`).where(sql`${table.googleEmail} IS NOT NULL`),
+]);
 
 export const memberDevices = pgTable("member_devices", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -195,6 +202,7 @@ export const accessCodes = pgTable("access_codes", {
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
+  consumedByAuthUserId: text("consumed_by_auth_user_id"),
   createdAt: createdAt(),
 });
 

@@ -62,18 +62,23 @@ No se usa GPS ni se requiere registrar movimientos reales.
 
 ## Acceso y perfiles
 
-- Los adultos ingresan con Google. Los integrantes jóvenes pueden usar el
-  plugin anónimo de Better Auth sin correo.
+- Cada perfil familiar se asocia a una identidad de acceso. Los adultos usan
+  una identidad Google verificada por perfil y pueden abrir sesiones en varios
+  dispositivos. Los integrantes jóvenes usan una identidad anónima distinta en
+  cada dispositivo.
 - El perfil familiar es independiente de la identidad y de cada dispositivo.
   Recuperar el acceso mantiene tareas, permisos e historial.
-- Invitaciones duran 24 horas y recuperación 10 minutos. Ambos códigos se
-  escriben dentro de la PWA instalada, incluso en iPhone. Abrir una página no
-  canjea ni consume un código.
+- Invitaciones duran 24 horas y recuperación 30 minutos. Los integrantes
+  jóvenes ingresan ambos códigos dentro de la PWA instalada; los adultos usan
+  una invitación para vincular su perfil Google por primera vez. Abrir una
+  página no canjea ni consume un código.
 - Códigos de diez caracteres Crockford se muestran `XXXXX-XXXXX`; el servidor
   guarda HMAC con secreto privado. Tokens largos se almacenan con SHA-256.
-- Los códigos son de un solo uso y el canje se realiza de manera atómica. Un
-  administrador puede revocar o reemplazar el acceso de un dispositivo
-  perdido sin cerrar las demás sesiones.
+- Los códigos son de un solo uso y el canje se realiza de manera atómica. Para
+  un integrante joven, recuperar el acceso revoca sus dispositivos anteriores.
+  Un adulto vuelve a iniciar sesión con la misma cuenta Google.
+- En iPhone, instalar primero la PWA y comenzar OAuth desde el icono asegura
+  que la sesión se cree en el mismo contexto en que se usará la aplicación.
 - Las sesiones vencen tras 90 días de inactividad y se renuevan a diario.
 - No se puede degradar, archivar ni dejar sin recuperación al último
   administrador.
@@ -83,9 +88,10 @@ No se usa GPS ni se requiere registrar movimientos reales.
 
 ## Experiencia y sincronización
 
-La PWA ofrece Hoy, Mi semana, Toda la familia, disponibles para asumir,
-completadas recientes e historial paginado. La aplicación valida membresía y
-permisos en el servidor.
+La plataforma abre primero sus aplicaciones y la gestión familiar. Tareas y
+rutinas ofrece la vista diaria y el alta de tareas; las vistas de semana e
+historial paginado se incorporarán en las siguientes entregas. La aplicación
+valida membresía y permisos en el servidor.
 
 Un endpoint autenticado de revisión/ETag familiar permite refrescar datos solo
 cuando cambian. Se consulta cada 30 segundos con la app visible y actividad

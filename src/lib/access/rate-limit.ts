@@ -13,15 +13,15 @@ export function opaqueBucketKey(secret: string, namespace: string, value: string
   return `${namespace}:${createHmac("sha256", secret).update(`${namespace}\0${value}`).digest("hex")}`;
 }
 
-export async function recordCodeAttempt(bucketKey: string, maximum: number): Promise<boolean> {
+export async function recordCodeAttempt(bucketKey: string, maximum: number, windowMinutes = 15): Promise<boolean> {
   const [row] = await getDb()
     .insert(codeRateLimits)
     .values({ bucketKey, windowStartedAt: new Date(), attempts: 1 })
     .onConflictDoUpdate({
       target: codeRateLimits.bucketKey,
       set: {
-        attempts: sql`CASE WHEN ${codeRateLimits.windowStartedAt} <= now() - interval '15 minutes' THEN 1 ELSE ${codeRateLimits.attempts} + 1 END`,
-        windowStartedAt: sql`CASE WHEN ${codeRateLimits.windowStartedAt} <= now() - interval '15 minutes' THEN now() ELSE ${codeRateLimits.windowStartedAt} END`,
+        attempts: sql`CASE WHEN ${codeRateLimits.windowStartedAt} <= now() - make_interval(mins => ${windowMinutes}) THEN 1 ELSE ${codeRateLimits.attempts} + 1 END`,
+        windowStartedAt: sql`CASE WHEN ${codeRateLimits.windowStartedAt} <= now() - make_interval(mins => ${windowMinutes}) THEN now() ELSE ${codeRateLimits.windowStartedAt} END`,
         updatedAt: sql`now()`,
       },
     })
