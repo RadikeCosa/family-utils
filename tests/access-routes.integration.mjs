@@ -110,6 +110,18 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal(state[0].revoked_at, null);
     });
 
+    await t.test("a regular family member cannot choose the shared meal", async () => {
+      const response = await fetch(`${origin}/api/meals/selection`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date: "2099-05-12", mealType: "dinner", title: "No debería guardarse", expectedVersion: 0 }),
+      });
+      assert.equal(response.status, 403);
+      assert.equal((await pool.query(
+        `SELECT count(*) FROM meal_suggestions ms JOIN meal_slots s ON s.id=ms.slot_id
+         WHERE s.family_id=$1 AND s.meal_date='2099-05-12' AND s.meal_type='dinner'`, [familyId],
+      )).rows[0].count, "0");
+    });
+
     await t.test("task editing handler writes configuration, occasion and audit atomically and rejects stale versions", async () => {
       const { rows: [task] } = await pool.query(
         `INSERT INTO tasks (family_id, title, created_by_member_id, edited_by_member_id)
@@ -290,34 +302,121 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await pool.query("SELECT archived_at IS NOT NULL AS archived FROM members WHERE id=$1", [adminId])).rows[0].archived, true);
     });
 
-    await t.test("real meal confirmation handler is single-winner under concurrent requests", async () => {
+    await t.test("real meal creation and confirmation is single-winner under concurrent HTTP requests", async () => {
       const date = "2099-05-12";
-      const revisionBefore = Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision);
-      const suggestionResponse = await fetch(`${origin}/api/meals/suggestions`, {
-        method: "POST", headers: { ...headers, Cookie: memberCookie },
-        body: JSON.stringify({ date, mealType: "dinner", title: "PRUEBA concurrencia" }),
+      const absent = await fetch(`${origin}/api/meals/attendance`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date, mealType: "dinner", memberId: childId, status: "absent" }),
       });
-      const suggestionText = await suggestionResponse.text();
-      assert.equal(suggestionResponse.status, 201, suggestionText);
-      const suggestion = JSON.parse(suggestionText);
+      assert.equal(absent.status, 200, "attendance is informational and may mark everyone absent");
+      const revisionBefore = Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision);
       const confirm = () => fetch(`${origin}/api/meals/selection`, {
         method: "PUT", headers: { ...headers, Cookie: memberCookie },
-        body: JSON.stringify({ date, mealType: "dinner", suggestionId: suggestion.id, expectedVersion: 0 }),
+        body: JSON.stringify({ date, mealType: "dinner", title: "PRUEBA concurrencia", expectedVersion: 0 }),
       });
       const [first, second] = await Promise.all([confirm(), confirm()]);
       assert.deepEqual([first.status, second.status].sort(), [200, 409]);
+      const winner = await (first.status === 200 ? first : second).json();
+      assert.equal(winner.pendingAttendance, false);
       const [selection] = (await pool.query(
-        `SELECT s.version, s.suggestion_id, s.confirmed_by_member_id, count(a.id)::int AS audit_count
+        `SELECT s.version, s.suggestion_id, s.confirmed_by_member_id, count(a.id)::int AS audit_count,
+           (SELECT count(*)::int FROM meal_suggestions ms WHERE ms.slot_id=s.slot_id AND ms.title='PRUEBA concurrencia') AS ideas
          FROM meal_selections s JOIN meal_slots ms ON ms.id=s.slot_id
          LEFT JOIN audit_events a ON a.entity_id=s.slot_id AND a.entity_type='meal_selection' AND a.action='confirmed'
          WHERE ms.family_id=$1 AND ms.meal_date=$2 AND ms.meal_type='dinner'
          GROUP BY s.version, s.suggestion_id, s.confirmed_by_member_id`, [familyId, date],
       )).rows;
       assert.equal(selection.version, 1);
-      assert.equal(selection.suggestion_id, suggestion.id);
+      assert.equal(selection.suggestion_id, winner.suggestion.id);
       assert.equal(selection.confirmed_by_member_id, childId);
       assert.equal(selection.audit_count, 1);
-      assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision), revisionBefore + 2);
+      assert.equal(selection.ideas, 1, "the losing request must not leave an orphan idea");
+      assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision), revisionBefore + 1);
+    });
+
+    await t.test("a failed selection after inserting a new idea rolls the whole transaction back", async () => {
+      const date = "2099-05-14";
+      await pool.query("DROP TRIGGER IF EXISTS fail_test_meal_selection_insert ON meal_selections");
+      await pool.query("DROP FUNCTION IF EXISTS fail_test_meal_selection_insert()");
+      await pool.query(`CREATE OR REPLACE FUNCTION fail_test_meal_selection_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM meal_slots WHERE id=NEW.slot_id AND family_id='${familyId}'::uuid AND meal_date='${date}'::date) THEN
+            RAISE EXCEPTION 'forced selection failure';
+          END IF;
+          RETURN NEW;
+        END
+      $$`);
+      await pool.query(`CREATE TRIGGER fail_test_meal_selection_insert BEFORE INSERT ON meal_selections
+        FOR EACH ROW EXECUTE FUNCTION fail_test_meal_selection_insert()`);
+      try {
+        const response = await fetch(`${origin}/api/meals/selection`, {
+          method: "PUT", headers: { ...headers, Cookie: memberCookie },
+          body: JSON.stringify({ date, mealType: "dinner", title: "No debe quedar suelta", expectedVersion: 0 }),
+        });
+        assert.equal(response.status, 500);
+        const state = await pool.query(
+          `SELECT
+             (SELECT count(*) FROM meal_slots WHERE family_id=$1 AND meal_date=$2 AND meal_type='dinner') AS slots,
+             (SELECT count(*) FROM meal_suggestions ms JOIN meal_slots s ON s.id=ms.slot_id WHERE s.family_id=$1 AND s.meal_date=$2 AND s.meal_type='dinner') AS ideas,
+             (SELECT count(*) FROM meal_selections ms JOIN meal_slots s ON s.id=ms.slot_id WHERE s.family_id=$1 AND s.meal_date=$2 AND s.meal_type='dinner') AS selections,
+             (SELECT count(*) FROM audit_events ae JOIN meal_suggestions ms ON ms.id=ae.entity_id JOIN meal_slots s ON s.id=ms.slot_id
+              WHERE ae.family_id=$1 AND ae.entity_type='meal_suggestion' AND ae.action='created_and_confirmed' AND s.meal_date=$2 AND s.meal_type='dinner') AS creation_audits`, [familyId, date],
+        );
+        assert.deepEqual(state.rows[0], { slots: "0", ideas: "0", selections: "0", creation_audits: "0" });
+      } finally {
+        await pool.query("DROP TRIGGER IF EXISTS fail_test_meal_selection_insert ON meal_selections");
+        await pool.query("DROP FUNCTION IF EXISTS fail_test_meal_selection_insert()");
+      }
+    });
+
+    await t.test("attendance is last-write-wins, rejects cross-family targets, and past meals are closed", async () => {
+      const date = "2099-05-13";
+      const updateAttendance = (status, memberId = childId, day = date) => fetch(`${origin}/api/meals/attendance`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date: day, mealType: "lunch", memberId, status }),
+      });
+      const [first, second] = await Promise.all([updateAttendance("absent"), updateAttendance("present")]);
+      assert.deepEqual([first.status, second.status], [200, 200]);
+      const firstBody = await first.json();
+      const secondBody = await second.json();
+      assert.deepEqual([firstBody.version, secondBody.version].sort(), [1, 2]);
+      const latest = firstBody.version > secondBody.version ? firstBody : secondBody;
+      const current = (await pool.query(
+        `SELECT a.version, a.status, a.updated_by_member_id, a.updated_at
+         FROM meal_attendance a JOIN meal_slots s ON s.id=a.slot_id
+         WHERE s.family_id=$1 AND s.meal_date=$2 AND s.meal_type='lunch' AND a.member_id=$3`, [familyId, date, childId],
+      )).rows[0];
+      assert.equal(Number(current.version), latest.version);
+      assert.equal(current.updated_by_member_id, latest.updatedByMemberId);
+      assert.equal(new Date(current.updated_at).toISOString(), latest.updatedAt);
+      assert.equal(current.status, latest.status);
+
+      const { rows: [otherFamily] } = await pool.query("INSERT INTO families (name) VALUES ($1) RETURNING id", [`foreign-${randomUUID()}`]);
+      const { rows: [foreignMember] } = await pool.query(
+        "INSERT INTO members (family_id, name, role, access_method) VALUES ($1, 'Foreign member', 'member', 'code') RETURNING id", [otherFamily.id],
+      );
+      assert.equal((await updateAttendance("absent", foreignMember.id)).status, 400);
+
+      const past = new Date(`${getFamilyDay()}T00:00:00Z`);
+      past.setUTCDate(past.getUTCDate() - 1);
+      const pastDate = past.toISOString().slice(0, 10);
+      const closed = await updateAttendance("present", childId, pastDate);
+      assert.equal(closed.status, 403);
+      assert.equal((await closed.json()).code, "MEAL_DAY_CLOSED");
+      const closedSelection = await fetch(`${origin}/api/meals/selection`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date: pastDate, mealType: "dinner", title: "Día cerrado", expectedVersion: 0 }),
+      });
+      assert.equal(closedSelection.status, 403);
+      assert.equal((await closedSelection.json()).code, "MEAL_DAY_CLOSED");
+      const closedIdea = await fetch(`${origin}/api/meals/suggestions`, {
+        method: "POST", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date: pastDate, mealType: "dinner", title: "Día cerrado" }),
+      });
+      assert.equal(closedIdea.status, 403);
+      assert.equal((await closedIdea.json()).code, "MEAL_DAY_CLOSED");
+      await pool.query("DELETE FROM members WHERE id=$1", [foreignMember.id]);
+      await pool.query("DELETE FROM families WHERE id=$1", [otherFamily.id]);
     });
 
     await t.test("task archive and restore handlers keep overdue work visible without retroactive debt", async () => {

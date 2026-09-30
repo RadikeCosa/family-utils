@@ -160,6 +160,125 @@ async function inspectControls(page: import("@playwright/test").Page) {
   });
 }
 
+test("menús permite elegir, quitar y volver a proponer con foco y objetivos táctiles accesibles", async ({ browser, baseURL }) => {
+  const fixture = await createFixture(baseURL!, browser);
+  try {
+    const context = await browser.newContext({ storageState: fixture.storageState, viewport: { width: 375, height: 850 } });
+    const page = await context.newPage();
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
+    await page.goto("/menus?fecha=fecha-invalida");
+    await expect(page.getByRole("status").filter({ hasText: "Mostramos hoy" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+
+    const dialogs = page.getByRole("dialog");
+    const choose = page.getByRole("button", { name: "Elegir comida" }).first();
+    await choose.click();
+    await expect(dialogs).toBeVisible();
+    await expect(page.locator("input[name='meal-choice']").first()).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("button", { name: "Cerrar" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("button", { name: "Elegir comida" }).last()).toBeFocused();
+    const dialogAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(dialogAxe.violations.map((violation) => violation.id)).toEqual([]);
+    const dialogSizes = await page.locator(".dialog button, .dialog input:not([type='radio']):not([type='checkbox']), .choiceOption, .newChoice").evaluateAll((elements) =>
+      elements.filter((element) => (element as HTMLElement).checkVisibility()).map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { label: element.textContent?.trim() ?? element.tagName, width: rect.width, height: rect.height };
+      }));
+    expect(dialogSizes.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(dialogs).toBeHidden();
+    await expect(choose).toBeFocused();
+
+    const interactiveSizes = await page.locator("a[href], button, input:not([type='radio']):not([type='checkbox']), .details summary, .statusChoice, .choiceOption, .newChoice").evaluateAll((elements) =>
+      elements.filter((element) => (element as HTMLElement).checkVisibility()).map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { label: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? element.tagName, width: rect.width, height: rect.height };
+      }));
+    expect(interactiveSizes.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
+
+    const lunch = page.locator("#meal-lunch");
+    await lunch.getByText("Asistencia", { exact: false }).click();
+    const attendanceTargets = await lunch.locator(".statusChoice").evaluateAll((elements) => elements.map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }));
+    expect(attendanceTargets.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
+    await lunch.getByLabel("No estará").click();
+    await expect(lunch.getByText("Nadie figura en casa; podés elegir de todos modos.")).toBeVisible();
+    await lunch.getByRole("button", { name: "Elegir comida" }).click();
+    await page.getByLabel("Escribir otra comida").check();
+    await page.getByLabel("Comida").fill("Guiso de prueba UX");
+    const resumedRequest = page.waitForRequest((request) => request.url().includes("/api/meals?weekStart="));
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await resumedRequest;
+    await expect(page.getByLabel("Comida")).toHaveValue("Guiso de prueba UX");
+    await page.route("**/api/meals/selection", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }) }));
+    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await expect(page.getByRole("alert").filter({ hasText: "Este día ya no se puede editar" })).toBeVisible();
+    await expect(page.getByLabel("Comida")).toHaveValue("Guiso de prueba UX");
+    await page.unroute("**/api/meals/selection");
+    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+
+    await lunch.getByRole("button", { name: "Quitar elección" }).click();
+    await page.getByRole("button", { name: "Quitar elección" }).last().click();
+    await expect(page.getByRole("button", { name: "Sí, quitar elección" })).toBeVisible();
+    await page.getByRole("button", { name: "Sí, quitar elección" }).click();
+    await expect(lunch.getByText("Todavía no se eligió una comida para este horario.")).toBeVisible();
+    await lunch.locator("details").nth(1).locator("summary").click();
+    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+    await lunch.getByRole("button", { name: "Elegir comida" }).click();
+    await page.locator(".choiceOption").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
+    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+    await expect(lunch.getByText(/elegió esta comida/)).toBeVisible();
+    await lunch.getByRole("button", { name: "Cambiar comida" }).click();
+    await page.getByLabel("Escribir otra comida").check();
+    await page.getByLabel("Comida").fill("Borrador ante conflicto");
+    let conflictRequests = 0;
+    await page.route("**/api/meals/selection", (route) => {
+      conflictRequests += 1;
+      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ code: "MEAL_SELECTION_CONFLICT", error: "Revisá la elección actual." }) });
+    });
+    await page.getByRole("button", { name: "Guardar cambio" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Alguien cambió esta comida" })).toBeVisible();
+    await expect(page.getByLabel("Comida")).toHaveValue("Borrador ante conflicto");
+    await page.getByRole("button", { name: "Ver la elección actual" }).click();
+    await expect(dialogs).toBeHidden();
+    expect(conflictRequests).toBe(1);
+    await page.unroute("**/api/meals/selection");
+    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+
+    const requestUrls: string[] = [];
+    page.on("request", (request) => { if (request.url().includes("/api/meals?weekStart=")) requestUrls.push(request.url()); });
+    const dateInput = page.getByLabel("Ir a una fecha");
+    const nextWithinWeek = new Date(`${today}T12:00:00.000Z`);
+    const deltaToStayInWeek = nextWithinWeek.getUTCDay() === 0 ? -1 : 1;
+    nextWithinWeek.setUTCDate(nextWithinWeek.getUTCDate() + deltaToStayInWeek);
+    const sameWeekDate = nextWithinWeek.toISOString().slice(0, 10);
+    await dateInput.fill(sameWeekDate);
+    await expect(page).toHaveURL(new RegExp(`fecha=${sameWeekDate}`));
+    await page.waitForTimeout(150);
+    expect(requestUrls).toHaveLength(0);
+    const nextWeek = new Date(`${today}T12:00:00.000Z`);
+    nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+    const nextWeekDate = nextWeek.toISOString().slice(0, 10);
+    await page.route(/\/api\/meals\?weekStart=/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.continue();
+    });
+    const weekRequest = page.waitForRequest((request) => request.url().includes("/api/meals?weekStart="));
+    await dateInput.fill(nextWeekDate);
+    await weekRequest;
+    await expect(page.getByText("Cargando…").first()).toBeVisible();
+    await context.close();
+  } finally {
+    await removeFixture(fixture);
+  }
+});
+
 test("contraste, foco y desbordamiento en las cinco áreas", async ({ browser, baseURL }) => {
   const fixture = await createFixture(baseURL!, browser);
   const failures: string[] = [];

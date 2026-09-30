@@ -46,6 +46,6 @@ export async function POST(request: Request) {
     return { kind: "ok" as const, suggestion };
   });
   if (result.kind === "forbidden") return NextResponse.json({ error: "No family access" }, { status: 403 });
-  if (result.kind === "past") return NextResponse.json({ error: "Los días anteriores son de solo lectura." }, { status: 409 });
+  if (result.kind === "past") return NextResponse.json({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }, { status: 403 });
   return NextResponse.json(result.suggestion, { status: 201 });
 }

@@ -69,7 +69,7 @@ async function mutate(request: Request, context: RouteContext, withdraw: boolean
 
   if (result.kind === "missing") return NextResponse.json({ error: "No se encontró la sugerencia." }, { status: 404 });
   if (result.kind === "forbidden") return NextResponse.json({ error: "No tenés permiso para modificar esa sugerencia." }, { status: 403 });
-  if (result.kind === "past") return NextResponse.json({ error: "Los días anteriores son de solo lectura." }, { status: 409 });
+  if (result.kind === "past") return NextResponse.json({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }, { status: 403 });
   if (result.kind === "selected") return NextResponse.json({ error: "Primero cambiá o quitá el menú confirmado." }, { status: 409 });
   if (result.kind === "conflict") return NextResponse.json({ error: "La sugerencia cambió. Actualizá la semana y volvé a intentar." }, { status: 409 });
   return withdraw ? new Response(null, { status: 204 }) : NextResponse.json(result.suggestion);

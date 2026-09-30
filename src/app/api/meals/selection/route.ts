@@ -8,6 +8,8 @@ import { bumpMenusRevision, lockFamilyActor, lockMealSlot } from "@/lib/meals/se
 
 export const runtime = "nodejs";
 
+class SelectionConflict extends Error {}
+
 export async function PUT(request: Request) {
   const actor = await getMemberContext(request.headers);
   if (!actor) return NextResponse.json({ error: "No family access" }, { status: 403 });
@@ -25,7 +27,8 @@ export async function PUT(request: Request) {
   }
   if (!suggestionId && body.suggestionId !== null && body.suggestionId !== undefined) return NextResponse.json({ error: "Sugerencia inválida." }, { status: 400 });
 
-  const result = await getDb().transaction(async (tx) => {
+  try {
+    const result = await getDb().transaction(async (tx) => {
     const currentActor = await lockFamilyActor(tx, actor);
     if (!currentActor) return { kind: "forbidden" as const };
     if (currentActor.role !== "administrator") return { kind: "forbidden" as const };
@@ -59,7 +62,7 @@ export async function PUT(request: Request) {
       ? await tx.select({ memberId: mealAttendance.memberId, status: mealAttendance.status }).from(mealAttendance)
         .where(and(eq(mealAttendance.slotId, slot.id), inArray(mealAttendance.memberId, activeMembers.map((profile) => profile.id))))
       : [];
-    const eligibility = canConfirmMeal(activeMembers.map((profile) => profile.id), attendance.flatMap((record) => record.status ? [{ memberId: record.memberId, status: record.status }] : []));
+    const eligibility = canConfirmMeal(activeMembers.map((profile) => profile.id));
     if (eligibility !== "ok") return { kind: eligibility };
     const pending = hasUnknownAttendance(activeMembers.map((profile) => profile.id), attendance.flatMap((record) => record.status ? [{ memberId: record.memberId, status: record.status }] : []));
 
@@ -77,19 +80,22 @@ export async function PUT(request: Request) {
         .where(and(eq(mealSelections.slotId, slot.id), eq(mealSelections.version, current.version))).returning()
       : await tx.insert(mealSelections).values({ slotId: slot.id, suggestionId: targetSuggestionId, confirmedByMemberId: currentActor.memberId }).returning();
     const selection = saved[0];
-    if (!selection) return { kind: "conflict" as const };
+    if (!selection) throw new SelectionConflict();
     await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: currentActor.memberId, entityType: "meal_selection", entityId: slot.id, action: current?.suggestionId ? "changed" : "confirmed", before: current ?? null, after: selection });
     await bumpMenusRevision(tx, actor.familyId);
     return { kind: "ok" as const, selection, pending, createdSuggestion };
-  });
+    });
 
-  if (result.kind === "forbidden") return NextResponse.json({ error: "Solo una persona adulta puede confirmar el menú." }, { status: 403 });
-  if (result.kind === "past") return NextResponse.json({ error: "Los días anteriores son de solo lectura." }, { status: 409 });
-  if (result.kind === "no-active-members") return NextResponse.json({ error: "No hay integrantes activos para esta comida." }, { status: 409 });
-  if (result.kind === "all-absent") return NextResponse.json({ error: "No se puede confirmar: todos los integrantes activos figuran ausentes." }, { status: 409 });
-  if (result.kind === "invalid-suggestion") return NextResponse.json({ error: "La sugerencia ya no está disponible para esta comida." }, { status: 400 });
-  if (result.kind === "invalid-title") return NextResponse.json({ error: "Escribí una comida o elegí una sugerencia." }, { status: 400 });
-  if (result.kind === "conflict") return NextResponse.json({ error: "La comida cambió. Actualizá la semana y volvé a intentar." }, { status: 409 });
-  if (result.kind === "cleared") return NextResponse.json({ selection: null, version: result.version });
-  return NextResponse.json({ selection: result.selection, pendingAttendance: result.pending, suggestion: result.createdSuggestion });
+    if (result.kind === "forbidden") return NextResponse.json({ error: "Solo una persona adulta puede confirmar el menú." }, { status: 403 });
+    if (result.kind === "past") return NextResponse.json({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }, { status: 403 });
+    if (result.kind === "no-active-members") return NextResponse.json({ error: "No hay integrantes activos para esta comida." }, { status: 409 });
+    if (result.kind === "invalid-suggestion") return NextResponse.json({ error: "La sugerencia ya no está disponible para esta comida." }, { status: 400 });
+    if (result.kind === "invalid-title") return NextResponse.json({ error: "Escribí una comida o elegí una sugerencia." }, { status: 400 });
+    if (result.kind === "conflict") return NextResponse.json({ code: "MEAL_SELECTION_CONFLICT", error: "La comida cambió mientras guardabas. Revisá la elección actual." }, { status: 409 });
+    if (result.kind === "cleared") return NextResponse.json({ selection: null, version: result.version });
+    return NextResponse.json({ selection: result.selection, pendingAttendance: result.pending, suggestion: result.createdSuggestion });
+  } catch (error) {
+    if (error instanceof SelectionConflict) return NextResponse.json({ code: "MEAL_SELECTION_CONFLICT", error: "La comida cambió mientras guardabas. Revisá la elección actual." }, { status: 409 });
+    throw error;
+  }
 }

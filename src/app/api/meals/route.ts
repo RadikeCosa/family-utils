@@ -93,6 +93,7 @@ export async function GET(request: Request) {
           version: record?.version ?? 0,
           updatedByMemberId: record?.updatedByMemberId ?? null,
           updatedByName: record?.updatedByMemberId ? namesById.get(record.updatedByMemberId) ?? "Integrante archivado" : null,
+          updatedAt: record?.updatedAt?.toISOString() ?? null,
         };
       }),
       suggestions: slot ? suggestionsBySlot.get(slot.id) ?? [] : [],

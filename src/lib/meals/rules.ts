@@ -48,10 +48,25 @@ export function mayManageSuggestion(role: FamilyRole, actorId: string, authorId:
   return role === "administrator" || actorId === authorId;
 }
 
-export function canConfirmMeal(activeMemberIds: readonly string[], attendance: readonly AttendanceRecord[]): "ok" | "no-active-members" | "all-absent" {
-  if (activeMemberIds.length === 0) return "no-active-members";
-  const states = new Map(attendance.map((record) => [record.memberId, record.status]));
-  return activeMemberIds.every((memberId) => states.get(memberId) === "absent") ? "all-absent" : "ok";
+export function canConfirmMeal(activeMemberIds: readonly string[]): "ok" | "no-active-members" {
+  return activeMemberIds.length === 0 ? "no-active-members" : "ok";
+}
+
+export function menuDateBounds(today: string): { earliest: string; latest: string } {
+  const current = new Date(`${today}T12:00:00.000Z`);
+  const earlierYear = current.getUTCFullYear() - 10;
+  const earlierLastDay = new Date(Date.UTC(earlierYear, current.getUTCMonth() + 1, 0)).getUTCDate();
+  const earlier = new Date(Date.UTC(earlierYear, current.getUTCMonth(), Math.min(current.getUTCDate(), earlierLastDay), 12));
+  const laterMonth = current.getUTCMonth() + 6;
+  const lastDayOfLaterMonth = new Date(Date.UTC(current.getUTCFullYear(), laterMonth + 1, 0)).getUTCDate();
+  const later = new Date(Date.UTC(current.getUTCFullYear(), laterMonth, Math.min(current.getUTCDate(), lastDayOfLaterMonth), 12));
+  return { earliest: earlier.toISOString().slice(0, 10), latest: later.toISOString().slice(0, 10) };
+}
+
+export function isMenuDateInRange(day: string, today: string): boolean {
+  if (!isValidDate(day) || !isValidDate(today)) return false;
+  const bounds = menuDateBounds(today);
+  return day >= bounds.earliest && day <= bounds.latest;
 }
 
 export function hasUnknownAttendance(activeMemberIds: readonly string[], attendance: readonly AttendanceRecord[]): boolean {

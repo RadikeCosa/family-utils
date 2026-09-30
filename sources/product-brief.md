@@ -105,15 +105,25 @@ actualización.
 
 ## Planificador de menús (primera versión)
 
-Cada integrante activo puede indicar si estará en casa y sugerir comidas para
-almuerzo o cena por día. Un administrador confirma una sugerencia o escribe y
-confirma una comida directamente. No se puede confirmar si todos figuran
-ausentes; la asistencia sin respuesta se muestra como pendiente y se advierte al
-confirmar. Los días pasados son de solo lectura. La vista semanal se actualiza
-con una revisión propia de menús para no refrescar por cambios de tareas.
+La vista principal muestra un día por vez, con almuerzo y cena. Las ideas se
+asocian a una fecha y comida concretas; no existe un catálogo general. Todos
+los integrantes activos pueden proponer ideas y cualquier integrante activo
+puede registrar o corregir la asistencia de cualquier persona activa de su
+familia. Se muestra quién hizo el último cambio de asistencia y cuándo; si hay
+ediciones simultáneas, prevalece la última escritura.
 
-La primera versión registra asistencia manual. La integración con calendarios
-de presencia queda para una etapa posterior.
+Solo un administrador adulto puede elegir la comida compartida a partir de una
+idea o escribir una nueva y elegirla en el mismo paso. La asistencia es
+informativa y no bloquea esa elección, incluso si todos figuran ausentes.
+Quitar una elección no retira la idea. La elección se comparte al consultar o
+actualizar la app; esta versión no envía notificaciones ni altera la asistencia
+al elegir.
+
+Las mutaciones se cierran al comenzar el día siguiente según la zona horaria
+familiar, actualmente `America/Argentina/Buenos_Aires`. Los días anteriores
+son de solo lectura. La vista conserva la revisión propia de menús para no
+refrescar por cambios de tareas. La asistencia se registra manualmente; la
+integración con calendarios queda para una etapa posterior.
 
 La experiencia offline se limita a consultar datos ya cargados; no escribe ni
 sincroniza cambios. Si el aislamiento por usuario, la limpieza al salir y la
