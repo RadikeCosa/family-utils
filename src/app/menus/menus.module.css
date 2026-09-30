@@ -83,3 +83,17 @@
   .suggestion { flex-wrap: wrap; }
   .suggestionActions { flex-wrap: wrap; }
 }
+
+/* Legibilidad y contraste compartidos por móvil y escritorio. */
+.titleRow p,.confirmed small,.suggestionText p,.empty,.loading { color: #59675d; font-weight: 500; }
+.brand > span:last-child,.eyebrow,.range,.mealHeading > span,.confirmedLabel,.subheading small,.person small,.suggestionText small,.footer { color: #5f6c63; }
+.dayHeading span { color: #536b58; }
+.headerLinks a,.exitButton,.subheading,.suggestionActions button,.footer a { color: #536b58; font-weight: 600; }
+.error { color: #9c5246; font-weight: 500; }
+.notice { color: #55755b; font-weight: 500; }
+.warning { color: #875f3f; font-weight: 500; }
+.removeButton { color: #855247; font-weight: 600; }
+
+.weekControls button,.person,.suggestionActions .chooseButton,.suggestForm input,.directForm input,.suggestForm button { border-color: #7f8d82; }
+.suggestForm input::placeholder,.directForm input::placeholder { color: #5f6c63; opacity: 1; }
+.page :is(a,button,input,select,textarea,summary):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }

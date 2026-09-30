@@ -77,3 +77,26 @@
   .weekCallout a span { font-size: 18px; }
   .footer { font-size: 11px; }
 }
+
+/* Legibilidad y contraste compartidos por móvil y escritorio. */
+.subtitle,.summaryCard > p,.tasksHeader > div > span,.taskInfo p,.weekCallout p,.accessPanelText p,.emptyState,.modalIntro { color: #59675d; font-weight: 500; }
+.brandLight,.sidebarLabel,.sidebarFooter small,.dateLabel,.summaryCard > div:nth-child(2) span,.summaryCard strong small,.quoteBy,.taskPeople,.taskStatus,.footer,.previewFlag,.signedInName,.editedBy,.modalEyebrow,.taskForm label span,.taskForm legend span,.memberRow small,.generatedCode span { color: #5f6c63; }
+.navItem,.filterButton,.weekCallout a,.signInButton,.signOutButton,.claimButton,.smallAction,.generatedCode button,.moreButton,.cardMore { color: #536b58; font-weight: 600; }
+.errorMessage { color: #a44c43; font-weight: 500; }
+.successMessage { color: #477251; font-weight: 500; }
+
+.codeForm input,.taskForm input:not([type=checkbox]),.taskForm select,.taskForm textarea,.inlineMemberForm input,.filterButton,.signInButton,.signOutButton,.settingsButton,.claimButton,.cancelButton,.smallAction { border-color: #7f8d82; }
+.codeForm input::placeholder,.taskForm input::placeholder,.taskForm textarea::placeholder,.inlineMemberForm input::placeholder { color: #5f6c63; opacity: 1; }
+.shell :is(a,button,input,select,textarea,summary):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }
+.completeAction:focus-visible { outline-color: #5b795f; }
+
+@media(max-width:620px) {
+  .tasksHeader { align-items: stretch; flex-direction: column; gap: 10px; }
+  .tasksHeader > .topActions { flex-wrap: wrap; }
+  .tasksHeader .filterButton { flex: 1 1 120px; }
+  .taskCard { flex-wrap: wrap; }
+  .taskCard > .taskInfo { flex: 1 1 calc(100% - 85px); min-width: calc(100% - 85px); }
+  .taskCard > .claimButton { margin-left: auto; }
+  .cardMore { min-height: 40px; padding-inline: 4px; }
+  .cardMore[aria-label^="Editar"] { font-size: 11px; }
+}
