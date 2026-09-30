@@ -15,10 +15,8 @@ async function mutate(request: Request, context: RouteContext, withdraw: boolean
   const { suggestionId } = await context.params;
   if (!isUuid(suggestionId)) return NextResponse.json({ error: "No se encontró la sugerencia." }, { status: 404 });
   let body: Record<string, unknown> = {};
-  if (!withdraw) {
-    try { body = await request.json() as Record<string, unknown>; }
-    catch { return NextResponse.json({ error: "Invalid suggestion" }, { status: 400 }); }
-  }
+  try { body = await request.json() as Record<string, unknown>; }
+  catch { return NextResponse.json({ error: "Invalid suggestion" }, { status: 400 }); }
   const expectedVersion = body.expectedVersion;
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const note = typeof body.note === "string" ? body.note.trim() : "";
