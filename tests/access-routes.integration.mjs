@@ -141,6 +141,31 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await update()).status, 409);
     });
 
+    await t.test("suggestion withdrawal handler reads expectedVersion from DELETE body", async () => {
+      const today = getFamilyDay();
+      const { rows: [slot] } = await pool.query(
+        "INSERT INTO meal_slots (family_id, meal_date, meal_type) VALUES ($1, $2, 'dinner') RETURNING id",
+        [familyId, today],
+      );
+      const { rows: [suggestion] } = await pool.query(
+        "INSERT INTO meal_suggestions (slot_id, author_member_id, title) VALUES ($1, $2, 'Withdrawal route test') RETURNING id",
+        [slot.id, childId],
+      );
+      const response = await fetch(`${origin}/api/meals/suggestions/${suggestion.id}`, {
+        method: "DELETE", headers: { ...headers, Cookie: memberCookie }, body: JSON.stringify({ expectedVersion: 1 }),
+      });
+      assert.equal(response.status, 204, await response.clone().text());
+
+      const { rows: [state] } = await pool.query(
+        `SELECT withdrawn_at, version,
+           (SELECT count(*) FROM audit_events WHERE entity_type='meal_suggestion' AND entity_id=$1 AND action='withdrawn') AS withdrawals
+         FROM meal_suggestions WHERE id=$1`, [suggestion.id],
+      );
+      assert.ok(state.withdrawn_at);
+      assert.equal(state.version, 2);
+      assert.equal(state.withdrawals, "1");
+    });
+
     await t.test("carried routine completes once, can be undone, and waits for the next scheduled day", async () => {
       const today = getFamilyDay();
       const previous = new Date(`${today}T00:00:00.000Z`);
