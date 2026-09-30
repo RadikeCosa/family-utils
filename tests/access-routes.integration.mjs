@@ -6,6 +6,9 @@ import pg from "pg";
 import { getFamilyDay, taskListEtag } from "../src/lib/tasks/family-day.ts";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+if (process.env.CI && !connectionString) {
+  throw new Error("FAMILY_UTILS_TEST_DATABASE_URL is required in CI");
+}
 const port = Number(process.env.FAMILY_UTILS_TEST_PORT ?? 3317);
 const origin = `http://localhost:${port}`;
 const secret = process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci";

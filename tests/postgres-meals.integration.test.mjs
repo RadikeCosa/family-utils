@@ -5,7 +5,11 @@ import pg from "pg";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 
-test("PostgreSQL meal selection is single-winner under concurrent confirmations", { skip: !connectionString && "requires an isolated PostgreSQL 17 test service with migrations applied" }, async () => {
+if (process.env.CI && !connectionString) {
+  throw new Error("FAMILY_UTILS_TEST_DATABASE_URL is required in CI");
+}
+
+test("PostgreSQL meal selection is single-winner under concurrent confirmations", { skip: !connectionString && "requires an isolated PostgreSQL test service with migrations applied" }, async () => {
   const pool = new pg.Pool({ connectionString });
   const suffix = randomUUID();
   let familyId;
