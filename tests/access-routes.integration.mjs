@@ -271,8 +271,9 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
         method: "POST", headers: { ...headers, Cookie: memberCookie },
         body: JSON.stringify({ date, mealType: "dinner", title: "PRUEBA concurrencia" }),
       });
-      assert.equal(suggestionResponse.status, 201, await suggestionResponse.text());
-      const suggestion = await suggestionResponse.json();
+      const suggestionText = await suggestionResponse.text();
+      assert.equal(suggestionResponse.status, 201, suggestionText);
+      const suggestion = JSON.parse(suggestionText);
       const confirm = () => fetch(`${origin}/api/meals/selection`, {
         method: "PUT", headers: { ...headers, Cookie: memberCookie },
         body: JSON.stringify({ date, mealType: "dinner", suggestionId: suggestion.id, expectedVersion: 0 }),
@@ -311,7 +312,8 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await pool.query("SELECT status FROM task_occurrences WHERE id=$1", [occurrence.id])).rows[0].status, "archived");
       const restoredResponse = await updateStatus("restore", archivedTask.version);
       assert.equal(restoredResponse.status, 200);
-      const restored = (await pool.query("SELECT status, due_date >= current_date AS not_overdue FROM task_occurrences WHERE id=$1", [occurrence.id])).rows[0];
+      const familyDay = getFamilyDay();
+      const restored = (await pool.query("SELECT status, due_date >= $2::date AS not_overdue FROM task_occurrences WHERE id=$1", [occurrence.id, familyDay])).rows[0];
       assert.equal(restored.status, "open");
       assert.equal(restored.not_overdue, true);
     });
