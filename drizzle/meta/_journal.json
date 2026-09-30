@@ -57,6 +57,13 @@
       "when": 1790703626099,
       "tag": "0007_task_edit_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790722434459,
+      "tag": "0008_meal_planner",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@
 .appCard { min-height: 195px; padding: 21px; display: flex; flex-direction: column; align-items: flex-start; text-decoration: none; background: #fff; border: 1px solid #e7eae3; border-radius: 13px; transition: border-color .18s, transform .18s; }
 .appCard:hover,.appCard:focus-visible { border-color: #b8cbb8; transform: translateY(-2px); outline: none; }
 .appIcon { width: 39px; height: 39px; display:grid; place-items:center; border-radius:12px; margin-bottom:15px; font-size:19px; }
-.lavender { background:#f0ebf8; color:#81729b; }.mint { background:#e7f1e5;color:#618568; }
+.lavender { background:#f0ebf8; color:#81729b; }.mint { background:#e7f1e5;color:#618568; }.peach { background:#f7eee7;color:#a47658; }
 .cardTitle { color:#33443a; font:600 15px Manrope,sans-serif; }.cardCopy { margin-top:6px; color:#8c9790; font-size:11px; }
 .cardArrow { width:100%; margin-top:auto; padding-top:18px; display:flex; justify-content:space-between; color:#66836b; font-size:11px; font-weight:700; }
 .footer { padding:40px 0 25px; display:flex; justify-content:space-between; color:#89958b; font-size:10px; }.footer span { color:#a0a9a1; }

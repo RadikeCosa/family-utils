@@ -4,6 +4,9 @@ import pg from "pg";
 import { getFamilyDay, taskListEtag } from "../../src/lib/tasks/family-day";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+if (process.env.CI && !connectionString) {
+  throw new Error("FAMILY_UTILS_TEST_DATABASE_URL is required in CI");
+}
 const baseURL = "http://localhost:3318";
 const secret = process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci";
 test.skip(!connectionString, "requires an isolated PostgreSQL 18 test service");

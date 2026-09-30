@@ -6,6 +6,9 @@ import pg from "pg";
 import { getFamilyDay, taskListEtag } from "../src/lib/tasks/family-day.ts";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+if (process.env.CI && !connectionString) {
+  throw new Error("FAMILY_UTILS_TEST_DATABASE_URL is required in CI");
+}
 const port = Number(process.env.FAMILY_UTILS_TEST_PORT ?? 3317);
 const origin = `http://localhost:${port}`;
 const secret = process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci";
@@ -262,6 +265,36 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await pool.query("SELECT archived_at IS NOT NULL AS archived FROM members WHERE id=$1", [adminId])).rows[0].archived, true);
     });
 
+    await t.test("real meal confirmation handler is single-winner under concurrent requests", async () => {
+      const date = "2099-05-12";
+      const revisionBefore = Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision);
+      const suggestionResponse = await fetch(`${origin}/api/meals/suggestions`, {
+        method: "POST", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date, mealType: "dinner", title: "PRUEBA concurrencia" }),
+      });
+      const suggestionText = await suggestionResponse.text();
+      assert.equal(suggestionResponse.status, 201, suggestionText);
+      const suggestion = JSON.parse(suggestionText);
+      const confirm = () => fetch(`${origin}/api/meals/selection`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date, mealType: "dinner", suggestionId: suggestion.id, expectedVersion: 0 }),
+      });
+      const [first, second] = await Promise.all([confirm(), confirm()]);
+      assert.deepEqual([first.status, second.status].sort(), [200, 409]);
+      const [selection] = (await pool.query(
+        `SELECT s.version, s.suggestion_id, s.confirmed_by_member_id, count(a.id)::int AS audit_count
+         FROM meal_selections s JOIN meal_slots ms ON ms.id=s.slot_id
+         LEFT JOIN audit_events a ON a.entity_id=s.slot_id AND a.entity_type='meal_selection' AND a.action='confirmed'
+         WHERE ms.family_id=$1 AND ms.meal_date=$2 AND ms.meal_type='dinner'
+         GROUP BY s.version, s.suggestion_id, s.confirmed_by_member_id`, [familyId, date],
+      )).rows;
+      assert.equal(selection.version, 1);
+      assert.equal(selection.suggestion_id, suggestion.id);
+      assert.equal(selection.confirmed_by_member_id, childId);
+      assert.equal(selection.audit_count, 1);
+      assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision), revisionBefore + 2);
+    });
+
     await t.test("task archive and restore handlers keep overdue work visible without retroactive debt", async () => {
       const { rows: [task] } = await pool.query(
         `INSERT INTO tasks (family_id, title, created_by_member_id, edited_by_member_id)
@@ -280,7 +313,8 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await pool.query("SELECT status FROM task_occurrences WHERE id=$1", [occurrence.id])).rows[0].status, "archived");
       const restoredResponse = await updateStatus("restore", archivedTask.version);
       assert.equal(restoredResponse.status, 200);
-      const restored = (await pool.query("SELECT status, due_date >= current_date AS not_overdue FROM task_occurrences WHERE id=$1", [occurrence.id])).rows[0];
+      const familyDay = getFamilyDay();
+      const restored = (await pool.query("SELECT status, due_date >= $2::date AS not_overdue FROM task_occurrences WHERE id=$1", [occurrence.id, familyDay])).rows[0];
       assert.equal(restored.status, "open");
       assert.equal(restored.not_overdue, true);
     });
@@ -310,7 +344,11 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
     const authIds = familyId
       ? (await pool.query("SELECT auth_user_id FROM member_devices WHERE member_id IN (SELECT id FROM members WHERE family_id=$1)", [familyId])).rows.map(({ auth_user_id }) => auth_user_id)
       : [];
-    if (familyId) await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
+    if (familyId) {
+      await pool.query("DELETE FROM meal_selections WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
+      await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
+      await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
+    }
     const idsToDelete = [...new Set([...authIds, ...preparedUserIds])];
     if (idsToDelete.length) await pool.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [idsToDelete]);
     await pool.end();

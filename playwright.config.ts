@@ -2,6 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = "http://localhost:3318";
 
+if (process.env.CI && !process.env.FAMILY_UTILS_TEST_DATABASE_URL) {
+  throw new Error("FAMILY_UTILS_TEST_DATABASE_URL is required in CI");
+}
+
 export default defineConfig({
   testDir: "./tests/e2e",
   workers: 1,

@@ -340,6 +340,7 @@ export default function Home() {
         <div className={styles.sideDivider} />
         <div className={styles.sidebarLabel}>APLICACIONES</div>
         <Link className={styles.appLink} href="/tareas"><span className={styles.appIcon}>✳</span><span>Tareas y rutinas</span><span className={styles.appDot} /></Link>
+        <Link className={styles.appLink} href="/menus"><span className={styles.appIcon}>◒</span><span>Planificador de menús</span></Link>
         <div className={styles.sidebarFooter}><div className={styles.familyAvatar}>⌂</div><div><strong>{family?.name ?? "Mi familia"}</strong><small>{members.length} integrantes</small></div><Link className={styles.moreButton} href="/familia" aria-label="Administrar familia">···</Link></div>
       </aside>
 

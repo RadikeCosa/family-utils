@@ -1,14 +1,15 @@
 # Family Utils
 
-Plataforma privada de aplicaciones útiles para una familia. La primera app es
-**Tareas y rutinas**. El producto está pensado como una PWA para Android y
-iPhone.
+Plataforma privada de aplicaciones útiles para una familia. Incluye **Tareas y
+rutinas** y una primera versión del **Planificador de menús**. El producto está
+pensado como una PWA para Android y iPhone.
 
 ## Estado
 
-La plataforma incluye una portada, acceso con Google o código, una aplicación de
-tareas y administración familiar. La base de datos requiere aplicar las
-migraciones antes de desplegar cambios que alteren su esquema.
+La plataforma incluye una portada, acceso con Google o código, administración
+familiar, tareas y rutinas, y propuestas y confirmación de almuerzos y cenas. La
+base de datos requiere aplicar las migraciones antes de desplegar cambios que
+alteren su esquema.
 
 ## Requisitos locales
 
@@ -44,6 +45,8 @@ no apuntes esa variable a la base de datos de producción.
 Playwright verifica la acción de completar y el cambio de día con tamaños de
 iPhone y Android. Para ejecutarlo localmente, compilá primero, instalá Chromium
 con `npx playwright install chromium` y usá la misma base aislada.
+La prueba PostgreSQL de menús verifica que una sola confirmación concurrente
+gane.
 
 ## Documentación
 

@@ -22,6 +22,12 @@ export default function Home() {
             <span className={styles.cardCopy}>Organicen las cosas de casa entre todos.</span>
             <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
           </Link>
+          <Link className={styles.appCard} href="/menus" aria-label="Abrir Planificador de menús">
+            <span className={`${styles.appIcon} ${styles.peach}`}>◒</span>
+            <span className={styles.cardTitle}>Planificador de menús</span>
+            <span className={styles.cardCopy}>Propongan comidas y organicen la semana entre todos.</span>
+            <span className={styles.cardArrow}>Planificar <span aria-hidden="true">→</span></span>
+          </Link>
           <Link className={`${styles.appCard} ${styles.familyCard}`} href="/familia">
             <span className={`${styles.appIcon} ${styles.mint}`}>⌂</span>
             <span className={styles.cardTitle}>Mi familia</span>
