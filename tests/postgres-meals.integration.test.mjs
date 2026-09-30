@@ -49,7 +49,7 @@ test("PostgreSQL meal selection is single-winner under concurrent confirmations"
         );
         await client.query(
           `INSERT INTO audit_events (family_id, actor_member_id, entity_type, entity_id, action, after)
-           VALUES ($1, $2, 'meal_selection', $3, 'confirmed', jsonb_build_object('suggestionId', $4))`,
+           VALUES ($1, $2, 'meal_selection', $3, 'confirmed', jsonb_build_object('suggestionId', $4::uuid))`,
           [familyId, memberId, slot.id, suggestion.id],
         );
         await client.query("UPDATE families SET menus_revision = menus_revision + 1 WHERE id = $1", [familyId]);
@@ -67,7 +67,13 @@ test("PostgreSQL meal selection is single-winner under concurrent confirmations"
     assert.equal((await pool.query("SELECT count(*) FROM meal_selections WHERE slot_id = $1", [slot.id])).rows[0].count, "1");
     assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id = $1", [familyId])).rows[0].menus_revision), 1);
   } finally {
-    if (familyId) await pool.query("DELETE FROM families WHERE id = $1", [familyId]);
+    if (familyId) {
+      await pool.query("DELETE FROM meal_selections WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [familyId]);
+      await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [familyId]);
+      await pool.query("DELETE FROM meal_slots WHERE family_id = $1", [familyId]);
+      await pool.query("DELETE FROM audit_events WHERE family_id = $1", [familyId]);
+      await pool.query("DELETE FROM families WHERE id = $1", [familyId]);
+    }
     await pool.end();
   }
 });
