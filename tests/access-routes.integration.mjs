@@ -267,6 +267,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
 
     await t.test("real meal confirmation handler is single-winner under concurrent requests", async () => {
       const date = "2099-05-12";
+      const revisionBefore = Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision);
       const suggestionResponse = await fetch(`${origin}/api/meals/suggestions`, {
         method: "POST", headers: { ...headers, Cookie: memberCookie },
         body: JSON.stringify({ date, mealType: "dinner", title: "PRUEBA concurrencia" }),
@@ -291,7 +292,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal(selection.suggestion_id, suggestion.id);
       assert.equal(selection.confirmed_by_member_id, childId);
       assert.equal(selection.audit_count, 1);
-      assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision), 2);
+      assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision), revisionBefore + 2);
     });
 
     await t.test("task archive and restore handlers keep overdue work visible without retroactive debt", async () => {
