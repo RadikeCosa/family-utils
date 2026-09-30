@@ -233,7 +233,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await page.locator(".choiceOption").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
     await page.getByRole("button", { name: "Elegir comida" }).last().click();
     await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
-    await expect(lunch.getByText(/elegió esta comida/)).toBeVisible();
+    await expect(lunch.getByText(/Confirmado por/)).toBeVisible();
     await lunch.getByRole("button", { name: "Cambiar comida" }).click();
     await page.getByLabel("Escribir otra comida").check();
     await page.getByLabel("Comida").fill("Borrador ante conflicto");

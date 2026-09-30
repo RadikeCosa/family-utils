@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canConfirmMeal, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
+import { canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
+
+test("meal attribution uses creator identity and handles repeated or missing names", () => {
+  assert.equal(formatMealAttribution("a", "Ana", "b", "Ramiro"), "Propuesto por Ana · Confirmado por Ramiro");
+  assert.equal(formatMealAttribution("a", "Ramiro", "a", "Ramiro"), "Propuesto y confirmado por Ramiro");
+  assert.equal(formatMealAttribution("a", "Ana", "b", "Ana"), "Propuesto por Ana · Confirmado por Ana");
+  assert.equal(formatMealAttribution("a", null, "b", "Ramiro"), "Propuesto por alguien de la familia · Confirmado por Ramiro");
+});
 
 test("meal weeks start Monday and local family day ignores the device timezone", () => {
   assert.equal(startOfWeek("2026-09-30"), "2026-09-28");

@@ -332,6 +332,23 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal(selection.audit_count, 1);
       assert.equal(selection.ideas, 1, "the losing request must not leave an orphan idea");
       assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id=$1", [familyId])).rows[0].menus_revision), revisionBefore + 1);
+
+      await pool.query("UPDATE meal_selections SET confirmed_by_member_id=$1 WHERE suggestion_id=$2", [adminId, winner.suggestion.id]);
+      const weekStart = "2099-05-11";
+      const mealsResponse = await fetch(`${origin}/api/meals?weekStart=${weekStart}`, { headers: { Cookie: memberCookie } });
+      assert.equal(mealsResponse.status, 200, await mealsResponse.text());
+      const mealsBody = await mealsResponse.json();
+      const selectedMeal = mealsBody.meals.find((meal) => meal.date === date && meal.mealType === "dinner");
+      assert.deepEqual(
+        {
+          proposedById: selectedMeal.selection.proposedById,
+          proposedByName: selectedMeal.selection.proposedByName,
+          confirmedByMemberId: selectedMeal.selection.confirmedByMemberId,
+          confirmedByName: selectedMeal.selection.confirmedByName,
+        },
+        { proposedById: childId, proposedByName: "Member test", confirmedByMemberId: adminId, confirmedByName: "Admin test" },
+      );
+      assert.equal(selectedMeal.selection.title, "PRUEBA concurrencia");
     });
 
     await t.test("a failed selection after inserting a new idea rolls the whole transaction back", async () => {

@@ -45,11 +45,12 @@ export async function GET(request: Request) {
       title: mealSuggestions.title,
       note: mealSuggestions.note,
       version: mealSuggestions.version,
+      withdrawnAt: mealSuggestions.withdrawnAt,
       createdAt: mealSuggestions.createdAt,
       updatedAt: mealSuggestions.updatedAt,
     }).from(mealSuggestions)
       .innerJoin(members, eq(mealSuggestions.authorMemberId, members.id))
-      .where(and(inArray(mealSuggestions.slotId, slotIds), isNull(mealSuggestions.withdrawnAt)))
+      .where(inArray(mealSuggestions.slotId, slotIds))
       .orderBy(asc(mealSuggestions.createdAt)),
     db.select().from(mealAttendance).where(inArray(mealAttendance.slotId, slotIds)),
     (() => {
@@ -68,7 +69,10 @@ export async function GET(request: Request) {
 
   const namesById = new Map(allMembers.map((profile) => [profile.id, profile.name]));
   const suggestionsBySlot = new Map<string, typeof suggestions>();
-  for (const suggestion of suggestions) suggestionsBySlot.set(suggestion.slotId, [...(suggestionsBySlot.get(suggestion.slotId) ?? []), suggestion]);
+  for (const suggestion of suggestions) {
+    if (suggestion.withdrawnAt) continue;
+    suggestionsBySlot.set(suggestion.slotId, [...(suggestionsBySlot.get(suggestion.slotId) ?? []), suggestion]);
+  }
   const attendanceBySlot = new Map<string, typeof attendance>();
   for (const record of attendance) attendanceBySlot.set(record.slotId, [...(attendanceBySlot.get(record.slotId) ?? []), record]);
   const selectionBySlot = new Map(selections.map((selection) => [selection.slotId, selection]));
@@ -100,6 +104,8 @@ export async function GET(request: Request) {
       selection: storedSelection?.suggestionId ? {
         suggestionId: storedSelection.suggestionId,
         title: selectedSuggestion?.title ?? null,
+        proposedById: selectedSuggestion?.authorMemberId ?? null,
+        proposedByName: selectedSuggestion?.authorName ?? null,
         confirmedByMemberId: storedSelection.confirmedByMemberId,
         confirmedByName: storedSelection.confirmedByName,
         confirmedAt: storedSelection.confirmedAt,

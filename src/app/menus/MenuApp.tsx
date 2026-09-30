@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "better-auth/react";
 import styles from "./menus.module.css";
-import { addDays, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
+import { addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
 
 const authClient = createAuthClient();
 type Role = "administrator" | "member";
@@ -22,7 +22,7 @@ type Attendance = {
   updatedAt: string | null;
 };
 type Suggestion = { id: string; authorMemberId: string; authorName: string; title: string; note: string | null; version: number; createdAt: string; updatedAt: string };
-type Selection = { suggestionId: string; title: string | null; confirmedByMemberId: string; confirmedByName: string; confirmedAt: string; version: number };
+type Selection = { suggestionId: string; title: string | null; proposedById: string | null; proposedByName: string | null; confirmedByMemberId: string; confirmedByName: string; confirmedAt: string; version: number };
 type Meal = {
   date: string;
   mealType: MealType;
@@ -382,7 +382,7 @@ export default function MenuApp() {
           {meal.selection ? <div className={styles.selectedMeal}>
             <span className={styles.selectedEyebrow}>PLAN DE LA FAMILIA</span>
             <strong>{meal.selection.title ?? "La idea elegida ya no está disponible"}</strong>
-            <small>{meal.selection.confirmedByName} eligió esta comida · {labelTime(meal.selection.confirmedAt)}</small>
+            <small>{formatMealAttribution(meal.selection.proposedById, meal.selection.proposedByName, meal.selection.confirmedByMemberId, meal.selection.confirmedByName)} · {labelTime(meal.selection.confirmedAt)}</small>
             {admin && !past && <button className={styles.textDanger} onClick={(event) => openDialog({ kind: "clear", meal }, event.currentTarget)}>Quitar elección</button>}
           </div> : <p className={styles.noSelection}>Todavía no se eligió una comida para este horario.</p>}
 
@@ -487,7 +487,7 @@ function DialogError({ message, conflict = false, currentSelection, onViewCurren
   return <div className={styles.dialogError} role="alert">
     <p>{message}</p>
     {conflict && (currentSelection
-      ? <p>Ahora está elegida “{currentSelection.title ?? "una idea retirada"}”. La eligió {currentSelection.confirmedByName} · {labelTime(currentSelection.confirmedAt)}.</p>
+      ? <p>Ahora está elegida “{currentSelection.title ?? "una idea retirada"}”. {formatMealAttribution(currentSelection.proposedById, currentSelection.proposedByName, currentSelection.confirmedByMemberId, currentSelection.confirmedByName)} · {labelTime(currentSelection.confirmedAt)}.</p>
       : <p>Ahora no hay una comida elegida para este horario.</p>)}
     {conflict && onViewCurrent && <button type="button" onClick={onViewCurrent}>Ver la elección actual</button>}
   </div>;

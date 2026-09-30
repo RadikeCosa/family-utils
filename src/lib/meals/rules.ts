@@ -3,6 +3,18 @@ export type AttendanceStatus = "present" | "absent" | "unknown";
 export type AttendanceSource = "manual" | "calendar" | "unknown";
 export type FamilyRole = "administrator" | "member";
 
+export function formatMealAttribution(
+  proposedById: string | null | undefined,
+  proposedByName: string | null | undefined,
+  confirmedById: string,
+  confirmedByName: string | null | undefined,
+): string {
+  const proposer = proposedByName?.trim() || "alguien de la familia";
+  const confirmer = confirmedByName?.trim() || "alguien de la familia";
+  if (proposedById && proposedById === confirmedById) return `Propuesto y confirmado por ${confirmer}`;
+  return `Propuesto por ${proposer} · Confirmado por ${confirmer}`;
+}
+
 export interface AttendanceRecord {
   memberId: string;
   status: "present" | "absent";
