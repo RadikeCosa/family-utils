@@ -4,7 +4,7 @@ import pg from "pg";
 
 const widths = process.env.A11Y_WIDTHS?.split(",").map(Number).filter(Number.isFinite) ?? [320, 360, 375, 430, 760, 761, 820, 821, 1280];
 const routes = ["/", "/acceso", "/familia", "/tareas", "/menus"];
-const databaseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 
 type Fixture = {
   api: APIRequestContext;
@@ -15,78 +15,95 @@ type Fixture = {
 };
 
 async function createFixture(baseURL: string, browser: Browser): Promise<Fixture> {
-  if (!databaseUrl) throw new Error("test:a11y requires FAMILY_UTILS_TEST_DATABASE_URL or DATABASE_URL");
+  if (!databaseUrl) throw new Error("test:a11y requires FAMILY_UTILS_TEST_DATABASE_URL; refusing to use an application database");
   const context = await browser.newContext({ baseURL });
-  const setupPage = await context.newPage();
-  await setupPage.goto("/acceso");
-  const anonymous = await setupPage.evaluate(async () => {
-    const response = await fetch("/api/access/prepare", { method: "POST" });
-    return { ok: response.ok, origin: location.origin, status: response.status, text: await response.text() };
-  });
-  if (!anonymous.ok) throw new Error(`anonymous access preparation failed from ${anonymous.origin} (${anonymous.status}): ${anonymous.text}`);
-  const api = context.request;
-  const sessionResponse = await api.get("/api/auth/get-session");
-  if (!sessionResponse.ok()) throw new Error(`session read failed (${sessionResponse.status()}): ${await sessionResponse.text()}`);
-  const session = await sessionResponse.json() as { user: { id: string } };
-  const pool = new pg.Pool({ connectionString: databaseUrl });
-  const client = await pool.connect();
   let familyId = "";
+  let userId = "";
   try {
-    await client.query("BEGIN");
-    const family = await client.query("INSERT INTO families (name) VALUES ('Familia accesibilidad') RETURNING id");
-    familyId = family.rows[0].id as string;
-    const member = await client.query(
-      "INSERT INTO members (family_id, name, role, access_method) VALUES ($1, 'Alex', 'administrator', 'code') RETURNING id",
-      [familyId],
-    );
-    await client.query(
-      "INSERT INTO member_devices (member_id, auth_user_id, label) VALUES ($1, $2, 'Playwright')",
-      [member.rows[0].id, session.user.id],
-    );
-    await client.query("COMMIT");
+    const setupPage = await context.newPage();
+    await setupPage.goto("/acceso");
+    const anonymous = await setupPage.evaluate(async () => {
+      const response = await fetch("/api/access/prepare", { method: "POST" });
+      return { ok: response.ok, origin: location.origin, status: response.status, text: await response.text() };
+    });
+    if (!anonymous.ok) throw new Error(`anonymous access preparation failed from ${anonymous.origin} (${anonymous.status}): ${anonymous.text}`);
+    const api = context.request;
+    const sessionResponse = await api.get("/api/auth/get-session");
+    if (!sessionResponse.ok()) throw new Error(`session read failed (${sessionResponse.status()}): ${await sessionResponse.text()}`);
+    const session = await sessionResponse.json() as { user: { id: string } };
+    userId = session.user.id;
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const family = await client.query("INSERT INTO families (name) VALUES ('Familia accesibilidad') RETURNING id");
+      familyId = family.rows[0].id as string;
+      const member = await client.query(
+        "INSERT INTO members (family_id, name, role, access_method) VALUES ($1, 'Alex', 'administrator', 'code') RETURNING id",
+        [familyId],
+      );
+      await client.query(
+        "INSERT INTO member_devices (member_id, auth_user_id, label) VALUES ($1, $2, 'Playwright')",
+        [member.rows[0].id, session.user.id],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+      await pool.end();
+    }
+
+    const task = await api.post("/api/tasks", { data: {
+      title: "Preparar la mesa",
+      description: "Dejar platos, vasos y cubiertos listos.",
+      assignmentMode: "shared",
+      carryPolicy: "expires_daily",
+      repeatWeekdays: [],
+      assigneeIds: [],
+    } });
+    expect(task.ok()).toBeTruthy();
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
+    const meal = await api.post("/api/meals/suggestions", { data: {
+      date: today,
+      mealType: "lunch",
+      title: "Tarta de verduras",
+      note: "Con ensalada fresca",
+    } });
+    expect(meal.ok()).toBeTruthy();
+
+    return { api, context, familyId, storageState: await context.storageState(), userId };
   } catch (error) {
-    await client.query("ROLLBACK");
+    try {
+      await removeFixture({ familyId, userId, context });
+    } catch {
+      await context.close();
+    }
     throw error;
-  } finally {
-    client.release();
-    await pool.end();
   }
-
-  const task = await api.post("/api/tasks", { data: {
-    title: "Preparar la mesa",
-    description: "Dejar platos, vasos y cubiertos listos.",
-    assignmentMode: "shared",
-    carryPolicy: "expires_daily",
-    repeatWeekdays: [],
-    assigneeIds: [],
-  } });
-  expect(task.ok()).toBeTruthy();
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
-  const meal = await api.post("/api/meals/suggestions", { data: {
-    date: today,
-    mealType: "lunch",
-    title: "Tarta de verduras",
-    note: "Con ensalada fresca",
-  } });
-  expect(meal.ok()).toBeTruthy();
-
-  return { api, context, familyId, storageState: await context.storageState(), userId: session.user.id };
 }
 
-async function removeFixture(fixture: Fixture | undefined) {
+async function removeFixture(fixture: Pick<Fixture, "familyId" | "userId" | "context"> | undefined) {
   if (!fixture || !databaseUrl) return;
+  if (!fixture.familyId && !fixture.userId) {
+    await fixture.context.close();
+    return;
+  }
   const pool = new pg.Pool({ connectionString: databaseUrl });
   try {
-    await pool.query("DELETE FROM meal_selections WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
-    await pool.query("DELETE FROM meal_attendance WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
-    await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
-    await pool.query("DELETE FROM meal_slots WHERE family_id = $1", [fixture.familyId]);
-    await pool.query("DELETE FROM audit_events WHERE family_id = $1", [fixture.familyId]);
-    await pool.query("DELETE FROM task_assignees WHERE task_id IN (SELECT id FROM tasks WHERE family_id = $1)", [fixture.familyId]);
-    await pool.query("DELETE FROM task_occurrences WHERE family_id = $1", [fixture.familyId]);
-    await pool.query("DELETE FROM tasks WHERE family_id = $1", [fixture.familyId]);
-    await pool.query("DELETE FROM families WHERE id = $1", [fixture.familyId]);
-    await pool.query('DELETE FROM "user" WHERE id = $1', [fixture.userId]);
+    if (fixture.familyId) {
+      await pool.query("DELETE FROM meal_selections WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
+      await pool.query("DELETE FROM meal_attendance WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
+      await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
+      await pool.query("DELETE FROM meal_slots WHERE family_id = $1", [fixture.familyId]);
+      await pool.query("DELETE FROM audit_events WHERE family_id = $1", [fixture.familyId]);
+      await pool.query("DELETE FROM task_assignees WHERE task_id IN (SELECT id FROM tasks WHERE family_id = $1)", [fixture.familyId]);
+      await pool.query("DELETE FROM task_occurrences WHERE family_id = $1", [fixture.familyId]);
+      await pool.query("DELETE FROM tasks WHERE family_id = $1", [fixture.familyId]);
+      await pool.query("DELETE FROM families WHERE id = $1", [fixture.familyId]);
+    }
+    if (fixture.userId) await pool.query('DELETE FROM "user" WHERE id = $1', [fixture.userId]);
   } finally {
     await pool.end();
     await fixture.context.close();
