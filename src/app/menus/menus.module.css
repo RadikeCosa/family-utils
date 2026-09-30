@@ -62,3 +62,24 @@
 .footer { display: flex; justify-content: space-between; gap: 10px; padding: 19px 0 26px; border-top: 1px solid #e6e9e2; color: #98a198; font-size: 9px; }.footer a { color: #6d826e; font-weight: 700; }
 @media(max-width:760px) { .page { padding: 0 18px; }.header { gap: 12px; }.headerLinks { gap: 0; }.headerLinks a { padding: 8px 7px; font-size: 10px; }.mealGrid { grid-template-columns: 1fr; }.mealCard + .mealCard { border-top: 1px solid #edf0eb; border-left: 0; }.intro { padding-top: 28px; }.mealCard { padding: 13px 14px; } }
 @media(max-width:520px) { .header { height: auto; min-height: 62px; padding: 10px 0; flex-wrap: wrap; }.brand { font-size: 14px; }.headerLinks { order: 3; width: 100%; display: flex; justify-content: center; margin: 0; }.exitButton { margin-left: auto; }.titleRow { align-items: flex-start; flex-direction: column; }.titleRow h1 { font-size: 37px; }.weekControls { align-self: stretch; }.weekControls button:first-child,.weekControls button:last-child { flex: 0 0 40px; }.weekControls .todayButton { flex: 1; }.suggestion { align-items: flex-start; }.suggestForm { grid-template-columns: 1fr auto; }.suggestForm label:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }.suggestForm button { grid-column: 2; grid-row: 1; }.directForm { grid-template-columns: 1fr; }.directForm button { min-height: 34px; }.footer { flex-direction: column; } }
+
+@media(max-width:820px) {
+  .headerLinks a,.exitButton,.eyebrow,.dayHeading span,.mealHeading > span,.confirmedLabel,.removeButton,.subheading,.subheading small,.person span,.suggestionText strong,.suggestionText small,.suggestionActions button,.footer { font-size: 11px; }
+  .range,.error,.notice,.confirmed small,.person small,.suggestionText p,.empty,.loading,.warning { font-size: 12px; }
+  .titleRow p,.confirmed strong,.mealHeading h3,.dayHeading h2 { font-size: 13px; }
+  .suggestForm input,.directForm input { height: 44px; font-size: 16px; }
+  .suggestForm button,.directForm button,.weekControls .todayButton { min-height: 40px; font-size: 11px; }
+  .weekControls button { min-width: 40px; min-height: 40px; height: 40px; }
+  .person { min-height: 40px; align-content: center; }
+  .suggestionActions button { min-height: 40px; min-width: 40px; }
+  .headerLinks a { min-height: 40px; display: inline-flex; align-items: center; }
+  .suggestionActions .chooseButton { min-height: 44px; }
+  .removeButton { min-height: 40px; padding: 8px 0; }
+  .suggestForm label,.directForm label { min-width: 0; }
+}
+
+@media(max-width:760px) {
+  .headerLinks a { padding: 8px 6px; }
+  .suggestion { flex-wrap: wrap; }
+  .suggestionActions { flex-wrap: wrap; }
+}
