@@ -63,3 +63,15 @@
   .installSteps strong { line-height: 1.4; }
   .codeActions .primaryButton { min-height: 44px; }
 }
+
+/* Legibilidad y contraste compartidos por móvil y escritorio. */
+.brand > span:last-child,.eyebrow,.footer,.footer span,.separator,.memberCount,.profileIdentity span,.statusPill,.profileEdit,.addProfile,.profileForm p,.expiry { color: #5f6c63; }
+.intro,.cardCopy,.accessCard p,.sessionNotice,.installGuide>p:not(.eyebrow),.installSteps span,.codePanel p:not(.eyebrow) { color: #59675d; font-weight: 500; }
+.signIn,.cardArrow,.textLink,.installLink,.plainButton,.textButton,.backLink { color: #536b58; font-weight: 600; }
+.logoutLink,.smallButtonSecondary { color: #855247; }
+.error { color: #a44c43; font-weight: 500; }
+.success { color: #477251; font-weight: 500; }
+
+.accessForm input,.profileEdit input,.profileEdit select,.profileForm input,.profileForm select,.signIn,.googleButton,.smallButton,.smallButtonSecondary { border-color: #7f8d82; }
+.accessForm input::placeholder,.profileEdit input::placeholder,.profileForm input::placeholder { color: #5f6c63; opacity: 1; }
+.page :is(a,button,input,select,textarea,summary):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }
