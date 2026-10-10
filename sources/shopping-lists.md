@@ -87,8 +87,14 @@ Presupuesto estático por GET con membresía válida, sin contar consultas de
 Better Auth ni BEGIN/COMMIT: tres SELECT para un 304 (contexto de miembro,
 revalidación y revisión); ocho SELECT para respuesta completa con listas
 (los tres anteriores más perfiles, listas, productos, editores y catálogo).
-Sin listas, se omiten las consultas a productos y editores. Confirmar los
-conteos reales con estadísticas antes de extrapolar costos.
+Sin listas, se omiten las consultas a productos y editores.
+
+Medición local del 2026-10-10 con PostgreSQL 18, una lista, un producto y sesión
+vigente: la respuesta 200 ejecutó **10 SELECT + BEGIN/COMMIT** y la respuesta
+304 ejecutó **5 SELECT + BEGIN/COMMIT**, incluyendo Better Auth. Se contaron
+sentencias del servidor con un `application_name` exclusivo y logging temporal
+solo en el contenedor aislado; la configuración de logs se restauró después.
+Estos conteos no representan latencia ni cómputo medido en Neon.
 
 Con cuatro dispositivos continuamente activos, el polling genera como máximo
 8 solicitudes por minuto, 480 por hora de actividad conjunta. No extrapolar
