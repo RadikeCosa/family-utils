@@ -10,7 +10,7 @@ const port = 3319;
 const origin = `http://localhost:${port}`;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test("shopping real endpoints: permissions, catalog and concurrent transactions", { skip: !connectionString && "requires isolated PostgreSQL 18", timeout: 90_000 }, async (t) => {
+test("shopping real endpoints: permissions, catalog and concurrent transactions", { skip: !connectionString && "requires isolated PostgreSQL 18", timeout: Number(process.env.FAMILY_UTILS_TEST_TIMEOUT_MS ?? 90_000) }, async (t) => {
   const pool = new pg.Pool({ connectionString });
   const users = [];
   const familyIds = [];
