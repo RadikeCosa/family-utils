@@ -175,13 +175,16 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await choose.click();
     await expect(dialogs).toBeVisible();
     await expect(page.locator("input[name='meal-choice']").first()).toBeFocused();
+    await page.locator("input[name='meal-choice']").first().check();
     await page.keyboard.press("Shift+Tab");
     await expect(page.getByRole("button", { name: "Cerrar" })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
+    // Chromium can visit browser chrome before wrapping a native dialog.
+    if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press("Shift+Tab");
     await expect(page.getByRole("button", { name: "Elegir comida" }).last()).toBeFocused();
     const dialogAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect(dialogAxe.violations.map((violation) => violation.id)).toEqual([]);
-    const dialogSizes = await page.locator(".dialog button, .dialog input:not([type='radio']):not([type='checkbox']), .choiceOption, .newChoice").evaluateAll((elements) =>
+    const dialogSizes = await dialogs.locator("button, input:not([type='radio']):not([type='checkbox']), [class*='choiceOption'], [class*='newChoice']").evaluateAll((elements) =>
       elements.filter((element) => (element as HTMLElement).checkVisibility()).map((element) => {
         const rect = element.getBoundingClientRect();
         return { label: element.textContent?.trim() ?? element.tagName, width: rect.width, height: rect.height };
@@ -191,7 +194,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await expect(dialogs).toBeHidden();
     await expect(choose).toBeFocused();
 
-    const interactiveSizes = await page.locator("a[href], button, input:not([type='radio']):not([type='checkbox']), .details summary, .statusChoice, .choiceOption, .newChoice").evaluateAll((elements) =>
+    const interactiveSizes = await page.locator("a[href], button, input:not([type='radio']):not([type='checkbox']), [class*='details'] summary, [class*='statusChoice'], [class*='choiceOption'], [class*='newChoice']").evaluateAll((elements) =>
       elements.filter((element) => (element as HTMLElement).checkVisibility()).map((element) => {
         const rect = element.getBoundingClientRect();
         return { label: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? element.tagName, width: rect.width, height: rect.height };
@@ -200,7 +203,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
 
     const lunch = page.locator("#meal-lunch");
     await lunch.getByText("Asistencia", { exact: false }).click();
-    const attendanceTargets = await lunch.locator(".statusChoice").evaluateAll((elements) => elements.map((element) => {
+    const attendanceTargets = await lunch.locator("[class*='statusChoice']").evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       return { width: rect.width, height: rect.height };
     }));
@@ -209,18 +212,18 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await expect(lunch.getByText("Nadie figura en casa; podés elegir de todos modos.")).toBeVisible();
     await lunch.getByRole("button", { name: "Elegir comida" }).click();
     await page.getByLabel("Escribir otra comida").check();
-    await page.getByLabel("Comida").fill("Guiso de prueba UX");
+    await page.getByLabel("Comida", { exact: true }).fill("Guiso de prueba UX");
     const resumedRequest = page.waitForRequest((request) => request.url().includes("/api/meals?weekStart="));
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await resumedRequest;
-    await expect(page.getByLabel("Comida")).toHaveValue("Guiso de prueba UX");
+    await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
     await page.route("**/api/meals/selection", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }) }));
     await page.getByRole("button", { name: "Elegir comida" }).last().click();
     await expect(page.getByRole("alert").filter({ hasText: "Este día ya no se puede editar" })).toBeVisible();
-    await expect(page.getByLabel("Comida")).toHaveValue("Guiso de prueba UX");
+    await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
     await page.unroute("**/api/meals/selection");
     await page.getByRole("button", { name: "Elegir comida" }).last().click();
-    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
 
     await lunch.getByRole("button", { name: "Quitar elección" }).click();
     await page.getByRole("button", { name: "Quitar elección" }).last().click();
@@ -228,15 +231,15 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await page.getByRole("button", { name: "Sí, quitar elección" }).click();
     await expect(lunch.getByText("Todavía no se eligió una comida para este horario.")).toBeVisible();
     await lunch.locator("details").nth(1).locator("summary").click();
-    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await lunch.getByRole("button", { name: "Elegir comida" }).click();
-    await page.locator(".choiceOption").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
+    await dialogs.locator("label").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
     await page.getByRole("button", { name: "Elegir comida" }).last().click();
-    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
-    await expect(lunch.getByText(/Confirmado por/)).toBeVisible();
+    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
+    await expect(lunch.getByText(/Propuesto y confirmado por Alex/)).toBeVisible();
     await lunch.getByRole("button", { name: "Cambiar comida" }).click();
     await page.getByLabel("Escribir otra comida").check();
-    await page.getByLabel("Comida").fill("Borrador ante conflicto");
+    await page.getByLabel("Comida", { exact: true }).fill("Borrador ante conflicto");
     let conflictRequests = 0;
     await page.route("**/api/meals/selection", (route) => {
       conflictRequests += 1;
@@ -244,12 +247,12 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     });
     await page.getByRole("button", { name: "Guardar cambio" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Alguien cambió esta comida" })).toBeVisible();
-    await expect(page.getByLabel("Comida")).toHaveValue("Borrador ante conflicto");
+    await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Borrador ante conflicto");
     await page.getByRole("button", { name: "Ver la elección actual" }).click();
     await expect(dialogs).toBeHidden();
     expect(conflictRequests).toBe(1);
     await page.unroute("**/api/meals/selection");
-    await expect(lunch.getByText("Guiso de prueba UX")).toBeVisible();
+    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
 
     const requestUrls: string[] = [];
     page.on("request", (request) => { if (request.url().includes("/api/meals?weekStart=")) requestUrls.push(request.url()); });
@@ -293,7 +296,7 @@ test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, ba
         const page = await context.newPage();
         for (const route of scenario.routes) {
           await page.goto(route, { waitUntil: "networkidle" });
-          await expect(page).toHaveURL(new RegExp(`${route === "/" ? "/?$" : `${route}$`}`));
+          await expect(page).toHaveURL((url) => url.pathname === route);
           const results = await new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
             .analyze();
