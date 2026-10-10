@@ -112,12 +112,12 @@ volumen de lecturas y repetir la medición; no habilitar consumo pago.
 El ensayo en Neon, el despliegue y las ventanas de uso real deben registrarse
 con fecha y resultados antes de declarar cerrada la validación operativa.
 
-### Preparación del ensayo en Neon — 2026-10-10
+### Ensayo en Neon — 2026-10-10
 
 Se comprobó la base configurada mediante una transacción explícita de solo
 lectura: PostgreSQL 18.6, migraciones `0000` a `0008_meal_planner` aplicadas
 y coincidentes con los archivos del repositorio, y ninguna tabla de compras.
-`0009_shopping_lists` sigue pendiente; no se modificó producción.
+`0009_shopping_lists` sigue pendiente en producción.
 
 La integración de Neon permitió confirmar el proyecto `family-utils`
 (`green-meadow-92440811`), PostgreSQL 18 y plan `free_v3`. Desde su rama
@@ -126,12 +126,30 @@ La integración de Neon permitió confirmar el proyecto `family-utils`
 predeterminada, con cómputo mínimo y máximo de 0,25 CU. Se conservó el tiempo de
 suspensión del servicio, porque este plan no permite modificarlo.
 
-El ensayo sigue pendiente de obtener la conexión directa de esa rama temporal;
-las herramientas expuestas no incluyen obtener conexiones. La conexión local
-de producción no se reemplazó. Antes de aplicar la migración, comprobar que el
-host corresponde a la rama temporal y difiere del configurado en producción.
-Verificar integridad, repetir
-la migración para comprobar que no reaplica cambios y ejecutar las pruebas de
-compras, incluidas las de concurrencia, exclusivamente sobre esa rama. Registrar
-el resultado y eliminar la rama temporal al terminar. No desplegar antes de
-completar este ensayo.
+Se aplicó `0009_shopping_lists` mediante Drizzle y conexión directa a la rama
+temporal. Antes y después se compararon conteos y resúmenes del contenido de las
+19 tablas existentes, conservando las columnas originales: ninguna fila cambió.
+Se comprobaron las cuatro tablas nuevas y la revisión inicial de familias en
+cero. Una segunda ejecución conservó datos e historial de diez migraciones sin
+reaplicar cambios. `.env.local` conservó su contenido original.
+
+Una comprobación posterior, en una transacción de solo lectura contra
+producción, confirmó nueve migraciones y ninguna tabla de compras.
+
+La primera ejecución de pruebas de rutas agotó el límite local de 90 segundos
+por la latencia remota. Se agregó `FAMILY_UTILS_TEST_TIMEOUT_MS` para ampliar el
+límite del recorrido en Neon, manteniendo 90 segundos por defecto. La repetición
+usó 300000 ms y la conexión agrupada de la rama temporal, igual que la aplicación.
+Pasaron **9 pruebas, sin fallos ni omisiones**, en 181,8 segundos: creación,
+aislamiento familiar, editores, productos repetidos y campos opcionales,
+conflictos de contenido, marcado idempotente, ETag privado, sugerencias ocultas
+y restauración, ambos órdenes de revocación contra escritura, ambos órdenes de
+archivo de perfil contra escritura, archivo/restauración de listas y
+transferencia administrativa con motivo y revocación de permisos anteriores.
+Las comprobaciones de concurrencia usaron conexiones independientes y esperaron
+bloqueos reales de PostgreSQL. También pasó lint tras ajustar el límite de prueba.
+
+El ensayo de migración y contratos queda validado. La rama temporal sigue
+disponible para revisión y debe retirarse con la herramienta de administración
+de Neon cuando esté disponible, confirmando antes la eliminación. Siguen
+pendientes la publicación y las ventanas de medición de uso real descritas arriba.
