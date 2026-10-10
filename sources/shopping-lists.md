@@ -119,11 +119,18 @@ lectura: PostgreSQL 18.6, migraciones `0000` a `0008_meal_planner` aplicadas
 y coincidentes con los archivos del repositorio, y ninguna tabla de compras.
 `0009_shopping_lists` sigue pendiente; no se modificó producción.
 
-El ensayo requiere conectar la integración de Neon con acceso al proyecto
-existente. La conexión SQL disponible no permite administrar ramas y la consola
-no tiene una sesión iniciada. Una vez conectado, identificar la rama que
-corresponde a la conexión configurada, crear una rama aislada desde ella y usar
-su conexión directa para aplicar la migración. Verificar integridad, repetir
+La integración de Neon permitió confirmar el proyecto `family-utils`
+(`green-meadow-92440811`), PostgreSQL 18 y plan `free_v3`. Desde su rama
+`production` (`br-lucky-bird-b5jop51y`) se creó
+`shopping-migration-test-2026-10-10` (`br-fragrant-surf-b54zr3qy`), aislada y no
+predeterminada, con cómputo mínimo y máximo de 0,25 CU. Se conservó el tiempo de
+suspensión del servicio, porque este plan no permite modificarlo.
+
+El ensayo sigue pendiente de obtener la conexión directa de esa rama temporal;
+las herramientas expuestas no incluyen obtener conexiones. La conexión local
+de producción no se reemplazó. Antes de aplicar la migración, comprobar que el
+host corresponde a la rama temporal y difiere del configurado en producción.
+Verificar integridad, repetir
 la migración para comprobar que no reaplica cambios y ejecutar las pruebas de
 compras, incluidas las de concurrencia, exclusivamente sobre esa rama. Registrar
 el resultado y eliminar la rama temporal al terminar. No desplegar antes de
