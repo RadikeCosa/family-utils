@@ -5,6 +5,7 @@ import pg from "pg";
 const widths = process.env.A11Y_WIDTHS?.split(",").map(Number).filter(Number.isFinite) ?? [320, 360, 375, 430, 760, 761, 820, 821, 1280];
 const routes = ["/", "/acceso", "/familia", "/tareas", "/menus", "/compras"];
 const databaseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+let fixtureSequence = 0;
 
 type Fixture = {
   api: APIRequestContext;
@@ -16,7 +17,11 @@ type Fixture = {
 
 async function createFixture(baseURL: string, browser: Browser): Promise<Fixture> {
   if (!databaseUrl) throw new Error("test:a11y requires FAMILY_UTILS_TEST_DATABASE_URL; refusing to use an application database");
-  const context = await browser.newContext({ baseURL });
+  // Independent test identities must not share Better Auth's sign-in rate-limit bucket.
+  const context = await browser.newContext({
+    baseURL,
+    extraHTTPHeaders: { "x-forwarded-for": `203.0.113.${++fixtureSequence}` },
+  });
   let familyId = "";
   let userId = "";
   try {

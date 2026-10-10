@@ -117,7 +117,7 @@ con fecha y resultados antes de declarar cerrada la validación operativa.
 Se comprobó la base configurada mediante una transacción explícita de solo
 lectura: PostgreSQL 18.6, migraciones `0000` a `0008_meal_planner` aplicadas
 y coincidentes con los archivos del repositorio, y ninguna tabla de compras.
-`0009_shopping_lists` sigue pendiente en producción.
+Esta fue la comprobación inicial, anterior a la publicación.
 
 La integración de Neon permitió confirmar el proyecto `family-utils`
 (`green-meadow-92440811`), PostgreSQL 18 y plan `free_v3`. Desde su rama
@@ -153,3 +153,21 @@ El ensayo de migración y contratos queda validado. La rama temporal sigue
 disponible para revisión y debe retirarse con la herramienta de administración
 de Neon cuando esté disponible, confirmando antes la eliminación. Siguen
 pendientes la publicación y las ventanas de medición de uso real descritas arriba.
+
+### Preparación de publicación — 2026-10-10
+
+La vista previa de la rama `codex/listas-compras` usa credenciales exclusivas de
+la rama temporal, sin acceso a producción. Conserva la protección de Vercel;
+el enlace temporal autorizado para verificación no se registra en el repositorio.
+
+Durante la preparación local se especificó `DATABASE_URL`, pero el comando de
+migración utiliza `DATABASE_URL_UNPOOLED`. Esto aplicó la migración aditiva a
+producción antes del orden previsto. La comprobación posterior de solo lectura
+confirmó diez migraciones, el hash correcto de `0009_shopping_lists`, las cuatro
+tablas nuevas y cero listas y productos. No se ejecutaron fixtures en producción.
+La aplicación de producción seguía en la versión anterior en ese momento.
+
+Se corrigió el aislamiento de identidades de accesibilidad: cada fixture utiliza
+una IP de documentación distinta para no compartir el límite de acceso de
+Better Auth entre pruebas rápidas. Lint, tipos y las dos pruebas de accesibilidad
+locales pasaron con PostgreSQL aislado y todas las conexiones explícitas.
