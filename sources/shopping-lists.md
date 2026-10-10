@@ -64,10 +64,12 @@ reenvían automáticamente.
 ## Migración y entrega
 
 `0009_shopping_lists` agrega cuatro tablas y `families.shopping_revision`.
-La migración y los endpoints se validan en PostgreSQL 18 aislado. Antes de
-producción, ensayar la migración usando conexión directa en una rama aislada
-de Neon del proyecto existente, comprobar integridad y concurrencia y revisar
-el destino del despliegue. No ejecutar los fixtures contra datos de producción.
+La migración se ensayó con conexión directa en una rama aislada de Neon,
+comprobando integridad, segunda ejecución sin cambios y preservación de las 19
+tablas existentes. Después se aplicó en producción y se verificaron el historial
+de diez migraciones, el hash aplicado, las cuatro tablas nuevas y que no había
+listas ni productos de compras creados por el despliegue. Las pruebas de rutas
+usan PostgreSQL aislado; nunca ejecutar sus fixtures contra producción.
 
 En una reversión, volver a la aplicación previa y conservar las tablas y
 columnas aditivas. No restaurar un respaldo completo para revertir esta función.
@@ -109,8 +111,9 @@ con `consumo_semanal / 7 * días_del_mes` y contrastar con las cuotas gratuitas
 vigentes de las cuentas. Si cualquier cuota se supera, reducir frecuencia o
 volumen de lecturas y repetir la medición; no habilitar consumo pago.
 
-El ensayo en Neon, el despliegue y las ventanas de uso real deben registrarse
-con fecha y resultados antes de declarar cerrada la validación operativa.
+El ensayo, el despliegue y las mediciones de uso real se registran con fecha y
+resultados en las secciones siguientes. La validación operativa sigue abierta
+hasta completar una medición de siete días y su proyección mensual.
 
 ### Ensayo en Neon — 2026-10-10
 
@@ -133,8 +136,8 @@ Se comprobaron las cuatro tablas nuevas y la revisión inicial de familias en
 cero. Una segunda ejecución conservó datos e historial de diez migraciones sin
 reaplicar cambios. `.env.local` conservó su contenido original.
 
-Una comprobación posterior, en una transacción de solo lectura contra
-producción, confirmó nueve migraciones y ninguna tabla de compras.
+La comprobación inicial de producción confirmó nueve migraciones y ninguna tabla
+de compras antes del despliegue.
 
 La primera ejecución de pruebas de rutas agotó el límite local de 90 segundos
 por la latencia remota. Se agregó `FAMILY_UTILS_TEST_TIMEOUT_MS` para ampliar el
@@ -149,15 +152,16 @@ transferencia administrativa con motivo y revocación de permisos anteriores.
 Las comprobaciones de concurrencia usaron conexiones independientes y esperaron
 bloqueos reales de PostgreSQL. También pasó lint tras ajustar el límite de prueba.
 
-El ensayo de migración y contratos queda validado. La rama temporal sigue
-disponible para revisión y debe retirarse con la herramienta de administración
-de Neon cuando esté disponible, confirmando antes la eliminación. Siguen
-pendientes la publicación y las ventanas de medición de uso real descritas arriba.
+El ensayo de migración y contratos quedó validado. La rama temporal sigue
+disponible para revisión y puede retirarse después de cerrar la vista previa
+usando la herramienta de administración de Neon, verificando la rama antes de
+confirmar su eliminación. La publicación y la medición de uso real se registran
+en la sección de despliegue.
 
 ### Preparación de publicación — 2026-10-10
 
 La vista previa de la rama `codex/listas-compras` usa credenciales exclusivas de
-la rama temporal, sin acceso a producción. Conserva la protección de Vercel;
+la rama temporal, sin acceso a producción. Conservó la protección de Vercel;
 el enlace temporal autorizado para verificación no se registra en el repositorio.
 
 Durante la preparación local se especificó `DATABASE_URL`, pero el comando de
@@ -168,6 +172,46 @@ tablas nuevas y cero listas y productos. No se ejecutaron fixtures en producció
 La aplicación de producción seguía en la versión anterior en ese momento.
 
 Se corrigió el aislamiento de identidades de accesibilidad: cada fixture utiliza
-una IP de documentación distinta para no compartir el límite de acceso de
-Better Auth entre pruebas rápidas. Lint, tipos y las dos pruebas de accesibilidad
-locales pasaron con PostgreSQL aislado y todas las conexiones explícitas.
+una dirección reservada para pruebas distinta para no compartir el límite de
+acceso de Better Auth entre pruebas rápidas. Lint, tipos y las dos pruebas de
+accesibilidad locales pasaron con PostgreSQL aislado y todas las conexiones
+explícitas.
+
+### Publicación — 2026-10-10
+
+El PR [#8](https://github.com/RadikeCosa/family-utils/pull/8) se incorporó a
+`main` después de que CI, Vercel Preview y GitGuardian aprobaran. Commit de
+incorporación: `df4982d159c567888d002b418049a5ca744719f2`. El despliegue de
+producción `dpl_42LZvjRhfyQq7qDtQtTWBx7hazub` quedó `READY` con ese mismo SHA.
+La aplicación está publicada en
+[family-utils-umber.vercel.app](https://family-utils-umber.vercel.app); la
+portada enlaza Compras y `/compras` dirige a acceso a visitantes sin sesión.
+
+La vista previa de rama se verificó con credenciales exclusivas de ensayo y un
+enlace privado temporal autorizado. El recorrido confirmó sesión, creación de
+una lista con nombre por defecto, campos opcionales, compra persistida y
+aprendizaje de sugerencias. Los datos temporales de prueba se eliminaron. La
+protección de la aplicación productiva no se desactivó.
+
+Durante la preparación de la publicación, un error al seleccionar la variable
+de conexión hizo que la migración llegara a producción antes del orden previsto.
+Se comprobó después, mediante consultas de solo lectura, el historial de diez
+migraciones, el hash de `0009_shopping_lists`, las cuatro tablas nuevas y cero
+listas y productos. No se ejecutaron fixtures ni se insertaron datos de prueba
+en producción. La migración ya había pasado el ensayo directo en Neon, con
+preservación de datos en la rama clonada.
+
+### Operación pendiente
+
+No se registró una ventana de siete días anterior a la publicación. Por tanto,
+la comparación previa/posterior definida en el plan todavía no puede cerrarse
+con una línea base medida. Tras siete días de uso, registrar solicitudes y
+respuestas 304 de Compras, consultas y cómputo de Neon, e invocaciones y
+duración de funciones de Vercel. Documentar las fechas, el consumo base
+disponible, el incremento observado y la proyección mensual frente a las cuotas
+gratuitas vigentes. No habilitar consumo pago.
+
+La rama de ensayo (`br-fragrant-surf-b54zr3qy`) y su rol restringido siguen
+activos para conservar la vista previa. Al terminar su revisión, retirar primero
+las variables de entorno de esa rama en Vercel y luego eliminar el rol y la rama
+en Neon; verificar los nombres y el entorno antes de confirmar la eliminación.

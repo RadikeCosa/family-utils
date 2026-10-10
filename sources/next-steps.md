@@ -138,3 +138,12 @@ copia completa solo ante corrupción confirmada y con una decisión explícita.
   destino de despliegue, la migración y la sesión OAuth.
 - Posponer la lectura automática desde calendarios de presencia a una etapa
   posterior.
+
+## Listas de compras
+
+La tercera utilidad se implementó, validó e incorporó a producción el
+2026-10-10. El PR, la migración `0009_shopping_lists`, los contratos, los
+resultados de pruebas, el despliegue y el estado pendiente de medición están en
+[la documentación operativa de Compras](shopping-lists.md). La comparación de
+uso durante siete días aún requiere registrar datos reales después de la
+publicación.

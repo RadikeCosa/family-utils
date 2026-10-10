@@ -150,9 +150,11 @@ adicionales quedan para después del uso familiar del primer módulo.
 
 ## Listas de compras
 
-La tercera utilidad permite listas visibles para toda la familia, con dueño y
-editores elegidos por perfil. Nombre de producto obligatorio, marca y cantidad
-opcionales; se marcan compras y se reutilizan listas. El catálogo familiar
-aprende al comprar y permite ocultar/restaurar sugerencias. Administradores
-pueden transferir propiedad indicando motivo. La definición completa y los
-contratos están en [Compras](shopping-lists.md).
+La tercera utilidad, ya publicada, está disponible desde la portada y en
+`/compras`. Todos los integrantes activos pueden consultar las listas
+familiares y crear listas. Cada dueño elige editores por perfil; nombre de
+producto es obligatorio, marca y cantidad son opcionales. Se puede marcar lo
+comprado, reutilizar una lista y administrar sugerencias aprendidas al comprar.
+Los administradores pueden transferir la propiedad indicando motivo. La
+definición, contratos, resultados de validación y estado operativo están en
+[Compras](shopping-lists.md).
