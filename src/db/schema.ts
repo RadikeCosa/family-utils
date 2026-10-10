@@ -96,6 +96,7 @@ export const families = pgTable("families", {
   timeZone: text("time_zone").notNull().default(FAMILY_TIME_ZONE),
   revision: bigint("revision", { mode: "number" }).notNull().default(0),
   menusRevision: bigint("menus_revision", { mode: "number" }).notNull().default(0),
+  shoppingRevision: bigint("shopping_revision", { mode: "number" }).notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -285,3 +286,47 @@ export const codeRateLimits = pgTable("code_rate_limits", {
   attempts: integer("attempts").notNull().default(0),
   updatedAt: updatedAt(),
 });
+
+export const shoppingLists = pgTable("shopping_lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
+  ownerMemberId: uuid("owner_member_id").notNull().references(() => members.id),
+  version: integer("version").notNull().default(1),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [index("shopping_lists_family_idx").on(table.familyId, table.createdAt)]);
+
+export const shoppingItems = pgTable("shopping_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  listId: uuid("list_id").notNull().references(() => shoppingLists.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  brand: varchar("brand", { length: 160 }),
+  quantity: varchar("quantity", { length: 100 }),
+  version: integer("version").notNull().default(1),
+  purchased: boolean("purchased").notNull().default(false),
+  purchasedByMemberId: uuid("purchased_by_member_id").references(() => members.id),
+  purchasedAt: timestamp("purchased_at", { withTimezone: true }),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [index("shopping_items_list_idx").on(table.listId, table.createdAt, table.id)]);
+
+export const shoppingEditors = pgTable("shopping_editors", {
+  listId: uuid("list_id").notNull().references(() => shoppingLists.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  createdAt: createdAt(),
+}, (table) => [uniqueIndex("shopping_editors_unique").on(table.listId, table.memberId)]);
+
+export const shoppingSuggestions = pgTable("shopping_suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  normalizedName: text("normalized_name").notNull(),
+  hidden: boolean("hidden").notNull().default(false),
+  version: integer("version").notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [uniqueIndex("shopping_suggestions_family_name_unique").on(table.familyId, table.normalizedName)]);
