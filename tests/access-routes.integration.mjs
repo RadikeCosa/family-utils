@@ -324,7 +324,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
          FROM meal_selections s JOIN meal_slots ms ON ms.id=s.slot_id
          LEFT JOIN audit_events a ON a.entity_id=s.slot_id AND a.entity_type='meal_selection' AND a.action='confirmed'
          WHERE ms.family_id=$1 AND ms.meal_date=$2 AND ms.meal_type='dinner'
-         GROUP BY s.version, s.suggestion_id, s.confirmed_by_member_id`, [familyId, date],
+         GROUP BY s.slot_id, s.version, s.suggestion_id, s.confirmed_by_member_id`, [familyId, date],
       )).rows;
       assert.equal(selection.version, 1);
       assert.equal(selection.suggestion_id, winner.suggestion.id);
@@ -336,7 +336,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       await pool.query("UPDATE meal_selections SET confirmed_by_member_id=$1 WHERE suggestion_id=$2", [adminId, winner.suggestion.id]);
       const weekStart = "2099-05-11";
       const mealsResponse = await fetch(`${origin}/api/meals?weekStart=${weekStart}`, { headers: { Cookie: memberCookie } });
-      assert.equal(mealsResponse.status, 200, await mealsResponse.text());
+      assert.equal(mealsResponse.status, 200, await mealsResponse.clone().text());
       const mealsBody = await mealsResponse.json();
       const selectedMeal = mealsBody.meals.find((meal) => meal.date === date && meal.mealType === "dinner");
       assert.deepEqual(
@@ -487,6 +487,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       : [];
     if (familyId) {
       await pool.query("DELETE FROM meal_selections WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
+      await pool.query("DELETE FROM meal_attendance WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
       await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
       await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
     }
