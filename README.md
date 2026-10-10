@@ -8,8 +8,12 @@ pensado como una PWA para Android y iPhone.
 
 La plataforma incluye una portada, acceso con Google o código, administración
 familiar, tareas y rutinas, propuestas y confirmación de almuerzos y cenas, y
-listas de compras con editores por perfil y sugerencias familiares. La base de datos requiere aplicar las migraciones antes de desplegar cambios que
-alteren su esquema.
+listas de compras con editores por perfil y sugerencias familiares. Las tres
+utilidades están disponibles en
+[family-utils-umber.vercel.app](https://family-utils-umber.vercel.app).
+Compras se abre desde la portada o en `/compras` y requiere acceso a una
+familia. La base de datos requiere aplicar las migraciones antes de desplegar
+cambios que alteren su esquema.
 
 ## Requisitos locales
 
