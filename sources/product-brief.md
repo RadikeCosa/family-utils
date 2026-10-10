@@ -147,3 +147,12 @@ privada se conserva fuera de Git y tiene una copia protegida adicional.
 
 Recordatorios, registro público de familias, escritura offline y aplicaciones
 adicionales quedan para después del uso familiar del primer módulo.
+
+## Listas de compras
+
+La tercera utilidad permite listas visibles para toda la familia, con dueño y
+editores elegidos por perfil. Nombre de producto obligatorio, marca y cantidad
+opcionales; se marcan compras y se reutilizan listas. El catálogo familiar
+aprende al comprar y permite ocultar/restaurar sugerencias. Administradores
+pueden transferir propiedad indicando motivo. La definición completa y los
+contratos están en [Compras](shopping-lists.md).

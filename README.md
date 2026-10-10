@@ -1,14 +1,14 @@
 # Family Utils
 
 Plataforma privada de aplicaciones útiles para una familia. Incluye **Tareas y
-rutinas** y una primera versión del **Planificador de menús**. El producto está
+rutinas**, **Planificador de menús** y **Listas de compras**. El producto está
 pensado como una PWA para Android y iPhone.
 
 ## Estado
 
 La plataforma incluye una portada, acceso con Google o código, administración
-familiar, tareas y rutinas, y propuestas y confirmación de almuerzos y cenas. La
-base de datos requiere aplicar las migraciones antes de desplegar cambios que
+familiar, tareas y rutinas, propuestas y confirmación de almuerzos y cenas, y
+listas de compras con editores por perfil y sugerencias familiares. La base de datos requiere aplicar las migraciones antes de desplegar cambios que
 alteren su esquema.
 
 ## Requisitos locales
@@ -52,6 +52,7 @@ gane.
 
 - [Definición del producto](sources/product-brief.md)
 - [Plan de implementación](sources/next-steps.md)
+- [Compras: contratos, migración y operación](sources/shopping-lists.md)
 
 Los nombres, calendarios y asignaciones de una familia son configuración
 privada; la documentación del repositorio usa roles genéricos y ejemplos
