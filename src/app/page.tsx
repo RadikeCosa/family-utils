@@ -28,6 +28,12 @@ export default function Home() {
             <span className={styles.cardCopy}>Propongan comidas y organicen la semana entre todos.</span>
             <span className={styles.cardArrow}>Planificar <span aria-hidden="true">→</span></span>
           </Link>
+          <Link className={styles.appCard} href="/compras" aria-label="Abrir Listas de compras">
+            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">☷</span>
+            <span className={styles.cardTitle}>Listas de compras</span>
+            <span className={styles.cardCopy}>Anoten lo que hace falta y compartan las compras.</span>
+            <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
+          </Link>
           <Link className={`${styles.appCard} ${styles.familyCard}`} href="/familia">
             <span className={`${styles.appIcon} ${styles.mint}`}>⌂</span>
             <span className={styles.cardTitle}>Mi familia</span>

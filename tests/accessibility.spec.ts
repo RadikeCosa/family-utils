@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Browser, type BrowserContext
 import pg from "pg";
 
 const widths = process.env.A11Y_WIDTHS?.split(",").map(Number).filter(Number.isFinite) ?? [320, 360, 375, 430, 760, 761, 820, 821, 1280];
-const routes = ["/", "/acceso", "/familia", "/tareas", "/menus"];
+const routes = ["/", "/acceso", "/familia", "/tareas", "/menus", "/compras"];
 const databaseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 
 type Fixture = {
@@ -279,7 +279,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
   }
 });
 
-test("contraste, foco y desbordamiento en las cinco áreas", async ({ browser, baseURL }) => {
+test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, baseURL }) => {
   const fixture = await createFixture(baseURL!, browser);
   const failures: string[] = [];
   try {

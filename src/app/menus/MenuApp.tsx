@@ -346,7 +346,7 @@ export default function MenuApp() {
   return <main className={styles.page}>
     <header className={styles.header}>
       <Link className={styles.brand} href="/" aria-label="Family Utils, inicio"><span className={styles.mark} aria-hidden="true">f</span>family<span>utils</span></Link>
-      <nav className={styles.headerLinks} aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link className={styles.activeLink} href="/menus">Menús</Link><Link href="/familia">Mi familia</Link></nav>
+      <nav className={styles.headerLinks} aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link className={styles.activeLink} href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/familia">Mi familia</Link></nav>
       <button className={styles.exitButton} onClick={() => void authClient.signOut().then(() => router.push("/acceso"))}>Salir</button>
     </header>
 
