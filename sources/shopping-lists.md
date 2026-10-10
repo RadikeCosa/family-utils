@@ -111,3 +111,20 @@ volumen de lecturas y repetir la medición; no habilitar consumo pago.
 
 El ensayo en Neon, el despliegue y las ventanas de uso real deben registrarse
 con fecha y resultados antes de declarar cerrada la validación operativa.
+
+### Preparación del ensayo en Neon — 2026-10-10
+
+Se comprobó la base configurada mediante una transacción explícita de solo
+lectura: PostgreSQL 18.6, migraciones `0000` a `0008_meal_planner` aplicadas
+y coincidentes con los archivos del repositorio, y ninguna tabla de compras.
+`0009_shopping_lists` sigue pendiente; no se modificó producción.
+
+El ensayo requiere conectar la integración de Neon con acceso al proyecto
+existente. La conexión SQL disponible no permite administrar ramas y la consola
+no tiene una sesión iniciada. Una vez conectado, identificar la rama que
+corresponde a la conexión configurada, crear una rama aislada desde ella y usar
+su conexión directa para aplicar la migración. Verificar integridad, repetir
+la migración para comprobar que no reaplica cambios y ejecutar las pruebas de
+compras, incluidas las de concurrencia, exclusivamente sobre esa rama. Registrar
+el resultado y eliminar la rama temporal al terminar. No desplegar antes de
+completar este ensayo.
