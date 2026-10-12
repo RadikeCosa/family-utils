@@ -70,6 +70,24 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       assert.equal((await request(outsider, `?kind=book&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
       const third = await ok(owner, `?kind=book&cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.works.length, 10); assert.equal(third.nextCursor, null);
     });
+    await t.test("duplicate warnings, shared edits, conflicts and archive rules", async () => {
+      const duplicate = await request(peer, "", "POST", { title: " CANCION del verano ", kind: "music" });
+      assert.equal(duplicate.status, 409); assert.equal(duplicate.body.code, "DUPLICATE"); assert.equal(duplicate.body.duplicates[0].id, workId);
+      const another = (await ok(peer, "", "POST", { title: "Canción del verano", kind: "music", confirmDuplicate: true })).id;
+      const before = await detail();
+      const outcomes = await Promise.all([peer, admin].map((person, index) => request(person, `/${workId}`, "PATCH", { action: "edit", title: `New ${index}`, kind: "music", expectedVersion: before.version })));
+      assert.deepEqual(outcomes.map((value) => value.status).sort(), [200, 409]);
+      const current = await detail();
+      const warning = await request(peer, `/${workId}`, "PATCH", { action: "edit", title: "Cancion del verano", kind: "music", expectedVersion: current.version });
+      assert.equal(warning.body.code, "DUPLICATE");
+      await ok(peer, `/${workId}`, "PATCH", { action: "archive", expectedVersion: current.version });
+      assert.equal((await request(owner, `/${workId}`, "PATCH", { action: "edit", title: "Forbidden", kind: "book", expectedVersion: current.version + 1 })).status, 403);
+      assert.ok(!(await ok(owner)).works.some((value) => value.id === workId));
+      assert.ok((await ok(owner, "?archived=true")).works.some((value) => value.id === workId));
+      await ok(owner, `/${workId}`, "PATCH", { action: "restore", expectedVersion: current.version + 1 });
+      assert.equal((await detail()).activityAt, before.activityAt, "edits and archive do not change activity");
+      assert.equal((await request(outsider, `/${another}`, "PATCH", { action: "archive", expectedVersion: 1 })).status, 404);
+    });
     await t.test("revoked device loses library access", async () => {
       await pool.query("UPDATE member_devices SET revoked_at=now() WHERE auth_user_id=$1", [peer.userId]);
       assert.equal((await request(peer)).status, 403);

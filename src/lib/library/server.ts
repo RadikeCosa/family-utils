@@ -93,7 +93,7 @@ async function record(tx: PoolClient, actor: MemberContext, entityType: string, 
   await tx.query('INSERT INTO audit_events(family_id,actor_member_id,entity_type,entity_id,action,"after") VALUES($1,$2,$3,$4,$5,$6::jsonb)', [actor.familyId, actor.memberId, entityType, entityId, action, JSON.stringify(metadata)]);
   await tx.query("UPDATE families SET library_revision=library_revision+1 WHERE id=$1", [actor.familyId]);
 }
-export async function mutateLibrary(request: Request, command: "create", workId?: string) {
+export async function mutateLibrary(request: Request, command: "create" | "manage", workId?: string) {
   if (!libraryEnabled()) return libraryUnavailable();
   let tx: PoolClient | undefined;
   try {
@@ -105,11 +105,40 @@ export async function mutateLibrary(request: Request, command: "create", workId?
     let body: Record<string, unknown>;
     try { body = await request.json(); if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(); } catch { fail(400, "INVALID", "Datos inválidos."); }
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
+    let current: WorkRow | undefined;
+    if (command !== "create") {
+      current = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR UPDATE", [workId, actor.familyId])).rows[0];
+      if (!current) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      await activeActor(tx, actor);
+      if (current.version !== body.expectedVersion) fail(409, "CONFLICT", "Hubo otro cambio. Actualizá y revisá los datos antes de reintentar.");
+      if (body.action === "archive" || body.action === "restore") {
+        const archive = body.action === "archive";
+        if (archive !== !!current.archived_at) {
+          await tx.query("UPDATE library_works SET archived_at=CASE WHEN $1 THEN now() ELSE NULL END,version=version+1,updated_at=now(),updated_by_member_id=$2 WHERE id=$3", [archive, actor.memberId, workId]);
+          await record(tx, actor, "library_work", workId!, body.action);
+        }
+        await tx.query("COMMIT"); return NextResponse.json({ id: workId });
+      }
+      if (body.action !== "edit") fail(400, "INVALID", "Acción inválida.");
+      if (current.archived_at) fail(403, "ARCHIVED", "Restaurá la ficha antes de editarla.");
+    }
     const input = workInput(body);
     if (!input) fail(400, "INVALID", "Revisá título, tipo y datos opcionales.");
-    const { rows: [work] } = await tx.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,creator,creador_normalizado,year,reference_url,created_by_member_id,updated_by_member_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING id", [actor.familyId, input.title, normalizeLibraryText(input.title), input.kind, input.creator, normalizeLibraryText(input.creator ?? ""), input.year, input.referenceUrl, actor.memberId]);
-    await record(tx, actor, "library_work", work.id, command);
-    await tx.query("COMMIT"); return NextResponse.json({ id: work.id }, { status: 201 });
+    const changedIdentity = !current || current.title !== input.title || current.kind !== input.kind;
+    if (changedIdentity && body.confirmDuplicate !== true) {
+      const { rows: duplicates } = await tx.query('SELECT id,title,archived_at AS "archivedAt" FROM library_works WHERE family_id=$1 AND kind=$2 AND titulo_normalizado=$3 AND ($4::uuid IS NULL OR id<>$4) ORDER BY created_at DESC,id DESC LIMIT 20', [actor.familyId, input.kind, normalizeLibraryText(input.title), current?.id ?? null]);
+      if (duplicates.length) throw new LibraryError(409, "DUPLICATE", "Encontramos obras parecidas. Abrí una ficha o confirmá que es otra obra.", { duplicates });
+    }
+    const values = [input.title, normalizeLibraryText(input.title), input.kind, input.creator, normalizeLibraryText(input.creator ?? ""), input.year, input.referenceUrl, actor.memberId];
+    let id: string;
+    if (current) {
+      await tx.query("UPDATE library_works SET title=$1,titulo_normalizado=$2,kind=$3,creator=$4,creador_normalizado=$5,year=$6,reference_url=$7,updated_by_member_id=$8,updated_at=now(),version=version+1 WHERE id=$9", [...values, workId]);
+      id = current.id;
+    } else {
+      id = (await tx.query("INSERT INTO library_works(title,titulo_normalizado,kind,creator,creador_normalizado,year,reference_url,created_by_member_id,updated_by_member_id,family_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9) RETURNING id", [...values, actor.familyId])).rows[0].id;
+    }
+    await record(tx, actor, "library_work", id, current ? "edited" : "created");
+    await tx.query("COMMIT"); return NextResponse.json({ id }, { status: current ? 200 : 201 });
   } catch (error) { if (tx) await tx.query("ROLLBACK"); return errorResponse(error); }
   finally { tx?.release(); }
 }

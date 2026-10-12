@@ -50,3 +50,27 @@ test("mobile library: create, restore draft, find accented titles and accessible
   expect(result.violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 });
+
+test("mobile shared management: duplicate confirmation, edit and archive/restore", async ({ page }) => {
+  const seeded = await api.post("/api/library", { data: { title: "La obra", kind: "book" } });
+  expect(seeded.status()).toBe(201);
+  await page.goto("/biblioteca");
+  await page.getByRole("button", { name: "Agregar obra", exact: true }).click();
+  await page.getByLabel(/^Título/).fill("LA OBRA");
+  await page.getByRole("combobox", { name: "Tipo de obra", exact: true }).selectOption("book");
+  await page.getByRole("button", { name: "Guardar ficha", exact: true }).click();
+  await expect(page.getByText("¿Es alguna de estas obras?")).toBeVisible();
+  await page.getByRole("button", { name: "Es otra obra: guardar igualmente" }).click();
+  await expect(page).toHaveURL(/\/biblioteca\/[a-f0-9-]+$/);
+  await page.getByRole("button", { name: "Editar ficha", exact: true }).click();
+  await page.getByLabel(/^Título/).fill("Otra mirada");
+  await page.getByRole("button", { name: "Guardar ficha", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Otra mirada" })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Archivar ficha" }).click();
+  await expect(page.getByText("Ficha archivada. Podés restaurarla o retirar tus aportes.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Editar ficha", exact: true })).toHaveCount(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Restaurar ficha" }).click();
+  await expect(page.getByRole("button", { name: "Editar ficha", exact: true })).toBeVisible();
+});
