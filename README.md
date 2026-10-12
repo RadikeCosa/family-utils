@@ -15,6 +15,10 @@ Compras se abre desde la portada o en `/compras` y requiere acceso a una
 familia. La base de datos requiere aplicar las migraciones antes de desplegar
 cambios que alteren su esquema.
 
+El [estado operativo y orden del repositorio](sources/shopping-lists.md#estado-operativo-y-orden-del-repositorio--2026-10-12)
+registra la verificación del 12/10/2026, los retiros pendientes y la medición
+desde el 18/10. Los cambios usan ramas cortas `codex/…` desde `main`, con PR y CI.
+
 ## Requisitos locales
 
 - Node.js 24.13.1
@@ -55,7 +59,7 @@ gane.
 ## Documentación
 
 - [Definición del producto](sources/product-brief.md)
-- [Plan de implementación](sources/next-steps.md)
+- [Plan histórico de implementación](sources/next-steps.md)
 - [Compras: contratos, migración y operación](sources/shopping-lists.md)
 
 Los nombres, calendarios y asignaciones de una familia son configuración

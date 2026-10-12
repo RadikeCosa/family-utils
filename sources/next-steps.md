@@ -1,4 +1,9 @@
-# Plan de implementación
+# Plan histórico de implementación
+
+Este documento conserva el plan original y las decisiones de entrega. No es
+un listado vigente de trabajo pendiente. El [estado operativo de Compras y del
+repositorio al 12/10/2026](shopping-lists.md#estado-operativo-y-orden-del-repositorio--2026-10-12)
+registra versión, limpieza realizada, recursos conservados y próximos pasos.
 
 ## 1. Repositorios y acceso
 
@@ -145,5 +150,5 @@ La tercera utilidad se implementó, validó e incorporó a producción el
 2026-10-10. El PR, la migración `0009_shopping_lists`, los contratos, los
 resultados de pruebas, el despliegue y el estado pendiente de medición están en
 [la documentación operativa de Compras](shopping-lists.md). La comparación de
-uso durante siete días aún requiere registrar datos reales después de la
-publicación.
+uso real se sigue en el [issue #10](https://github.com/RadikeCosa/family-utils/issues/10),
+a partir del 18/10/2026 y con revisión prospectiva el 25/10 si falta historial.

@@ -103,17 +103,24 @@ Con cuatro dispositivos continuamente activos, el polling genera como máximo
 24 horas de actividad diaria: la pausa por inactividad es parte del presupuesto.
 Las acciones propias y los eventos de regreso/conexión agregan solicitudes.
 
-Antes del piloto registrar una ventana previa de siete días y luego siete días
-de uso: solicitudes de compras y proporción de 304, consultas y cómputo de Neon,
-invocaciones y duración de Vercel. No registrar nombres, contenido ni identidades.
-Comparar consumo total existente más incremento, proyectar cada métrica mensual
-con `consumo_semanal / 7 * días_del_mes` y contrastar con las cuotas gratuitas
-vigentes de las cuentas. Si cualquier cuota se supera, reducir frecuencia o
-volumen de lecturas y repetir la medición; no habilitar consumo pago.
+El plan inicial pedía siete días antes y después del piloto. La ventana previa
+no se registró y no puede reconstruirse como una línea base medida. El
+[issue #10](https://github.com/RadikeCosa/family-utils/issues/10) define la
+medición desde el **18 de octubre de 2026**, sus fuentes y criterio de cierre.
+Si el historial no alcanza, observar del 18/10 al 25/10 y revisar el 25/10,
+registrando cobertura real y huecos. Toda proyección mensual con pocos días es
+preliminar; los totales de la plataforma no prueban incrementos causados por
+Compras. No habilitar consumo pago.
 
 El ensayo, el despliegue y las mediciones de uso real se registran con fecha y
 resultados en las secciones siguientes. La validación operativa sigue abierta
 hasta completar una medición de siete días y su proyección mensual.
+
+## Antecedentes históricos de la entrega
+
+Las secciones del 10/10 describen ese momento. El estado vigente y los recursos
+conservados se registran en el cierre del 12/10, más abajo. Los antecedentes
+se preservan aunque se retiren las ramas que los originaron.
 
 ### Ensayo en Neon — 2026-10-10
 
@@ -160,7 +167,8 @@ en la sección de despliegue.
 
 ### Preparación de publicación — 2026-10-10
 
-La vista previa de la rama `codex/listas-compras` usa credenciales exclusivas de
+La vista previa del [PR #8](https://github.com/RadikeCosa/family-utils/pull/8)
+usaba credenciales exclusivas de
 la rama temporal, sin acceso a producción. Conservó la protección de Vercel;
 el enlace temporal autorizado para verificación no se registra en el repositorio.
 
@@ -201,17 +209,127 @@ listas y productos. No se ejecutaron fixtures ni se insertaron datos de prueba
 en producción. La migración ya había pasado el ensayo directo en Neon, con
 preservación de datos en la rama clonada.
 
-### Operación pendiente
+## Estado operativo y orden del repositorio — 2026-10-12
 
-No se registró una ventana de siete días anterior a la publicación. Por tanto,
-la comparación previa/posterior definida en el plan todavía no puede cerrarse
-con una línea base medida. Tras siete días de uso, registrar solicitudes y
-respuestas 304 de Compras, consultas y cómputo de Neon, e invocaciones y
-duración de funciones de Vercel. Documentar las fechas, el consumo base
-disponible, el incremento observado y la proyección mensual frente a las cuotas
-gratuitas vigentes. No habilitar consumo pago.
+### Versión comprobada
 
-La rama de ensayo (`br-fragrant-surf-b54zr3qy`) y su rol restringido siguen
-activos para conservar la vista previa. Al terminar su revisión, retirar primero
-las variables de entorno de esa rama en Vercel y luego eliminar el rol y la rama
-en Neon; verificar los nombres y el entorno antes de confirmar la eliminación.
+Comprobación cerrada a las **13:53 ART (16:53 UTC)**. Es una instantánea previa
+a incorporar este PR documental, no una promesa de que producción nunca cambie.
+
+| Comprobación | Evidencia y resultado |
+| --- | --- |
+| Producción frente a main remoto | Despliegue activo `dpl_EvWXKV9UoWJoVDn9GSs2wzkL3p2n`, READY; SHA `13b6bea1892b7a4b81afe26f341e5351e4eab2f5`, igual a `origin/main`. Creado el 10/10 a las 16:40:19 ART y listo a las 16:40:56. No se promovió ni desplegó manualmente. |
+| Incorporación de Compras | [PR #8](https://github.com/RadikeCosa/family-utils/pull/8), integración [df4982d](https://github.com/RadikeCosa/family-utils/commit/df4982d159c567888d002b418049a5ca744719f2). El extremo `36056de9546f799fa459ba854e29b732a4f74269` es ancestro de main. |
+| Incorporación documental | [PR #9](https://github.com/RadikeCosa/family-utils/pull/9), integración [13b6bea](https://github.com/RadikeCosa/family-utils/commit/13b6bea1892b7a4b81afe26f341e5351e4eab2f5). El extremo `66f82d590e98742df89f691615958d782600b396` es ancestro de main. |
+| Migraciones productivas | Diez hashes coincidentes, desde `0000` hasta `0009`. Hash SHA-256 de `0009`: `91302db67d5b152a856ebd92b1fa13f444eaff6bd26adf2258ad4255ef2ccd8d`. Las cuatro tablas, `families.shopping_revision`, columnas, índices y restricciones coinciden con la migración. |
+| Lecturas de la base | SQL Editor, PostgreSQL 18.6. El editor conecta con `neondb_owner`; no es un rol lector. Se ejecutaron exclusivamente los bloques de consulta aprobados individualmente, con `BEGIN READ ONLY`, comprobación de `transaction_read_only=on` y `ROLLBACK`. El intento de `SET LOCAL ROLE family_utils_backup_reader` fue rechazado y revertido. No se cambiaron permisos. |
+| Acceso a Compras | Portada pública 200 con enlace a Compras; `/compras` redirige 307 a acceso sin sesión. Existe actividad guardada en las tablas productivas. El recorrido autenticado se verificó durante la entrega del 10/10; no se repitió con una sesión familiar el 12/10. No se crearon fixtures ni datos de prueba productivos. |
+| Respaldo | Última ejecución diaria revisada: [38232273766](https://github.com/RadikeCosa/family-utils-backups/actions/runs/38232273766), exitosa el 12/10, con restauración aislada. El enlace requiere acceso al repositorio privado. |
+
+### Limpieza realizada y recursos conservados
+
+El usuario aprobó la limpieza identificada, condicionada a las comprobaciones.
+Se retiraron **solo las ramas locales** `codex/listas-compras` y
+`codex/documentar-publicacion-compras` con borrado normal, después de comprobar
+su incorporación y la ausencia de PR abiertos como origen o destino. Sus commits,
+PR y documentación permanecen disponibles. No se necesitó borrado forzado.
+
+Ramas locales al preparar este documento: `main` y `codex/orden-repo`.
+Ramas remotas conservadas: `main`, las dos ramas históricas indicadas y la rama
+documental de este PR cuando se publique. El checkout de main no se modificó.
+
+**No se retiraron recursos externos.** El conector disponible de Vercel permite
+inspeccionarlos, pero no expone su borrado; la consola web requiere sesión.
+Mientras sus vistas previas estén disponibles, se conservan las ramas remotas,
+la rama de ensayo de Neon y su rol. El cierre externo sigue pendiente: no se
+considera completado por haber documentado sus pasos.
+
+Inventario exacto de retiro pendiente, dentro del proyecto Vercel `family-utils`
+(`prj_SYvr9uLiDCRbuOLyZjNLVaVKn9bO`):
+
+| Recurso | Identificador o nombre | Estado |
+| --- | --- | --- |
+| Preview documental del PR #9 | `dpl_B4ouA8C6LbNhjRJ727HtxTQyTado` | READY, conservado |
+| Preview de Compras del PR #8 | `dpl_HRr4rHvchGfYrgyTzac7u4wqna8q` | READY, conservado |
+| Ensayo de Compras, target staging | `dpl_BF4cnVmVnD2TLMyUAQvdw83snMnD` | READY, conservado |
+| Preview anterior de Compras | `dpl_s7FJ4XWHK6TzHaxF4Ubme66ddk43` | READY, conservado |
+| Alias documental | `family-utils-git-codex-documentar-p-8a120a-radikecosas-projects.vercel.app` | Conservado |
+| Alias Compras | `family-utils-git-codex-listas-compras-radikecosas-projects.vercel.app` | Conservado |
+| Variables Preview exclusivas de Compras | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `CODE_PEPPER`, `BETTER_AUTH_URL`, limitadas a `codex/listas-compras` | Conservadas; no publicar sus valores |
+| Rama Neon de ensayo | `shopping-migration-test-2026-10-10` / `br-fragrant-surf-b54zr3qy` | Conservada; sin ramas hijas entre las tres existentes |
+| Rol Neon exclusivo del ensayo | `shopping_preview_20261010` | Conservado; ausente de producción |
+| Ramas Git remotas | `codex/listas-compras`, `codex/documentar-publicacion-compras` | Incorporadas, conservadas hasta cerrar Preview |
+
+Se preservan producción (`br-lucky-bird-b5jop51y`), `family-utils-preview`,
+los otros despliegues no relacionados y los roles productivos.
+
+La comparación de 23 tablas por huellas encontró diferencias en cinco tablas.
+La clasificación posterior por identidad y columnas mostró:
+
+- `families`: mismo registro, revisiones y fecha anteriores en ensayo.
+- `task_occurrences`: mismos registros; versiones anteriores a completarlas en
+  producción, sin diferencias de título, descripción o responsables originales.
+- `session`: mismas identidades; fechas de renovación y vencimiento anteriores.
+- `code_rate_limits` y `rateLimit`: contadores técnicos antiguos y contadores
+  exclusivos del ensayo. No contienen contenido familiar que deba migrarse.
+- Las cuatro tablas de Compras están vacías en ensayo. No se detectó contenido
+  familiar exclusivo que rescatar. Las lecturas fueron sucesivas entre ramas,
+  no una instantánea atómica compartida; repetir la comprobación si hay actividad
+  posterior del ensayo antes de retirarlo.
+
+Las credenciales locales inspeccionadas apuntan a producción; no se encontraron
+referencias locales activas al ensayo. El repositorio de la app y sus entornos
+no tienen secretos de Actions. El respaldo privado usa un secreto `DATABASE_URL`
+actualizado el 29/09, anterior a la creación del rol de ensayo; su workflow está
+activo y el respaldo funciona. La consola confirma un rol productivo separado
+`family_utils_backup_reader`. El valor del secreto de GitHub no es recuperable:
+no se afirma haber inspeccionado su cadena ni se modificó para comprobarla.
+
+El retiro externo se realiza en un único lote cuando el acceso esté disponible:
+
+1. Revalidar producción, dependencias y PR abiertos. La medición usa producción;
+   no depende de estos recursos de ensayo. Cualquier comprobación incompleta
+   bloquea el recurso afectado.
+2. Retirar las cuatro variables exclusivas de Preview, conservando evidencia
+   sin secretos; retirar los cuatro despliegues y los dos alias. Confirmar que
+   sus URLs ya no ofrecen la aplicación y que no queda Preview de esas ramas.
+3. Con la vista previa cerrada, confirmar el retiro específico del rol y rama
+   de Neon antes del borrado irreversible. No tocar producción ni respaldo.
+4. Retirar las dos ramas Git remotas incorporadas y conservar esta documentación
+   como antecedente histórico. Actualizar este inventario con fecha y resultado.
+
+### Medición desde el 18 de octubre
+
+Seguimiento único: [issue #10](https://github.com/RadikeCosa/family-utils/issues/10).
+Permanece abierto hasta registrar período, fuentes, cobertura, resultados,
+limitaciones y proyección preliminar frente a cuotas gratuitas.
+
+| Fuente | Plan confirmado | Ventana y disponibilidad |
+| --- | --- | --- |
+| Vercel | Hobby, confirmado por el contexto Git del conector el 12/10 | [Observability](https://vercel.com/docs/observability/observability-plus#limitations): 12 h; logs de ejecución: 1 h. Sin Plus hay restricciones de desglose por ruta y latencia. [Query](https://vercel.com/docs/query) editable requiere Plus. La consulta de prueba del conector devolvió 400; no prueba ausencia de actividad. Granularidad y acceso efectivo por métrica pendientes de revisar en consola. |
+| Neon | Free, confirmado en consola el 12/10 | [Monitoring](https://github.com/neondatabase/website/blob/main/content/docs/introduction/plans.md): 1 día. La consola ofrece 1/3/6/12 h, un día y Custom; algunos gráficos tienen disponibilidad parcial. Granularidad y consultas/consumo facturable pendientes. La restauración de seis horas es otra retención. |
+
+La ventana prospectiva propuesta es **18/10 00:00 a 25/10 00:00 ART**, con
+revisión el **25/10/2026**. Capturas cada seis horas sirven solo para fuentes
+accesibles con retención suficiente; los logs de una hora necesitan intervalos
+menores a una hora para cobertura continua. No hay automatización de capturas
+instalada. No sumar ventanas solapadas ni convertir huecos en ceros.
+
+Medir solicitudes/304 de Compras, consultas y CU-h de Neon, invocaciones y
+duración de funciones; distinguir métricas por utilidad de totales del proyecto.
+Si el plan gratuito no permite una métrica, mantenerla pendiente con fecha y
+próximo paso en el issue. No crear una línea base ficticia ni atribuir incrementos
+sin evidencia. No se habilitaron servicios pagos ni se instrumentó la app.
+
+### Estrategia para las próximas ramas
+
+`main` es la base estable. Cada cambio usa una rama corta `codex/…` creada desde
+main actualizado y se incorpora por PR con CI correcto. Separar cambios de
+esquema de publicación cuando corresponda y verificar expresamente el destino
+de la migración. Retirar la rama incorporada al cerrar sus dependencias Preview;
+los antecedentes se enlazan por PR y commits, no por URLs de ramas temporales.
+
+Este cierre cambia únicamente documentación y referencias locales. La nueva
+utilidad familiar todavía no tiene requisitos, contratos ni esquema definidos.
+Los retiros externos y la medición futura quedan explícitos; no se confunden
+con funcionalidades terminadas.
