@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createAuthClient } from "better-auth/react";
+import { createAuthClient } from "@/lib/family-auth-client";
 import styles from "../platform.module.css";
 
 type Member = {

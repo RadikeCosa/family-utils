@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createAuthClient } from "better-auth/react";
+import { createAuthClient } from "@/lib/family-auth-client";
 import styles from "./menus.module.css";
 import { addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
 

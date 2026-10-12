@@ -115,3 +115,18 @@ test("mobile memories preserve partial dates, drafts, accessible spoilers and re
   page.once("dialog",(dialog)=>dialog.accept()); await page.getByRole("button",{name:"Retirar aporte",exact:true}).click();
   await expect(page.getByText("Todavía no hay aportes. Cada mirada tiene su lugar.")).toBeVisible();
 });
+
+test("drafts are isolated by identity and cleared on sign out", async ({page}) => {
+  await page.goto("/biblioteca");
+  await page.evaluate(() => sessionStorage.setItem("family-library-draft:v1:other-family:other-profile:new-work", JSON.stringify({title:"Privado"})));
+  await page.reload();
+  await expect(page.getByRole("heading",{name:"Nuestra colección empieza acá"})).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("family-library-draft:v1:other-family:other-profile:new-work"))).toBeNull();
+  await page.getByRole("button",{name:"Agregar obra",exact:true}).click();
+  await page.getByLabel(/^Título/).fill("Mi borrador privado");
+  expect(await page.evaluate(() => Object.keys(sessionStorage).some((key)=>key.startsWith("family-library-draft:v1:")))).toBe(true);
+  await page.goto("/familia");
+  await page.getByRole("button",{name:"Salir",exact:true}).click();
+  await expect(page).toHaveURL(/\/acceso/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).some((key)=>key.startsWith("family-library-draft:v1:")))).toBe(false);
+});

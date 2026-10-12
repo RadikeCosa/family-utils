@@ -77,7 +77,8 @@ ascender bloqueos para actualizar actividad. Versiones esperadas por entidad.
 - Etapa 3: estados y estrellas personales implementados; pendiente de ensayo remoto
   e integración.
 - Etapa 4: aportes, fechas parciales, compañía, spoilers y retirada lógica implementados.
-  API y ocho recorridos móviles satisfactorios, incluidas comprobaciones Axe. Etapa 5 pendiente.
+  API y ocho recorridos móviles satisfactorios, incluidas comprobaciones Axe. Etapa 5: privacidad de borradores, conflictos y validación final implementados;
+  integración, migración productiva, habilitación y piloto pendientes.
 
 El número de migración se decide al integrar. La segunda rama rebasa y regenera
 SQL, journal y snapshot sobre main. No modificar migraciones ya integradas/aplicadas.
@@ -100,3 +101,8 @@ Cierre: etapas y CI completos, smoke productivo de lectura, piloto auténtico,
 evidencias guardadas y ausencia de dependencias/datos exclusivos. Inventariar y
 obtener aprobación explícita antes de retirar recursos externos y credenciales.
 No hay migración destructiva de rollback: deshabilitar utilidad conserva datos.
+
+Validación local final: 36 pruebas de reglas/PostgreSQL, 31 de rutas y 10
+recorridos móviles de Biblioteca satisfactorios. Ensayo remoto pendiente de
+validación funcional completa; producción sigue apagada. No se modificaron
+archivos de Tareas en esta entrega.

@@ -142,6 +142,27 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       assert.equal(new Set([...first.contributions,...second.contributions].map((entry)=>entry.id)).size,100);
       const third=await ok(owner,`/${workId}?cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.contributions.length,5);
     });
+    await t.test("archive lock wins before publication and personal write", async () => {
+      const id=(await ok(owner,"","POST",{title:"Concurrent archive",kind:"book"})).id;
+      const blocker=await pool.connect();
+      try {
+        await blocker.query("BEGIN"); await blocker.query("SELECT id FROM library_works WHERE id=$1 FOR UPDATE",[id]);
+        const publish=request(owner,`/${id}/contributions`,"POST",{body:"No debe publicarse",spoiler:false,companionIds:[]});
+        const personal=request(peer,`/${id}/personal`,"PUT",{status:"pending",rating:1,expectedVersion:0});
+        await delay(100);
+        await blocker.query("UPDATE library_works SET archived_at=now(),version=version+1 WHERE id=$1",[id]);
+        await blocker.query("COMMIT");
+        assert.equal((await publish).status,403); assert.equal((await personal).status,403);
+        assert.equal(Number((await pool.query("SELECT count(*) n FROM library_contributions WHERE work_id=$1",[id])).rows[0].n),0);
+      } finally { await blocker.query("ROLLBACK");blocker.release(); }
+      const second=(await ok(owner,"","POST",{title:"Dependent lock",kind:"music"})).id;
+      const shared=await pool.connect();
+      try { await shared.query("BEGIN"); await shared.query("SELECT id FROM library_works WHERE id=$1 FOR SHARE",[second]);
+        let resolved=false; const archive=request(peer,`/${second}`,"PATCH",{action:"archive",expectedVersion:1}).then((result)=>{resolved=true;return result;});
+        await delay(100); assert.equal(resolved,false,"archive waits for dependent writes");
+        await shared.query("COMMIT"); assert.equal((await archive).status,200);
+      } finally {await shared.query("ROLLBACK");shared.release();}
+    });
     await t.test("revoked device loses library access", async () => {
       await pool.query("UPDATE member_devices SET revoked_at=now() WHERE auth_user_id=$1", [peer.userId]);
       assert.equal((await request(peer)).status, 403);
