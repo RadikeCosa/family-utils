@@ -102,7 +102,7 @@ test("a completed routine moves to history at Buenos Aires midnight", async ({ p
     assignees: [], taskAssignees: [],
   };
   const upcoming = { ...completed, id: randomUUID(), dueDate: "2026-09-29", completedAt: null, completedByMemberId: null, status: "open", version: 1 };
-  await page.route("**/api/tasks/revision", async (route) => {
+  await page.route("**/api/tasks/revision?*", async (route) => {
     const etag = taskListEtag(familyId, 1, day);
     if (route.request().headers()["if-none-match"] === etag) {
       await route.fulfill({ status: 304, headers: { ETag: etag } });
@@ -110,11 +110,12 @@ test("a completed routine moves to history at Buenos Aires midnight", async ({ p
       await route.fulfill({ status: 200, contentType: "application/json", headers: { ETag: etag }, body: JSON.stringify({ revision: 1, familyDay: day }) });
     }
   });
-  await page.route("**/api/tasks{,?*}", async (route) => {
+  await page.route("**/api/tasks?*", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", headers: { ETag: taskListEtag(familyId, 1, day) }, body: JSON.stringify({
-      familyDay: day, counts: { open: day === "2026-09-28" ? 0 : 1, completed: day === "2026-09-28" ? 1 : 0 }, nextCursor: null, memberId, revision: 1, tasks: day === "2026-09-28" ? [completed] : [upcoming],
+      familyDay: day, selectedDate: day, familyId, generationMode: "explicit_sync", counts: { open: day === "2026-09-28" ? 0 : 1, completed: day === "2026-09-28" ? 1 : 0 }, nextCursor: null, memberId, revision: 1, tasks: day === "2026-09-28" ? [completed] : [upcoming],
     }) });
   });
+  await page.route("**/api/tasks/sync", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changed: false }) }));
   await page.goto("/tareas");
   await expect(page.getByText("Hecha por Test member")).toBeVisible();
   day = "2026-09-29";
@@ -123,6 +124,85 @@ test("a completed routine moves to history at Buenos Aires midnight", async ({ p
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByRole("button", { name: "Marcar Mesa de prueba como hecha" })).toBeVisible();
   await expect(page.getByText("Hecha por Test member")).toHaveCount(0);
+});
+
+async function mockDaily(page: import("@playwright/test").Page, sync: "fast" | "slow" | "fail" = "fast") {
+  await page.clock.install({ time: new Date("2026-10-12T15:00:00Z") });
+  let generated = false;
+  let syncCalls = 0;
+  await page.route("**/api/tasks**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/tasks/sync") {
+      syncCalls++;
+      if (sync === "fail") return route.abort("failed");
+      if (sync === "slow") await new Promise((resolve) => setTimeout(resolve, 1200));
+      generated = true;
+      return route.fulfill({ json: { changed: true } });
+    }
+    if (url.pathname === "/api/tasks/revision") return route.fulfill({ status: 304 });
+    if (url.pathname !== "/api/tasks") return route.fallback();
+    const selectedDate = url.searchParams.get("date") ?? "2026-10-12";
+    const taskId = "calendar-task";
+    return route.fulfill({ json: {
+      familyId, memberId, familyDay: "2026-10-12", selectedDate, generationMode: "explicit_sync", revision: generated ? 2 : 1,
+      counts: { open: 1, completed: 0 }, total: 1, possibleTotal: 0, nextCursor: null,
+      tasks: [{ id: generated ? "calendar-occurrence" : null, kind: generated ? "occurrence" : "forecast", key: JSON.stringify([taskId, null, selectedDate]), generationDate: selectedDate,
+        taskId, title: "Calendario compartido", taskTitle: "Calendario compartido", taskStatus: "active", taskVersion: 1,
+        description: null, taskDescription: null, taskScheduledDate: selectedDate, taskScheduledTime: null, taskAssignmentMode: "shared", assignmentMode: "shared",
+        repeatWeekdays: [0,1,2,3,4,5,6], carryPolicy: "expires_daily", dueDate: selectedDate, scheduledTime: null,
+        responsibilityMemberId: null, claimedByMemberId: null, status: "open", version: generated ? 1 : null, assignees: [], taskAssignees: [] }],
+    }, headers: { ETag: '"calendar"' } });
+  });
+  return () => syncCalls;
+}
+
+test("date selection fixes today, Hoy resumes following, history preserves the date", async ({ page }) => {
+  const syncCalls = await mockDaily(page);
+  await page.goto("/tareas");
+  await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
+  await page.getByLabel("Ir a una fecha").fill("2026-10-11");
+  await page.getByLabel("Ir a una fecha").fill("2026-10-12");
+  await expect(page).toHaveURL(/fecha=2026-10-12/);
+  await page.getByRole("button", { name: "Día anterior" }).click();
+  await expect(page.getByText("Solo lectura", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Marcar Calendario/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Historial", exact: true }).click();
+  await page.getByRole("button", { name: "Volver a tareas" }).click();
+  await expect(page).toHaveURL(/fecha=2026-10-11/);
+  await page.getByRole("button", { name: "Hoy", exact: true }).click();
+  await expect(page).toHaveURL(/\/tareas$/);
+  expect(syncCalls()).toBe(1);
+});
+
+test("failed sync leaves a pure reading and disabled forecasts visible", async ({ page }) => {
+  const syncCalls = await mockDaily(page, "fail");
+  await page.goto("/tareas");
+  await expect(page.getByRole("heading", { name: "Calendario compartido" })).toBeVisible();
+  await expect(page.getByText("Pendiente de actualizar", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Marcar Calendario/ })).toHaveCount(0);
+  await expect(page.getByText("Puede faltar actualizar las tareas de hoy.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Reintentar actualización" }).click();
+  await expect(page.getByRole("button", { name: "Reintentar actualización" })).toHaveCount(0);
+  expect(syncCalls()).toBe(2);
+});
+
+test("fast sync does not flash the delayed notice", async ({ page }) => {
+  await mockDaily(page);
+  await page.goto("/tareas");
+  await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
+  await page.clock.fastForward(900);
+  await expect(page.getByText("Puede faltar actualizar las tareas de hoy.", { exact: false })).toHaveCount(0);
+});
+
+test("family date stays in Buenos Aires on a device in Auckland", async ({ browser }) => {
+  const context = await browser.newContext({ timezoneId: "Pacific/Auckland", storageState: { cookies, origins: [] } });
+  const page = await context.newPage();
+  try {
+    await mockDaily(page);
+    await page.goto(`${baseURL}/tareas`);
+    await expect(page.getByLabel("Ir a una fecha")).toHaveValue("2026-10-12");
+    await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
+  } finally { await context.close(); }
 });
 
 test("choosing today explicitly generates a missing daily occasion through the shared loader", async ({ page }) => {
@@ -144,4 +224,30 @@ test("choosing today explicitly generates a missing daily occasion through the s
   await page.getByRole("button", { name: "Hoy", exact: true }).click();
   await todayRead;
   await expect(page).toHaveURL(/\/tareas$/);
+});
+
+test("potential pending pages refresh atomically and recover an obsolete cursor", async ({ page }) => {
+  const today = getFamilyDay();
+  const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 5);
+  await pool.query(`WITH created AS (
+    INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id)
+    SELECT $1, 'Potential ' || n, $2, $2 FROM generate_series(1,175) n RETURNING id,title
+  ) INSERT INTO task_occurrences(task_id,family_id,due_date,title_snapshot,assignment_mode_snapshot)
+    SELECT id,$1,$3,title,'shared' FROM created`, [familyId, memberId, today]);
+  await page.goto(`/tareas?fecha=${next.toISOString().slice(0, 10)}`);
+  const section = page.locator("section").filter({ has: page.getByRole("button", { name: /Podrían seguir pendientes/ }) }).last();
+  await section.getByRole("button", { name: /Podrían seguir pendientes/ }).click();
+  const cards = section.locator("[data-task-key]");
+  await expect(cards).toHaveCount(50);
+  await section.getByRole("button", { name: "Cargar más pendientes" }).click();
+  await expect(cards).toHaveCount(100);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await section.getByRole("button", { name: "Cargar más pendientes" }).click();
+  await expect(cards).toHaveCount(100);
+  await expect(section.getByRole("button", { name: "Cargar más pendientes" })).toBeEnabled();
+  await pool.query("UPDATE task_occurrences SET title_snapshot=title_snapshot || ' actualizado' WHERE family_id=$1 AND title_snapshot LIKE 'Potential %'", [familyId]);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(cards.first().getByRole("heading")).toContainText("actualizado");
+  await expect(cards).toHaveCount(100);
 });

@@ -10,7 +10,7 @@ import styles from "../page.module.css";
 const authClient = createAuthClient();
 type Member = { id: string; name: string; role: "administrator" | "member" };
 type Task = {
-  id: string;
+  id: string | null;
   key: string;
   kind: "occurrence" | "forecast";
   generationDate: string | null;
@@ -35,7 +35,7 @@ type Task = {
   completedByMemberId?: string | null;
   completedAt?: string | null;
   status: "open" | "completed" | "missed" | "archived";
-  version: number;
+  version: number | null;
   editedByName?: string;
   updatedAt?: string;
   assignees: { memberId?: string; name: string }[];
@@ -82,6 +82,23 @@ export default function Home() {
   const requestSequence = useRef(0);
   const loadedCount = useRef(50);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [possibleTasks, setPossibleTasks] = useState<Task[]>([]);
+  const [possibleTotal, setPossibleTotal] = useState(0);
+  const [possibleCursor, setPossibleCursor] = useState<string | null>(null);
+  const [possibleOpen, setPossibleOpen] = useState(false);
+  const [possibleLoading, setPossibleLoading] = useState(false);
+  const possibleSequence = useRef(0);
+  const possibleLoadedCount = useRef(50);
+  const possibleOpenRef = useRef(false);
+  const refreshPossible = useRef<(() => Promise<void>) | null>(null);
+  const [syncNotice, setSyncNotice] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
+  const [manualRetryUsed, setManualRetryUsed] = useState(false);
+  const lastRead = useRef<{ date: string; familyId: string; mode: "explicit_sync" | "legacy_today" } | null>(null);
+  const generationModeRef = useRef<"explicit_sync" | "legacy_today">("explicit_sync");
+  const lastSync = useRef(new Map<string, number>());
+  const syncInFlight = useRef(false);
+  const refreshLatest = useRef<((force?: boolean, cursor?: string, readOnly?: boolean) => Promise<void>) | null>(null);
   const [counts, setCounts] = useState({ open: 0, completed: 0 });
   const [notice, setNotice] = useState("");
   const [syncState, setSyncState] = useState<"idle" | "loading" | "synced" | "error">("idle");
@@ -110,21 +127,50 @@ export default function Home() {
   const lastActivityAt = useRef(0);
   const occurrenceBusy = useRef(false);
 
-  const refresh = useCallback(async (force = false, cursor?: string) => {
+  const synchronize = useCallback(async (familyId: string, mode: "explicit_sync" | "legacy_today", manual = false) => {
+    if (syncInFlight.current || (!manual && Date.now() - (lastSync.current.get(familyId) ?? 0) < 30_000)) return;
+    syncInFlight.current = true;
+    lastSync.current.set(familyId, Date.now());
+    if (manual) setManualRetryUsed(true);
+    const controller = new AbortController();
+    const delayedNotice = window.setTimeout(() => setSyncNotice(true), 800);
+    const timeout = window.setTimeout(() => controller.abort(), 5_000);
+    try {
+      const response = await fetch(mode === "legacy_today" ? "/api/tasks" : "/api/tasks/sync", { method: mode === "legacy_today" ? "GET" : "POST", cache: "no-store", signal: controller.signal });
+      if (!response.ok) throw new Error("No se pudo actualizar el día.");
+      setSyncNotice(false); setSyncFailed(false); setManualRetryUsed(false);
+      void refreshLatest.current?.(true, undefined, true);
+    } catch {
+      setSyncNotice(true); setSyncFailed(true);
+    } finally {
+      window.clearTimeout(delayedNotice); window.clearTimeout(timeout);
+      syncInFlight.current = false;
+    }
+  }, []);
+
+  const refresh = useCallback(async (force = false, cursor?: string, readOnly = false) => {
     if (!session?.user?.id || !dateInitialized) return;
     const sequence = ++requestSequence.current;
     const requestedDate = selectedDate;
     if (force) setSyncState("loading");
     const anchors = [...document.querySelectorAll<HTMLElement>("[data-task-key]")].map((element) => ({ key: element.dataset.taskKey, top: element.getBoundingClientRect().top })).filter((item) => item.top >= 0);
     try {
-      // Transitional legacy generation is only used for today's coordinator.
-      if (requestedDate === getFamilyDay()) await fetch("/api/tasks", { cache: "no-store" });
+      if (!force && !cursor && etagRef.current && lastRead.current?.date === requestedDate) {
+        const response = await fetch(`/api/tasks/revision?date=${requestedDate}`, { cache: "no-store", headers: { "If-None-Match": etagRef.current } });
+        if (sequence !== requestSequence.current) return;
+        if (response.status === 304) {
+          setSyncState("synced"); setLastUpdated(new Date());
+          if (requestedDate === getFamilyDay() && !readOnly) void synchronize(lastRead.current.familyId, lastRead.current.mode);
+          return;
+        }
+      }
       const all: Task[] = [];
       let append = !!cursor;
       let restarted = false;
       let pageCursor = cursor;
       let body;
       let response;
+      let firstEtag: string | null = null;
       do {
         const params = new URLSearchParams({ date: requestedDate });
         if (pageCursor) params.set("cursor", pageCursor);
@@ -133,16 +179,31 @@ export default function Home() {
         if (sequence !== requestSequence.current || requestedDate !== dateRef.current) return;
         if (response.status === 409 && !restarted) { restarted = true; append = false; all.length = 0; pageCursor = undefined; continue; }
         if (!response.ok) throw new Error(body.error ?? "No se pudieron cargar las tareas.");
+        if (!pageCursor) firstEtag = response.headers.get("ETag");
         all.push(...body.tasks);
         pageCursor = body.nextCursor ?? undefined;
       } while ((!append && pageCursor && all.length < loadedCount.current) || (restarted && !body.tasks));
-      etagRef.current = response!.headers.get("ETag");
+      if (firstEtag) etagRef.current = firstEtag;
+      lastRead.current = { date: requestedDate, familyId: body.familyId, mode: body.generationMode };
+      generationModeRef.current = body.generationMode ?? "explicit_sync";
       setFamilyDay(body.familyDay);
-      if (followsToday.current && requestedDate !== body.familyDay) { setSelectedDate(body.familyDay); return; }
+      if (!isTaskDateInRange(requestedDate, body.familyDay) || (followsToday.current && requestedDate !== body.familyDay)) {
+        dateRef.current = body.familyDay; setSelectedDate(body.familyDay); setTasks([]); return;
+      }
       setTasks((current) => append ? [...current, ...all] : all);
       loadedCount.current = append ? loadedCount.current + all.length : Math.max(50, all.length);
       setNextCursor(body.nextCursor);
       setCounts(body.counts);
+      setPossibleTotal(body.possibleTotal ?? 0);
+      if (!cursor && possibleOpenRef.current) void refreshPossible.current?.();
+      if (requestedDate === body.familyDay && !cursor && !readOnly) void synchronize(body.familyId, body.generationMode);
+      if (requestedDate > body.familyDay) {
+        try {
+          const storageKey = `task-future-use:${body.familyId}`;
+          const usage = JSON.parse(localStorage.getItem(storageKey) ?? "null") ?? { firstVisit: Date.now(), visits: 0, opens: 0 };
+          if (Date.now() - usage.firstVisit <= 14 * 86400_000) { usage.visits += 1; localStorage.setItem(storageKey, JSON.stringify(usage)); }
+        } catch { /* Private browsing may disable local storage. */ }
+      }
       setSyncState("synced"); setLastUpdated(new Date()); setError("");
       requestAnimationFrame(() => {
         if (sequence !== requestSequence.current) return;
@@ -156,7 +217,9 @@ export default function Home() {
       if (sequence !== requestSequence.current) return;
       setSyncState("error"); setError(caught instanceof Error ? caught.message : "No se pudieron cargar las tareas.");
     }
-  }, [session?.user?.id, selectedDate, dateInitialized]);
+  }, [session?.user?.id, selectedDate, dateInitialized, synchronize]);
+
+  useEffect(() => { refreshLatest.current = refresh; return () => { refreshLatest.current = null; }; }, [refresh]);
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("fecha");
@@ -178,12 +241,53 @@ export default function Home() {
     queueMicrotask(() => void refresh(true));
   }, [dateInitialized, selectedDate, refresh]);
 
+  const loadPossible = useCallback(async (cursor?: string) => {
+    const sequence = ++possibleSequence.current;
+    const anchors = [...document.querySelectorAll<HTMLElement>("[data-task-key]")].map((element) => ({ key: element.dataset.taskKey, top: element.getBoundingClientRect().top })).filter((item) => item.top >= 0);
+    setPossibleLoading(true);
+    try {
+      let append = !!cursor;
+      let restarted = false;
+      let pageCursor = cursor;
+      const items: Task[] = [];
+      let data;
+      do {
+        const params = new URLSearchParams({ date: selectedDate, section: "possible" });
+        if (pageCursor) params.set("cursor", pageCursor);
+        const response = await fetch(`/api/tasks?${params}`, { cache: "no-store" });
+        data = await response.json();
+        if (sequence !== possibleSequence.current || selectedDate !== dateRef.current) return;
+        if (response.status === 409 && !restarted) { restarted = true; append = false; items.length = 0; pageCursor = undefined; continue; }
+        if (!response.ok) throw new Error(data.error ?? "No se pudieron cargar los pendientes.");
+        items.push(...data.tasks);
+        pageCursor = data.nextCursor ?? undefined;
+      } while ((!append && pageCursor && items.length < possibleLoadedCount.current) || (restarted && !data.tasks));
+      setPossibleTasks((current) => append ? [...current, ...items] : items);
+      possibleLoadedCount.current = append ? possibleLoadedCount.current + items.length : Math.max(50, items.length);
+      setPossibleCursor(data.nextCursor); setPossibleTotal(data.possibleTotal);
+      requestAnimationFrame(() => {
+        if (sequence !== possibleSequence.current) return;
+        const elements = [...document.querySelectorAll<HTMLElement>("[data-task-key]")];
+        for (const anchor of anchors) {
+          const element = elements.find((item) => item.dataset.taskKey === anchor.key);
+          if (element) { window.scrollBy(0, element.getBoundingClientRect().top - anchor.top); break; }
+        }
+      });
+    } catch (caught) { if (sequence === possibleSequence.current) setError(caught instanceof Error ? caught.message : "No se pudieron cargar los pendientes."); }
+    finally { if (sequence === possibleSequence.current) setPossibleLoading(false); }
+  }, [selectedDate]);
+
+  useEffect(() => { refreshPossible.current = loadPossible; return () => { refreshPossible.current = null; }; }, [loadPossible]);
+
   function navigateDate(day: string, follow = false) {
     if (!isTaskDateInRange(day, familyDay)) return;
     followsToday.current = follow;
     requestSequence.current += 1;
     dateRef.current = day;
     loadedCount.current = 50;
+    etagRef.current = null; lastRead.current = null;
+    possibleOpenRef.current = false; possibleLoadedCount.current = 50;
+    setPossibleOpen(false); setPossibleTasks([]); setPossibleCursor(null); possibleSequence.current += 1;
     setTasks([]); setCounts({ open: 0, completed: 0 }); setNextCursor(null);
     setSelectedDate(day); setError("");
     const url = new URL(window.location.href);
@@ -243,7 +347,7 @@ export default function Home() {
   const bounds = taskDateBounds(familyDay);
 
   async function performOccurrence(task: Task, action: "claim" | "complete" | "undo" | "skip") {
-    if (occurrenceBusy.current) return;
+    if (occurrenceBusy.current || !task.id || task.kind === "forecast") return;
     occurrenceBusy.current = true;
     setBusy(true); setError("");
     try {
@@ -416,11 +520,12 @@ export default function Home() {
 
           <div className={styles.dateNav} aria-label="Navegar por fecha">
             <button aria-label="Día anterior" disabled={selectedDate === bounds.earliest} onClick={() => navigateDate(addTaskDays(selectedDate, -1))}>←</button>
-            <label><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={familyDay} onChange={(event) => navigateDate(event.target.value)} /></label>
-            <button aria-label="Día siguiente" disabled={selectedDate >= familyDay} onClick={() => navigateDate(addTaskDays(selectedDate, 1))}>→</button>
+            <label><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => navigateDate(event.target.value)} /></label>
+            <button aria-label="Día siguiente" disabled={selectedDate >= bounds.latest} onClick={() => navigateDate(addTaskDays(selectedDate, 1))}>→</button>
             <button onClick={() => navigateDate(familyDay, true)}>Hoy</button>
             {past && <span>Solo lectura</span>}
           </div>
+          {isToday && syncNotice && <p role="status">Puede faltar actualizar las tareas de hoy. {syncFailed && !manualRetryUsed && <button className={styles.filterButton} onClick={() => { if (family) void synchronize(family.id, generationModeRef.current, true); }}>Reintentar actualización</button>}</p>}
           {notice && <p role="status">{notice}</p>}
           <div className={styles.summaryGrid}>
             <div className={`${styles.summaryCard} ${styles.summaryPrimary}`}><div className={styles.summaryIcon}>◷</div><div><span>{isToday ? "Para hoy" : "Pendientes de la fecha"}</span><strong>{openCount} <small>tareas</small></strong></div><div className={styles.progressTrack}><div style={{ width: `${openCount + completeCount ? Math.round(completeCount / (openCount + completeCount) * 100) : 0}%` }} /></div><p>Todo a su ritmo, sin apuro.</p></div>
@@ -451,7 +556,7 @@ export default function Home() {
               const meta = task.dueDate ? `${task.dueDate === familyDay ? "Hoy" : task.dueDate}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}` : task.scheduledTime ? `Hoy · ${task.scheduledTime}` : "Sin fecha";
               const tone = ["lavender", "mint", "peach"][index % 3];
               return <article className={`${styles.taskCard} ${isComplete ? styles.taskDone : ""}`} key={task.key ?? task.id} data-task-key={task.key ?? task.id}>
-                {!isToday || task.kind === "forecast" || task.status === "missed" || task.status === "archived" ? <span className={styles.doneBadge}>{task.status === "completed" ? "Hecha" : task.status === "missed" ? "Vencida" : task.status === "archived" ? task.skipped ? "Omitida" : "Archivada" : "Programada"}</span> : isComplete ? canUndo
+                {!isToday || task.kind === "forecast" || task.status === "missed" || task.status === "archived" ? <span className={styles.doneBadge} aria-disabled={task.kind === "forecast" && isToday ? true : undefined}>{task.status === "completed" ? "Hecha" : task.status === "missed" ? "Vencida" : task.status === "archived" ? task.skipped ? "Omitida" : "Archivada" : task.kind === "forecast" && isToday ? "Pendiente de actualizar" : "Programada"}</span> : isComplete ? canUndo
                   ? <button className={`${styles.completeAction} ${styles.undoAction}`} aria-label={`Deshacer finalización de ${task.title}`} disabled={busy} onClick={() => void performOccurrence(task, "undo")}>Deshacer</button>
                   : <span className={styles.doneBadge} aria-label={`${task.title}, completada`}>✓ Hecha</span>
                   : <button className={styles.completeAction} aria-label={`Marcar ${task.title} como hecha`} disabled={busy} onClick={() => void performOccurrence(task, "complete")}>{busy ? "Guardando…" : "Marcar hecha"}</button>}
@@ -459,11 +564,30 @@ export default function Home() {
                 <div className={styles.taskInfo}><h3>{task.title}</h3><p>{meta}{isComplete && task.completedAt ? ` · Completada el ${getFamilyDay(new Date(task.completedAt))}` : ""}</p><span className={styles.taskPeople}>{isComplete ? `Hecha por ${members.find((person) => person.id === task.completedByMemberId)?.name ?? "un integrante"}` : people}</span>{task.editedByName && <small className={styles.editedBy}>Editada por {task.editedByName}</small>}</div>
                 {available && <button className={styles.claimButton} disabled={busy} onClick={() => void performOccurrence(task, "claim")}>Asumir</button>}
                 {isComplete && <span className={styles.taskStatus}>Completada</span>}
-                {!past && !isComplete && task.status === "open" && task.taskStatus === "active" && <button className={styles.cardMore} aria-label={`Editar: ${task.title}`} onClick={() => openTaskEditor(task)}>Editar</button>}
+                {!past && task.kind !== "forecast" && !isComplete && task.status === "open" && task.taskStatus === "active" && <button className={styles.cardMore} aria-label={`Editar: ${task.title}`} onClick={() => openTaskEditor(task)}>Editar</button>}
                 {isToday && task.kind !== "forecast" && <button className={styles.cardMore} aria-label={`Más opciones: ${task.title}`} onClick={() => setTaskOptions(task)}>···</button>}
               </article>;
             })}
           </div>}
+          {!showHistory && selectedDate > familyDay && possibleTotal > 0 && <section className={styles.possibleSection}>
+            <button className={styles.filterButton} aria-expanded={possibleOpen} onClick={() => {
+              possibleOpenRef.current = !possibleOpen;
+              setPossibleOpen(!possibleOpen);
+              if (!possibleOpen) {
+                void loadPossible();
+                try {
+                  const key = `task-future-use:${family?.id}`;
+                  const usage = JSON.parse(localStorage.getItem(key) ?? "null");
+                  if (usage && Date.now() - usage.firstVisit <= 14 * 86400_000) { usage.opens += 1; localStorage.setItem(key, JSON.stringify(usage)); }
+                } catch { /* Local-only measurement is optional. */ }
+              }
+            }}>Podrían seguir pendientes ({possibleTotal})</button>
+            {possibleOpen && <div><p>Se muestran si siguen pendientes al llegar esta fecha. Podés gestionarlas desde Hoy.</p>
+              {possibleTasks.map((task) => <article className={styles.taskCard} key={task.key} data-task-key={task.key}><div className={styles.taskInfo}><h3>{task.title}</h3><p>{task.dueDate ?? "Sin fecha"} · Pendiente potencial</p><span className={styles.taskPeople}>{task.assignees.map((person) => person.name).join(", ")}</span></div></article>)}
+              {possibleLoading && <p role="status">Cargando pendientes…</p>}
+              {possibleCursor && <button className={styles.filterButton} disabled={possibleLoading} onClick={() => void loadPossible(possibleCursor)}>Cargar más pendientes</button>}
+            </div>}
+          </section>}
           {!showHistory && nextCursor && <button className={styles.filterButton} disabled={syncState === "loading"} onClick={() => void refresh(true, nextCursor)}>Cargar más</button>}
 
           <footer className={styles.footer}><span>Un espacio para estar más en equipo.</span><span>{syncState === "loading" ? "Actualizando…" : syncState === "error" ? "Error de sincronización" : syncState === "synced" ? `Actualizado${lastUpdated ? ` ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(lastUpdated)}` : ""}` : "Sin sincronizar"} <i /></span></footer>

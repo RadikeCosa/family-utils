@@ -200,7 +200,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       const before = await list();
       assert.equal(before.status, 200);
       const beforeBody = await before.json();
-      assert.equal(before.headers.get("etag"), taskListEtag(familyId, beforeBody.revision, today, today, "0"));
+      assert.equal(before.headers.get("etag"), taskListEtag(familyId, beforeBody.revision, today, today, "daily-0", "explicit_sync"));
       assert.equal(beforeBody.tasks.filter((item) => item.taskId === task.id && item.status === "open").length, 1);
       await assert.rejects(
         pool.query(
@@ -242,6 +242,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
         `INSERT INTO task_occurrences (task_id, family_id, due_date, generation_date, title_snapshot, assignment_mode_snapshot)
          VALUES ($1, $2, $3, $3, 'Daily expiry test', 'shared')`, [task.id, familyId, previousDay],
       );
+      assert.equal((await fetch(`${origin}/api/tasks/sync`, { method: "POST", headers: { ...headers, Cookie: memberCookie } })).status, 200);
       const list = await fetch(`${origin}/api/tasks`, { headers: { Cookie: memberCookie } });
       assert.equal(list.status, 200, await list.clone().text().then((body) => body.slice(0, 200)));
       const items = (await list.json()).tasks.filter((item) => item.taskId === task.id);

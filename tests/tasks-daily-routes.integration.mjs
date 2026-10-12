@@ -17,16 +17,20 @@ test("daily task routes", { skip: !connectionString && "requires isolated Postgr
   const familyId = randomUUID(), memberId = randomUUID();
   let userId;
   const today = getFamilyDay();
-  const headers = { Origin: origin, "Content-Type": "application/json" };
+  const headers = { Origin: origin, "Content-Type": "application/json", "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}::1` };
   try {
-    server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], {
-      env: { ...process.env, DATABASE_URL: connectionString, DATABASE_URL_UNPOOLED: connectionString, BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "daily-tests-only-secret-1234567890", CODE_PEPPER: secret, TASK_GENERATION_MODE: "legacy_today" }, stdio: "ignore",
+    async function startServer(mode) {
+      if (server) { server.kill("SIGTERM"); await new Promise((resolve) => server.once("exit", resolve)); }
+      server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], {
+      env: { ...process.env, DATABASE_URL: connectionString, DATABASE_URL_UNPOOLED: connectionString, BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "daily-tests-only-secret-1234567890", CODE_PEPPER: secret, TASK_GENERATION_MODE: mode }, stdio: "ignore",
     });
     for (let attempt = 0; attempt < 150; attempt++) {
       try { if ((await fetch(origin)).ok) break; } catch { /* starting */ }
       if (server.exitCode !== null) throw new Error("test server exited");
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
+    }
+    await startServer("legacy_today");
     await pool.query("INSERT INTO families(id,name) VALUES ($1,'Daily route fixture')", [familyId]);
     await pool.query("INSERT INTO members(id,family_id,name,role,access_method) VALUES ($1,$2,'Daily member','member','code')", [memberId, familyId]);
     const prepared = await fetch(`${origin}/api/access/prepare`, { method: "POST", headers });
@@ -79,6 +83,62 @@ test("daily task routes", { skip: !connectionString && "requires isolated Postgr
       } while (cursor);
       assert.equal(new Set(ids).size, 175);
     });
+    await startServer("explicit_sync");
+    const sync = () => fetch(`${origin}/api/tasks/sync`, { method: "POST", headers });
+    await t.test("all GETs are pure in explicit mode; concurrent clients converge", async () => {
+      const { rows: [task] } = await pool.query("INSERT INTO tasks(family_id,title,repeat_weekdays,scheduled_date,created_by_member_id,edited_by_member_id) VALUES($1,'Concurrent daily',ARRAY[0,1,2,3,4,5,6],$3,$2,$2) RETURNING id", [familyId, memberId, today]);
+      const before = await state();
+      const raw = await get().then((response) => response.json());
+      assert.equal(raw.generationMode, "explicit_sync");
+      assert.equal(raw.tasks.find((item) => item.taskId === task.id).kind, "forecast");
+      assert.deepEqual(await state(), before);
+      const responses = await Promise.all([sync(), sync(), get(`?date=${addTaskDays(today, 30)}`)]);
+      for (const response of responses) assert.equal(response.status, 200, await response.text());
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count, "1");
+      const converged = await state();
+      assert.equal((await sync().then((response) => response.json())).changed, false);
+      assert.deepEqual(await state(), converged);
+    });
+
+    await t.test("sync with no work does not wait for task row locks or write anything", async () => {
+      await sync();
+      const before = await state();
+      const lock = await pool.connect();
+      try {
+        await lock.query("BEGIN");
+        await lock.query("SELECT id FROM tasks WHERE family_id=$1 FOR UPDATE", [familyId]);
+        const started = performance.now();
+        const response = await fetch(`${origin}/api/tasks/sync`, { method: "POST", headers, signal: AbortSignal.timeout(2000) });
+        assert.equal(response.status, 200);
+        assert.equal((await response.json()).changed, false);
+        t.diagnostic(`no-work sync: ${Math.round(performance.now() - started)} ms`);
+        assert.deepEqual(await state(), before);
+      } finally { await lock.query("ROLLBACK"); lock.release(); }
+    });
+
+    await t.test("carry preview becomes exactly the same persisted occasion on its real day", async () => {
+      const { rows: [task] } = await pool.query("INSERT INTO tasks(family_id,title,repeat_weekdays,carry_policy,scheduled_date,created_by_member_id,edited_by_member_id) VALUES($1,'Carry contract',ARRAY[0,1,2,3,4,5,6],'carry_forward',$3,$2,$2) RETURNING id", [familyId, memberId, today]);
+      const forecast = (await get(`?date=${today}`).then((response) => response.json())).tasks.find((item) => item.taskId === task.id);
+      assert.equal(forecast.kind, "forecast");
+      await sync();
+      const actual = (await get(`?date=${today}`).then((response) => response.json())).tasks.find((item) => item.taskId === task.id);
+      assert.equal(actual.kind, "occurrence"); assert.equal(actual.key, forecast.key);
+      const future = await get(`?date=${addTaskDays(today, 100)}&section=possible`).then((response) => response.json());
+      assert.equal(future.tasks.filter((item) => item.taskId === task.id).length, 1);
+      assert.equal((await get(`?date=${addTaskDays(today, 100)}`).then((response) => response.json())).tasks.filter((item) => item.taskId === task.id).length, 0);
+    });
+
+    await t.test("user completion concurrent with sync preserves versions and unique generation", async () => {
+      const { rows: [task] } = await pool.query("INSERT INTO tasks(family_id,title,repeat_weekdays,scheduled_date,created_by_member_id,edited_by_member_id) VALUES($1,'Concurrent write',ARRAY[0,1,2,3,4,5,6],$3,$2,$2) RETURNING id", [familyId, memberId, today]);
+      await sync();
+      const { rows: [occasion] } = await pool.query("SELECT id,version FROM task_occurrences WHERE task_id=$1", [task.id]);
+      const [completed, synchronized] = await Promise.all([
+        fetch(`${origin}/api/tasks/${task.id}/occurrences/${occasion.id}`, { method: "PATCH", headers, body: JSON.stringify({ action: "complete", expectedVersion: occasion.version }) }), sync(),
+      ]);
+      assert.equal(completed.status, 200, await completed.text()); assert.equal(synchronized.status, 200);
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count, "1");
+    });
+
   } finally {
     server?.kill("SIGTERM");
     if (server && server.exitCode === null) await new Promise((resolve) => server.once("exit", resolve));
