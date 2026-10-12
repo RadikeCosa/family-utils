@@ -76,7 +76,7 @@ ascender bloqueos para actualizar actividad. Versiones esperadas por entidad.
   `814fa140e6671780ad1a904d0adae94e6fff1ed04f006edcb5796d9a20813753`.
   Verificación posterior mediante `family_utils_backup_reader`, transacción de
   lectura: 12 migraciones con hashes/timestamps correctos, cuatro tablas,
-  53 restricciones y cero filas de Biblioteca. Biblioteca sigue apagada.
+  53 restricciones y cero filas de Biblioteca. Biblioteca se habilitó después de completar todas las etapas y CI.
 - Etapa 2a: colección y carga en [PR #21](https://github.com/RadikeCosa/family-utils/pull/21).
   Este PR incorpora a main el contenido de #16, integrado previamente en su rama
   base de desarrollo. Etapas 2b, 3, 4 y 5 en los PR
@@ -84,10 +84,9 @@ ascender bloqueos para actualizar actividad. Versiones esperadas por entidad.
   [#18](https://github.com/RadikeCosa/family-utils/pull/18),
   [#19](https://github.com/RadikeCosa/family-utils/pull/19) y
   [#20](https://github.com/RadikeCosa/family-utils/pull/20).
-  Todas implementadas y con CI satisfactorio en sus entregas; integración y
-  validación final en curso. No se modificaron archivos de Tareas.
-- Piloto acordado: **Yojimbo**, película, en producción cuando esté habilitada la
-  utilidad completa. Vicky y Ramiro publicarán sus propios aportes posteriormente;
+  Todas integradas en main y con CI satisfactorio en sus entregas. No se modificaron archivos de Tareas.
+- Piloto acordado: **Yojimbo**, película, registrada en producción con la
+  utilidad completa el 12/10/2026. Vicky y Ramiro publicarán sus propios aportes posteriormente;
   no se crean reseñas en su nombre.
 
 El número de migración se decide al integrar. La segunda rama rebasa y regenera
@@ -127,5 +126,53 @@ local: ocho comprobaciones de API de Biblioteca (incluidos permisos, familia,
 revocación, bloqueos concurrentes y bandera apagada en todas las operaciones),
 diez recorridos móviles, ficha sin desbordamiento a 320 px y tres comprobaciones
 de accesibilidad de la plataforma, incluida colección a nueve anchos. Tipos y lint
-satisfactorios. Habilitación productiva, smoke de lectura, piloto y retirada de
-recursos del ensayo pendientes; esta última requiere inventario y aprobación.
+satisfactorios. Habilitación productiva, smoke de lectura y piloto completados. Retirada de
+recursos del ensayo pendiente de aprobación explícita del inventario.
+
+## Lanzamiento y piloto — 12 de octubre de 2026
+
+- Versión publicada: `dd6972d666cfbcaa465f34e94b4ef09359dcd380`, igual al HEAD
+  remoto de main al lanzar. Despliegue productivo
+  `dpl_6kyoRXup2vX65QtPSPAw31Bticn8`, READY a las 19:30:14 UTC.
+  `LIBRARY_ENABLED=true` exclusivamente en producción tras CI final satisfactorio.
+- [Biblioteca productiva](https://family-utils-umber.vercel.app/biblioteca).
+  Smoke de lectura con sesión familiar autorizada: colección inicialmente vacía,
+  perfiles activos de Ramiro y Vicky disponibles. API sin sesión: 403; antes de
+  habilitar la bandera: 404. Aislamiento entre familias y accesos revocados
+  comprobados en PostgreSQL y CI, sin crear familias ficticias en producción.
+- Piloto auténtico:
+  [Yojimbo](https://family-utils-umber.vercel.app/biblioteca/61e57cd3-e4ee-4c19-86bf-dd5d16830166),
+  tipo película, creada desde la sesión existente. Lectura posterior con
+  `family_utils_backup_reader` y `BEGIN READ ONLY`: una ficha, cero aportes y
+  cero datos personales. Cada integrante podrá escribir su propia reseña.
+- CI [38297493113](https://github.com/RadikeCosa/family-utils/actions/runs/38297493113):
+  43 pruebas de reglas/PostgreSQL, 43 de rutas, 44 recorridos móviles de la
+  plataforma y tres pruebas de accesibilidad; tipos, lint y compilación correctos.
+  Se verificaron 12 migraciones aplicadas y sus hashes en PostgreSQL 18.
+- Logs del despliegue revisados después del piloto: sin fallos de aplicación;
+  stderr contiene el aviso de compatibilidad futura SSL de pg-connection-string.
+  No se cambió la conexión productiva para silenciarlo.
+
+## Inventario de retiro pendiente
+
+[Inventario exacto](./family-library-cleanup.json), sin secretos, capturado después
+ del lanzamiento. Retirar únicamente estos recursos tras aprobación explícita:
+
+- Neon: rama `library-rehearsal-2026-10-12` (`br-young-star-b55g74w9`) y su rol
+  exclusivo `library_preview_20261012`. Rama schema-only sin hijas; una familia,
+  un perfil, una obra y dos aportes exclusivamente sintéticos. No contiene datos
+  familiares de producción. El rol no es `family_utils_backup_reader` ni participa
+  en el respaldo diario.
+- Vercel: siete variables exclusivas Preview para las entregas 4 y 5, 22 despliegues
+  Preview de Biblioteca y sus seis alias de ramas. El inventario conserva todos
+  sus identificadores. No retirar `LIBRARY_ENABLED` productiva ni variables ajenas.
+- Git: seis ramas de implementación `codex/biblioteca-01`, `-02a`, `-02b`, `-03`,
+  `-04` y `-05`; sus entregas están incorporadas por PR y no quedan PR abiertos
+  con esas ramas como origen/destino. La rama documental de cierre se conserva
+  hasta su integración. Ramas de Tareas y Compras fuera de este retiro.
+
+No hay automatizaciones ni workflows del repositorio que usen el ensayo. Las
+únicas dependencias son sus Preview y archivos temporales privados de esta sesión.
+El respaldo y las mediciones operativas utilizan producción. Conservar PR, commits,
+resultados de CI y este informe como evidencia histórica. Primero retirar variables,
+despliegues y alias del ensayo; después su rol/rama Neon y ramas Git aprobadas.

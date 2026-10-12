@@ -1,0 +1,245 @@
+{
+  "neon": {
+    "branch": "library-rehearsal-2026-10-12",
+    "id": "br-young-star-b55g74w9",
+    "role": "library_preview_20261012"
+  },
+  "deployments": [
+    {
+      "id": "dpl_GUb8W6P6ECvPgvF8tRFqophXc5id",
+      "url": "family-utils-86znupjmj-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-05",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_7kjXW63MSx2ZJt77GYQ4uu97b7oX",
+      "url": "family-utils-5lcot0von-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-01",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_7o2eVrBZQREUtV4AvhWwqg1jFWty",
+      "url": "family-utils-pg9ktr2zz-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-05",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_5545i8eibkVisoeRusoajWSxkG2C",
+      "url": "family-utils-pya3lf6tl-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-02b",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_FddT3V9UQNLhuuAqr8hyuZvxkQCc",
+      "url": "family-utils-r4cg62wyk-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-04",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_G4sRTTo24KWqdRwtEddGCwkKb3n8",
+      "url": "family-utils-qvg7i88i5-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-05",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_BvW3EEVHUCEvyfRV24psHpdqrFYb",
+      "url": "family-utils-hykrgnmdf-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-01",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_3SgKVs5bzMVAbu1ekHAAwymBxLk2",
+      "url": "family-utils-3zhmfvv80-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-02a",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_Cf9YgV1n2HEPE7gGdYN4Sw4KewkX",
+      "url": "family-utils-dy067w2ni-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-03",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_3bYC8zCtwh6SJHLAWXNmfWMPsFJP",
+      "url": "family-utils-ggele6acc-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-03",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_HXV6mH5ig9DUvHeoXF2PG22XV3rU",
+      "url": "family-utils-jss4ml9r8-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-02a",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_EP8J1yAe1ZCt7LetmfRgiyd7MpJf",
+      "url": "family-utils-o5vfbuzyn-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-02b",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_AC8MngRGGAb6SEMWoAbiM4iiniaR",
+      "url": "family-utils-91rs9thwr-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-05",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_4AufKzLJ7EGV1dceLs6URFzWCCoj",
+      "url": "family-utils-6s41y7oqu-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-04",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_9DjEWQrv7rphKvzWETceCyAYnLCs",
+      "url": "family-utils-7lab7o6x4-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-01",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_95459UoWjNNoUVnMvnEJtCLQY9Lm",
+      "url": "family-utils-akh3y8fs3-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-05",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_J9SYz5YMADM6iGybVWdni4uZdrdA",
+      "url": "family-utils-4gkusf7ti-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-04",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_2bkYL1ZEEuRiSmxbB5zfFvjt8FBh",
+      "url": "family-utils-3g3h24dbz-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-03",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_CVto9nLFQrB1eMCfDqrAwZvdgjox",
+      "url": "family-utils-qof2ewbbo-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-02b",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_7abqYvofHRLz5L7zwLd1dVBrPg87",
+      "url": "family-utils-lj8jzv3tr-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-02a",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_dmZrhDsqvAQDEBKmwzfeBG8UXEBX",
+      "url": "family-utils-bz1m9iz26-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-01",
+      "state": "READY"
+    },
+    {
+      "id": "dpl_FNzkdSjZWTDcxqvA7PAyndgEmV9S",
+      "url": "family-utils-pb88vavjq-radikecosas-projects.vercel.app",
+      "branch": "codex/biblioteca-01",
+      "state": "READY"
+    }
+  ],
+  "aliases": [
+    {
+      "uid": "5602a8dc7d213fb20135b45011ebf33319c3b2af428e8abe1e38dc818374e0beb47cfbf93b02c8e4bd5ebf9aaf0119396100e18afb7fe4803ca56fc5fcd80279",
+      "alias": "family-utils-git-codex-biblioteca-05-radikecosas-projects.vercel.app",
+      "created": "2026-10-12T19:03:27.048Z",
+      "redirect": null
+    },
+    {
+      "uid": "b170b3d5f4fc356b3064beeff05d8519464888db75f237b8239879139648d55b543da344332d5843928cd7eb05d661bb08ac35dd9cf3dde7bbd452ac84becf99",
+      "alias": "family-utils-git-codex-biblioteca-01-radikecosas-projects.vercel.app",
+      "created": "2026-10-12T18:20:59.977Z",
+      "redirect": null
+    },
+    {
+      "uid": "80155a8bffbcc44a6bd1c556b4762bd87637ddd9b458c8f10dd42f1aa0fcab2bea577e5b0127e059dbd7a0daff4b1d3d7540703a80ad62bd8b40cd7c07b35e0d",
+      "alias": "family-utils-git-codex-biblioteca-02b-radikecosas-projects.vercel.app",
+      "created": "2026-10-12T18:35:33.459Z",
+      "redirect": null
+    },
+    {
+      "uid": "f116efa70e43aa18936b325ffbefb4af2b23eceeefb681b2a3acb96933f5da0735f4e15ddd29442154b47a76a7f26e48774851f0194139157f94e469b15c9772",
+      "alias": "family-utils-git-codex-biblioteca-04-radikecosas-projects.vercel.app",
+      "created": "2026-10-12T18:55:38.810Z",
+      "redirect": null
+    },
+    {
+      "uid": "20793dc002c2b22be6d6f410c0921b7a600f910a7f220ed45748f858c0590d9782f56a3957d5b4f887457b0755ed569cc2720306e03eacb47b72063df0105a54",
+      "alias": "family-utils-git-codex-biblioteca-02a-radikecosas-projects.vercel.app",
+      "created": "2026-10-12T18:32:38.234Z",
+      "redirect": null
+    },
+    {
+      "uid": "843bc3da054168203f4bb22285638e526e929b2a409088ae04e1f0febff65f0aa66917444af1d9465a4e74a750ed4ae4e1b291cb09fe0d0cf4676de83a130796",
+      "alias": "family-utils-git-codex-biblioteca-03-radikecosas-projects.vercel.app",
+      "created": "2026-10-12T18:40:26.307Z",
+      "redirect": null
+    }
+  ],
+  "envs": [
+    {
+      "id": "hNLYSI8IFtBvSqjp",
+      "key": "BETTER_AUTH_SECRET",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-05"
+    },
+    {
+      "id": "XGUOTo31lzOJv4Ia",
+      "key": "CODE_PEPPER",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-05"
+    },
+    {
+      "id": "vOKq0w0kiIdW4HhV",
+      "key": "BETTER_AUTH_URL",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-05"
+    },
+    {
+      "id": "v5psujisdZRXUWT7",
+      "key": "DATABASE_URL",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-05"
+    },
+    {
+      "id": "JElV9mCARlnW42j6",
+      "key": "LIBRARY_ENABLED",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-05"
+    },
+    {
+      "id": "ABPXAeBZHJIOYOlU",
+      "key": "DATABASE_URL",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-04"
+    },
+    {
+      "id": "Ddt672Kbi38loFjb",
+      "key": "LIBRARY_ENABLED",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/biblioteca-04"
+    }
+  ],
+  "branches": [
+    "codex/biblioteca-01",
+    "codex/biblioteca-02a",
+    "codex/biblioteca-02b",
+    "codex/biblioteca-03",
+    "codex/biblioteca-04",
+    "codex/biblioteca-05"
+  ]
+}
