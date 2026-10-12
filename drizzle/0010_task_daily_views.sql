@@ -1,0 +1,3 @@
+CREATE INDEX "audit_occurrence_cause_idx" ON "audit_events" USING btree ("family_id","entity_id","action") WHERE "audit_events"."entity_type" = 'occurrence';--> statement-breakpoint
+CREATE INDEX "occurrences_family_due_id_idx" ON "task_occurrences" USING btree ("family_id","due_date","id");--> statement-breakpoint
+CREATE INDEX "occurrences_family_completed_id_idx" ON "task_occurrences" USING btree ("family_id","completed_at","id") WHERE "task_occurrences"."status" = 'completed';

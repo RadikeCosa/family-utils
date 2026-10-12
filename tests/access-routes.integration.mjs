@@ -20,7 +20,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
   let server;
   let memberCookie;
   const preparedUserIds = [];
-  const headers = { Origin: origin, "Content-Type": "application/json" };
+  const headers = { Origin: origin, "Content-Type": "application/json", "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}::1` };
 
   async function waitForServer() {
     const deadline = Date.now() + 45_000;
@@ -200,7 +200,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       const before = await list();
       assert.equal(before.status, 200);
       const beforeBody = await before.json();
-      assert.equal(before.headers.get("etag"), taskListEtag(familyId, beforeBody.revision, today));
+      assert.equal(before.headers.get("etag"), taskListEtag(familyId, beforeBody.revision, today, today, "0"));
       assert.equal(beforeBody.tasks.filter((item) => item.taskId === task.id && item.status === "open").length, 1);
       await assert.rejects(
         pool.query(

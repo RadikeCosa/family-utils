@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "better-auth/react";
-import { FAMILY_TIME_ZONE, getFamilyDay } from "@/lib/tasks/family-day";
+import { addTaskDays, getFamilyDay, isTaskDateInRange, labelTaskDay, taskDateBounds } from "@/lib/tasks/family-day";
 import styles from "../page.module.css";
 
 const authClient = createAuthClient();
 type Member = { id: string; name: string; role: "administrator" | "member" };
 type Task = {
   id: string;
+  key: string;
+  kind: "occurrence" | "forecast";
+  generationDate: string | null;
+  skipped?: boolean;
   taskId: string;
   title: string;
   description: string | null;
@@ -30,7 +34,7 @@ type Task = {
   claimedByMemberId: string | null;
   completedByMemberId?: string | null;
   completedAt?: string | null;
-  status: "open" | "completed";
+  status: "open" | "completed" | "missed" | "archived";
   version: number;
   editedByName?: string;
   updatedAt?: string;
@@ -70,6 +74,16 @@ export default function Home() {
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [familyDay, setFamilyDay] = useState(() => getFamilyDay());
+  const [selectedDate, setSelectedDate] = useState(() => getFamilyDay());
+  const [dateInitialized, setDateInitialized] = useState(false);
+  const followsToday = useRef(true);
+  const dateRef = useRef(selectedDate);
+  useEffect(() => { dateRef.current = selectedDate; }, [selectedDate]);
+  const requestSequence = useRef(0);
+  const loadedCount = useRef(50);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [counts, setCounts] = useState({ open: 0, completed: 0 });
+  const [notice, setNotice] = useState("");
   const [syncState, setSyncState] = useState<"idle" | "loading" | "synced" | "error">("idle");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -96,48 +110,87 @@ export default function Home() {
   const lastActivityAt = useRef(0);
   const occurrenceBusy = useRef(false);
 
-  const refresh = useCallback(async (force = false) => {
-    if (!session?.user?.id) return;
+  const refresh = useCallback(async (force = false, cursor?: string) => {
+    if (!session?.user?.id || !dateInitialized) return;
+    const sequence = ++requestSequence.current;
+    const requestedDate = selectedDate;
     if (force) setSyncState("loading");
+    const anchors = [...document.querySelectorAll<HTMLElement>("[data-task-key]")].map((element) => ({ key: element.dataset.taskKey, top: element.getBoundingClientRect().top })).filter((item) => item.top >= 0);
     try {
-      if (!force && etagRef.current) {
-        const revisionResponse = await fetch("/api/tasks/revision", {
-          cache: "no-store",
-          headers: { "If-None-Match": etagRef.current },
-        });
-        if (revisionResponse.status === 304) {
-          setSyncState("synced");
-          setLastUpdated(new Date());
-          setError("");
-          return;
+      // Transitional legacy generation is only used for today's coordinator.
+      if (requestedDate === getFamilyDay()) await fetch("/api/tasks", { cache: "no-store" });
+      const all: Task[] = [];
+      let append = !!cursor;
+      let restarted = false;
+      let pageCursor = cursor;
+      let body;
+      let response;
+      do {
+        const params = new URLSearchParams({ date: requestedDate });
+        if (pageCursor) params.set("cursor", pageCursor);
+        response = await fetch(`/api/tasks?${params}`, { cache: "no-store" });
+        body = await response.json();
+        if (sequence !== requestSequence.current || requestedDate !== dateRef.current) return;
+        if (response.status === 409 && !restarted) { restarted = true; append = false; all.length = 0; pageCursor = undefined; continue; }
+        if (!response.ok) throw new Error(body.error ?? "No se pudieron cargar las tareas.");
+        all.push(...body.tasks);
+        pageCursor = body.nextCursor ?? undefined;
+      } while ((!append && pageCursor && all.length < loadedCount.current) || (restarted && !body.tasks));
+      etagRef.current = response!.headers.get("ETag");
+      setFamilyDay(body.familyDay);
+      if (followsToday.current && requestedDate !== body.familyDay) { setSelectedDate(body.familyDay); return; }
+      setTasks((current) => append ? [...current, ...all] : all);
+      loadedCount.current = append ? loadedCount.current + all.length : Math.max(50, all.length);
+      setNextCursor(body.nextCursor);
+      setCounts(body.counts);
+      setSyncState("synced"); setLastUpdated(new Date()); setError("");
+      requestAnimationFrame(() => {
+        if (sequence !== requestSequence.current) return;
+        const elements = [...document.querySelectorAll<HTMLElement>("[data-task-key]")];
+        for (const anchor of anchors) {
+          const element = elements.find((item) => item.dataset.taskKey === anchor.key);
+          if (element) { window.scrollBy(0, element.getBoundingClientRect().top - anchor.top); break; }
         }
-        if (!revisionResponse.ok) {
-          const body = await revisionResponse.json().catch(() => ({}));
-          throw new Error(typeof body.error === "string" ? body.error : "No se pudo comprobar si hay cambios.");
-        }
-      }
-      const response = await fetch("/api/tasks", {
-        cache: "no-store",
       });
-      if (response.status === 304) {
-        setSyncState("synced");
-        setLastUpdated((value) => value ?? new Date());
-        setError("");
-        return;
-      }
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "No se pudieron cargar las tareas.");
-      etagRef.current = response.headers.get("ETag");
-      setFamilyDay(body.familyDay as string);
-      setTasks(body.tasks as Task[]);
-      setSyncState("synced");
-      setLastUpdated(new Date());
-      setError("");
     } catch (caught) {
-      setSyncState("error");
-      setError(caught instanceof Error ? caught.message : "No se pudo cargar la familia.");
+      if (sequence !== requestSequence.current) return;
+      setSyncState("error"); setError(caught instanceof Error ? caught.message : "No se pudieron cargar las tareas.");
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, selectedDate, dateInitialized]);
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("fecha");
+    queueMicrotask(() => {
+      if (requested !== null) {
+        followsToday.current = false;
+        if (isTaskDateInRange(requested, getFamilyDay())) setSelectedDate(requested);
+        else setNotice("La fecha no es válida o queda fuera del período permitido. Mostramos hoy.");
+      }
+      setDateInitialized(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!dateInitialized) return;
+    const url = new URL(window.location.href);
+    if (followsToday.current) url.searchParams.delete("fecha"); else url.searchParams.set("fecha", selectedDate);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    queueMicrotask(() => void refresh(true));
+  }, [dateInitialized, selectedDate, refresh]);
+
+  function navigateDate(day: string, follow = false) {
+    if (!isTaskDateInRange(day, familyDay)) return;
+    followsToday.current = follow;
+    requestSequence.current += 1;
+    dateRef.current = day;
+    loadedCount.current = 50;
+    setTasks([]); setCounts({ open: 0, completed: 0 }); setNextCursor(null);
+    setSelectedDate(day); setError("");
+    const url = new URL(window.location.href);
+    if (follow) url.searchParams.delete("fecha"); else url.searchParams.set("fecha", day);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    if (day === selectedDate) void refresh(true);
+  }
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -149,11 +202,10 @@ export default function Home() {
         requestJson<{ family: NonNullable<typeof family>; members: Member[]; currentMemberId: string }>("/api/family")
           .then((data) => { if (active) { setFamily(data.family); setMembers(data.members); setCurrentMemberId(data.currentMemberId); } })
           .catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "No se pudo cargar la familia."); }),
-        refresh(true),
       ]);
     });
     return () => { active = false; };
-  }, [refresh, session?.user?.id]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -183,13 +235,12 @@ export default function Home() {
     };
   }, [refresh, session?.user?.id]);
 
-  const visibleTasks = useMemo(() => {
-    return tasks.filter((task) => task.status === "open"
-      ? !task.dueDate || task.dueDate <= familyDay
-      : !!task.completedAt && getFamilyDay(new Date(task.completedAt)) === familyDay);
-  }, [familyDay, tasks]);
-  const openCount = visibleTasks.filter((task) => task.status === "open").length;
-  const completeCount = visibleTasks.filter((task) => task.status === "completed").length;
+  const visibleTasks = tasks;
+  const openCount = counts.open;
+  const completeCount = counts.completed;
+  const isToday = selectedDate === familyDay;
+  const past = selectedDate < familyDay;
+  const bounds = taskDateBounds(familyDay);
 
   async function performOccurrence(task: Task, action: "claim" | "complete" | "undo" | "skip") {
     if (occurrenceBusy.current) return;
@@ -323,7 +374,7 @@ export default function Home() {
     });
   }
 
-  const dateLabel = new Intl.DateTimeFormat("es-AR", { timeZone: FAMILY_TIME_ZONE, weekday: "long", day: "numeric", month: "long" }).format(new Date()).toLocaleUpperCase("es-AR");
+  const dateLabel = labelTaskDay(selectedDate).toLocaleUpperCase("es-AR");
   const currentMemberName = members.find((person) => person.id === currentMemberId)?.name ?? "Integrante";
   const currentRole = members.find((person) => person.id === currentMemberId)?.role ?? "member";
   const weekdayOptions = [[0, "Do"], [1, "Lu"], [2, "Ma"], [3, "Mi"], [4, "Ju"], [5, "Vi"], [6, "Sá"]] as const;
@@ -359,17 +410,25 @@ export default function Home() {
           {error && <p className={styles.errorMessage} role="alert">{error}</p>}
 
           <div className={styles.greetingRow}>
-            <div><p className={styles.dateLabel}>{dateLabel}</p><h1>Un día a la vez<span>.</span></h1><p className={styles.subtitle}>Esto es lo que tenemos para hoy.</p></div>
-            <div className={styles.createActions}><button className={styles.addButton} onClick={() => setShowCreate(true)}><span>＋</span> Nueva tarea</button></div>
+            <div><p className={styles.dateLabel}>{dateLabel}</p><h1>Un día a la vez<span>.</span></h1><p className={styles.subtitle}>{isToday ? "Esto es lo que tenemos para hoy." : past ? "Consultá las tareas y la actividad de esta fecha." : "Un vistazo a lo que viene."}</p></div>
+            <div className={styles.createActions}>{!past && <button className={styles.addButton} onClick={() => setShowCreate(true)}><span>＋</span> Nueva tarea</button>}</div>
           </div>
 
+          <div className={styles.dateNav} aria-label="Navegar por fecha">
+            <button aria-label="Día anterior" disabled={selectedDate === bounds.earliest} onClick={() => navigateDate(addTaskDays(selectedDate, -1))}>←</button>
+            <label><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={familyDay} onChange={(event) => navigateDate(event.target.value)} /></label>
+            <button aria-label="Día siguiente" disabled={selectedDate >= familyDay} onClick={() => navigateDate(addTaskDays(selectedDate, 1))}>→</button>
+            <button onClick={() => navigateDate(familyDay, true)}>Hoy</button>
+            {past && <span>Solo lectura</span>}
+          </div>
+          {notice && <p role="status">{notice}</p>}
           <div className={styles.summaryGrid}>
-            <div className={`${styles.summaryCard} ${styles.summaryPrimary}`}><div className={styles.summaryIcon}>◷</div><div><span>Para hoy</span><strong>{openCount} <small>tareas</small></strong></div><div className={styles.progressTrack}><div style={{ width: `${openCount + completeCount ? Math.round(completeCount / (openCount + completeCount) * 100) : 0}%` }} /></div><p>Todo a su ritmo, sin apuro.</p></div>
-            <div className={styles.summaryCard}><div className={`${styles.summaryIcon} ${styles.iconGreen}`}>✓</div><div><span>Hechas recientemente</span><strong>{completeCount} <small>tareas</small></strong></div><div className={styles.miniAvatars}><i>✓</i><i>✓</i><i>+</i></div><p>Buen trabajo en equipo.</p></div>
+            <div className={`${styles.summaryCard} ${styles.summaryPrimary}`}><div className={styles.summaryIcon}>◷</div><div><span>{isToday ? "Para hoy" : "Pendientes de la fecha"}</span><strong>{openCount} <small>tareas</small></strong></div><div className={styles.progressTrack}><div style={{ width: `${openCount + completeCount ? Math.round(completeCount / (openCount + completeCount) * 100) : 0}%` }} /></div><p>Todo a su ritmo, sin apuro.</p></div>
+            <div className={styles.summaryCard}><div className={`${styles.summaryIcon} ${styles.iconGreen}`}>✓</div><div><span>Completadas en la fecha</span><strong>{completeCount} <small>tareas</small></strong></div><div className={styles.miniAvatars}><i>✓</i><i>✓</i><i>+</i></div><p>Buen trabajo en equipo.</p></div>
             <div className={`${styles.summaryCard} ${styles.summaryQuote}`}><span className={styles.quoteMark}>“</span><p>Las pequeñas cosas<br />también cuentan.</p><span className={styles.quoteBy}>— para hoy</span></div>
           </div>
 
-          <div className={styles.tasksHeader}><div><h2>{showHistory ? "Historial" : "Hoy en casa"}</h2><span>{showHistory ? "Completadas y ocasiones omitidas" : "Pendientes y completadas de hoy"}</span></div><div className={styles.topActions}><button className={styles.filterButton} onClick={() => showHistory ? void loadHistory(true) : void refresh(true)}>{showHistory ? historyLoading ? "Cargando…" : "Actualizar historial" : syncState === "loading" ? "Actualizando…" : "Actualizar"} <span>↻</span></button><button className={styles.filterButton} onClick={() => showHistory ? setShowHistory(false) : void loadHistory(true)}>{showHistory ? "Volver a tareas" : "Historial"}</button></div></div>
+          <div className={styles.tasksHeader}><div><h2>{showHistory ? "Historial" : isToday ? "Hoy en casa" : "Tareas de la fecha"}</h2><span>{showHistory ? "Completadas y ocasiones omitidas" : labelTaskDay(selectedDate)}</span></div><div className={styles.topActions}><button className={styles.filterButton} onClick={() => showHistory ? void loadHistory(true) : void refresh(true)}>{showHistory ? historyLoading ? "Cargando…" : "Actualizar historial" : syncState === "loading" ? "Actualizando…" : "Actualizar"} <span>↻</span></button><button className={styles.filterButton} onClick={() => showHistory ? (setShowHistory(false), void refresh(true)) : void loadHistory(true)}>{showHistory ? "Volver a tareas" : "Historial"}</button></div></div>
 
           {showHistory ? <><div className={styles.topActions} aria-label="Filtrar historial"><button className={styles.filterButton} aria-pressed={historyFilter === "all"} onClick={() => { setHistoryFilter("all"); void loadHistory(true, "all"); }}>Todo</button><button className={styles.filterButton} aria-pressed={historyFilter === "completed"} onClick={() => { setHistoryFilter("completed"); void loadHistory(true, "completed"); }}>Completadas</button><button className={styles.filterButton} aria-pressed={historyFilter === "archived"} onClick={() => { setHistoryFilter("archived"); void loadHistory(true, "archived"); }}>Omitidas y archivadas</button></div><div className={styles.taskList}>
             {historyItems.length === 0 && !historyLoading && <div className={styles.emptyState}>Todavía no hay actividad en el historial.</div>}
@@ -380,32 +439,32 @@ export default function Home() {
             </article>)}
             {historyHasMore && <button className={styles.filterButton} disabled={historyLoading} onClick={() => void loadHistory()}>{historyLoading ? "Cargando…" : "Cargar más"}</button>}
           </div></> : <div className={styles.taskList}>
-            {visibleTasks.length === 0 && <div className={styles.emptyState}>No hay tareas pendientes. Podés crear una cuando haga falta.</div>}
+            {visibleTasks.length === 0 && <div className={styles.emptyState}>{syncState === "loading" ? "Cargando tareas…" : "No hay tareas para esta fecha."}</div>}
             {visibleTasks.map((task, index) => {
               const isComplete = task.status === "completed";
-              const canUndo = isComplete && (currentRole === "administrator" || task.completedByMemberId === currentMemberId);
-              const available = task.status === "open" && task.assignmentMode === "shared" && task.assignees.length === 0 && !task.claimedByMemberId;
+              const canUndo = isToday && isComplete && (currentRole === "administrator" || task.completedByMemberId === currentMemberId);
+              const available = isToday && task.kind !== "forecast" && task.status === "open" && task.assignmentMode === "shared" && task.assignees.length === 0 && !task.claimedByMemberId;
               const individualOwner = task.responsibilityMemberId ? members.find((person) => person.id === task.responsibilityMemberId)?.name : null;
               const people = task.assignmentMode === "individual"
                 ? individualOwner ?? "Responsable archivado"
                 : task.assignees.map((person) => person.name).join(", ") || (task.claimedByMemberId ? members.find((person) => person.id === task.claimedByMemberId)?.name ?? "Asumida" : "Disponible para asumir");
               const meta = task.dueDate ? `${task.dueDate === familyDay ? "Hoy" : task.dueDate}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}` : task.scheduledTime ? `Hoy · ${task.scheduledTime}` : "Sin fecha";
               const tone = ["lavender", "mint", "peach"][index % 3];
-              return <article className={`${styles.taskCard} ${isComplete ? styles.taskDone : ""}`} key={task.id}>
-                {isComplete ? canUndo
+              return <article className={`${styles.taskCard} ${isComplete ? styles.taskDone : ""}`} key={task.key ?? task.id} data-task-key={task.key ?? task.id}>
+                {!isToday || task.kind === "forecast" || task.status === "missed" || task.status === "archived" ? <span className={styles.doneBadge}>{task.status === "completed" ? "Hecha" : task.status === "missed" ? "Vencida" : task.status === "archived" ? task.skipped ? "Omitida" : "Archivada" : "Programada"}</span> : isComplete ? canUndo
                   ? <button className={`${styles.completeAction} ${styles.undoAction}`} aria-label={`Deshacer finalización de ${task.title}`} disabled={busy} onClick={() => void performOccurrence(task, "undo")}>Deshacer</button>
                   : <span className={styles.doneBadge} aria-label={`${task.title}, completada`}>✓ Hecha</span>
                   : <button className={styles.completeAction} aria-label={`Marcar ${task.title} como hecha`} disabled={busy} onClick={() => void performOccurrence(task, "complete")}>{busy ? "Guardando…" : "Marcar hecha"}</button>}
                 <div className={`${styles.taskIcon} ${styles[tone]}`}>{index % 3 === 0 ? "⌂" : index % 3 === 1 ? "♧" : "✳"}</div>
-                <div className={styles.taskInfo}><h3>{task.title}</h3><p>{meta}</p><span className={styles.taskPeople}>{isComplete ? `Hecha por ${members.find((person) => person.id === task.completedByMemberId)?.name ?? "un integrante"}` : people}</span>{task.editedByName && <small className={styles.editedBy}>Editada por {task.editedByName}</small>}</div>
+                <div className={styles.taskInfo}><h3>{task.title}</h3><p>{meta}{isComplete && task.completedAt ? ` · Completada el ${getFamilyDay(new Date(task.completedAt))}` : ""}</p><span className={styles.taskPeople}>{isComplete ? `Hecha por ${members.find((person) => person.id === task.completedByMemberId)?.name ?? "un integrante"}` : people}</span>{task.editedByName && <small className={styles.editedBy}>Editada por {task.editedByName}</small>}</div>
                 {available && <button className={styles.claimButton} disabled={busy} onClick={() => void performOccurrence(task, "claim")}>Asumir</button>}
                 {isComplete && <span className={styles.taskStatus}>Completada</span>}
-                {!isComplete && task.taskStatus === "active" && <button className={styles.cardMore} aria-label={`Editar: ${task.title}`} onClick={() => openTaskEditor(task)}>Editar</button>}
-                <button className={styles.cardMore} aria-label={`Más opciones: ${task.title}`} onClick={() => setTaskOptions(task)}>···</button>
+                {!past && !isComplete && task.status === "open" && task.taskStatus === "active" && <button className={styles.cardMore} aria-label={`Editar: ${task.title}`} onClick={() => openTaskEditor(task)}>Editar</button>}
+                {isToday && task.kind !== "forecast" && <button className={styles.cardMore} aria-label={`Más opciones: ${task.title}`} onClick={() => setTaskOptions(task)}>···</button>}
               </article>;
             })}
           </div>}
-
+          {!showHistory && nextCursor && <button className={styles.filterButton} disabled={syncState === "loading"} onClick={() => void refresh(true, nextCursor)}>Cargar más</button>}
 
           <footer className={styles.footer}><span>Un espacio para estar más en equipo.</span><span>{syncState === "loading" ? "Actualizando…" : syncState === "error" ? "Error de sincronización" : syncState === "synced" ? `Actualizado${lastUpdated ? ` ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(lastUpdated)}` : ""}` : "Sin sincronizar"} <i /></span></footer>
         </div>

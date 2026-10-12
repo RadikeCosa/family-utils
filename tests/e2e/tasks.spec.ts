@@ -26,7 +26,7 @@ test.beforeAll(async () => {
   );
   memberId = member.rows[0].id;
 
-  const api = await playwrightRequest.newContext({ baseURL });
+  const api = await playwrightRequest.newContext({ baseURL, extraHTTPHeaders: { "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}::1` } });
   const prepared = await api.post("/api/access/prepare", { headers: { Origin: baseURL } });
   expect(prepared.status(), await prepared.text()).toBe(200);
   const session = await api.get("/api/auth/get-session");
@@ -110,9 +110,9 @@ test("a completed routine moves to history at Buenos Aires midnight", async ({ p
       await route.fulfill({ status: 200, contentType: "application/json", headers: { ETag: etag }, body: JSON.stringify({ revision: 1, familyDay: day }) });
     }
   });
-  await page.route("**/api/tasks", async (route) => {
+  await page.route("**/api/tasks{,?*}", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", headers: { ETag: taskListEtag(familyId, 1, day) }, body: JSON.stringify({
-      familyDay: day, memberId, revision: 1, tasks: day === "2026-09-28" ? [completed] : [upcoming],
+      familyDay: day, counts: { open: day === "2026-09-28" ? 0 : 1, completed: day === "2026-09-28" ? 1 : 0 }, nextCursor: null, memberId, revision: 1, tasks: day === "2026-09-28" ? [completed] : [upcoming],
     }) });
   });
   await page.goto("/tareas");
@@ -123,4 +123,25 @@ test("a completed routine moves to history at Buenos Aires midnight", async ({ p
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByRole("button", { name: "Marcar Mesa de prueba como hecha" })).toBeVisible();
   await expect(page.getByText("Hecha por Test member")).toHaveCount(0);
+});
+
+test("choosing today explicitly generates a missing daily occasion through the shared loader", async ({ page }) => {
+  const today = getFamilyDay();
+  const prior = new Date(`${today}T12:00:00Z`); prior.setUTCDate(prior.getUTCDate() - 1);
+  const title = `Missing daily ${randomUUID().slice(0, 6)}`;
+  await pool.query(`INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id,scheduled_date,repeat_weekdays)
+    VALUES($1,$2,$3,$3,$4,ARRAY[0,1,2,3,4,5,6])`, [familyId, title, memberId, today]);
+  await page.goto(`/tareas?fecha=${prior.toISOString().slice(0, 10)}`);
+  await expect(page.getByText("Solo lectura", { exact: true })).toBeVisible();
+  await page.getByLabel("Ir a una fecha").fill(today);
+  await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha` })).toBeVisible();
+  await page.getByRole("button", { name: "Historial", exact: true }).click();
+  await page.getByRole("button", { name: "Volver a tareas" }).click();
+  await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha` })).toBeVisible();
+  const todayRead = page.waitForResponse((response) => response.url().includes("/api/tasks?date="));
+  await page.getByRole("button", { name: "Hoy", exact: true }).click();
+  await todayRead;
+  await expect(page).toHaveURL(/\/tareas$/);
 });

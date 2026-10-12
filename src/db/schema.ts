@@ -180,6 +180,8 @@ export const occurrences = pgTable("task_occurrences", {
   version: integer("version").notNull().default(1),
   createdAt: createdAt(),
 }, (table) => [
+  index("occurrences_family_due_id_idx").on(table.familyId, table.dueDate, table.id),
+  index("occurrences_family_completed_id_idx").on(table.familyId, table.completedAt, table.id).where(sql`${table.status} = 'completed'`),
   index("occurrences_family_status_date_idx").on(table.familyId, table.status, table.dueDate),
   uniqueIndex("occurrences_shared_generation_once_idx").on(table.taskId, table.generationDate)
     .where(sql`${table.responsibilityMemberId} IS NULL AND ${table.generationDate} IS NOT NULL AND ${table.status} <> 'archived'`),
@@ -205,7 +207,7 @@ export const auditEvents = pgTable("audit_events", {
   before: jsonb("before"),
   after: jsonb("after"),
   createdAt: createdAt(),
-}, (table) => [index("audit_family_created_idx").on(table.familyId, table.createdAt.desc())]);
+}, (table) => [index("audit_family_created_idx").on(table.familyId, table.createdAt.desc()), index("audit_occurrence_cause_idx").on(table.familyId, table.entityId, table.action).where(sql`${table.entityType} = 'occurrence'`)]);
 
 export const presenceRules = pgTable("presence_rules", {
   id: uuid("id").primaryKey().defaultRandom(),

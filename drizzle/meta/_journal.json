@@ -71,6 +71,13 @@
       "when": 1791657026997,
       "tag": "0009_shopping_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791826643226,
+      "tag": "0010_task_daily_views",
+      "breakpoints": true
     }
   ]
 }

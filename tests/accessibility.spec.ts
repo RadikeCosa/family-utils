@@ -186,7 +186,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await page.keyboard.press("Shift+Tab");
     // Chromium can visit browser chrome before wrapping a native dialog.
     if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press("Shift+Tab");
-    await expect(page.getByRole("button", { name: "Elegir comida" }).last()).toBeFocused();
+    await expect(dialogs.getByRole("button", { name: "Elegir comida", exact: true })).toBeFocused();
     const dialogAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect(dialogAxe.violations.map((violation) => violation.id)).toEqual([]);
     const dialogSizes = await dialogs.locator("button, input:not([type='radio']):not([type='checkbox']), [class*='choiceOption'], [class*='newChoice']").evaluateAll((elements) =>
@@ -223,11 +223,11 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await resumedRequest;
     await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
     await page.route("**/api/meals/selection", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }) }));
-    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Este día ya no se puede editar" })).toBeVisible();
     await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
     await page.unroute("**/api/meals/selection");
-    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
 
     await lunch.getByRole("button", { name: "Quitar elección" }).click();
@@ -239,7 +239,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await lunch.getByRole("button", { name: "Elegir comida" }).click();
     await dialogs.locator("label").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
-    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await expect(lunch.getByText(/Propuesto y confirmado por Alex/)).toBeVisible();
     await lunch.getByRole("button", { name: "Cambiar comida" }).click();
@@ -300,7 +300,12 @@ test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, ba
         const context = await browser.newContext({ storageState: scenario.storageState, viewport: { width, height: 900 } });
         const page = await context.newPage();
         for (const route of scenario.routes) {
-          await page.goto(route, { waitUntil: "networkidle" });
+          const apiPath = ({ "/familia": "/api/family", "/tareas": "/api/tasks", "/menus": "/api/meals", "/compras": "/api/shopping" } as Record<string, string>)[route];
+          const dataReady = apiPath ? page.waitForResponse((response) => new URL(response.url()).pathname === apiPath && response.ok()) : null;
+          await page.goto(route, { waitUntil: "domcontentloaded" });
+          if (dataReady) await dataReady;
+          await expect(page.locator("main")).toBeVisible();
+          if (route === "/tareas") await expect(page.getByLabel("Ir a una fecha")).toBeVisible();
           await expect(page).toHaveURL((url) => url.pathname === route);
           const results = await new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])

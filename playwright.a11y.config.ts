@@ -4,6 +4,7 @@ const port = 3319;
 
 export default defineConfig({
   testDir: "./tests",
+  outputDir: "test-results-a11y",
   testMatch: "accessibility.spec.ts",
   fullyParallel: false,
   workers: 1,
