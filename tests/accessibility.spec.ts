@@ -186,7 +186,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await page.keyboard.press("Shift+Tab");
     // Chromium can visit browser chrome before wrapping a native dialog.
     if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press("Shift+Tab");
-    await expect(page.getByRole("button", { name: "Elegir comida" }).last()).toBeFocused();
+    await expect(dialogs.getByRole("button", { name: "Elegir comida", exact: true })).toBeFocused();
     const dialogAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect(dialogAxe.violations.map((violation) => violation.id)).toEqual([]);
     const dialogSizes = await dialogs.locator("button, input:not([type='radio']):not([type='checkbox']), [class*='choiceOption'], [class*='newChoice']").evaluateAll((elements) =>
@@ -223,11 +223,11 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await resumedRequest;
     await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
     await page.route("**/api/meals/selection", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }) }));
-    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Este día ya no se puede editar" })).toBeVisible();
     await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
     await page.unroute("**/api/meals/selection");
-    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
 
     await lunch.getByRole("button", { name: "Quitar elección" }).click();
@@ -239,7 +239,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await lunch.getByRole("button", { name: "Elegir comida" }).click();
     await dialogs.locator("label").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
-    await page.getByRole("button", { name: "Elegir comida" }).last().click();
+    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await expect(lunch.getByText(/Propuesto y confirmado por Alex/)).toBeVisible();
     await lunch.getByRole("button", { name: "Cambiar comida" }).click();
