@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   }
 
   const editor = alias(members, "task_editor");
-  const data = await getDb()
+  const data = await tx
     .select({
       id: occurrences.id,
       taskId: tasks.id,

@@ -204,3 +204,24 @@ test("family date stays in Buenos Aires on a device in Auckland", async ({ brows
     await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
   } finally { await context.close(); }
 });
+
+test("choosing today explicitly generates a missing daily occasion through the shared loader", async ({ page }) => {
+  const today = getFamilyDay();
+  const prior = new Date(`${today}T12:00:00Z`); prior.setUTCDate(prior.getUTCDate() - 1);
+  const title = `Missing daily ${randomUUID().slice(0, 6)}`;
+  await pool.query(`INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id,scheduled_date,repeat_weekdays)
+    VALUES($1,$2,$3,$3,$4,ARRAY[0,1,2,3,4,5,6])`, [familyId, title, memberId, today]);
+  await page.goto(`/tareas?fecha=${prior.toISOString().slice(0, 10)}`);
+  await expect(page.getByText("Solo lectura", { exact: true })).toBeVisible();
+  await page.getByLabel("Ir a una fecha").fill(today);
+  await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha` })).toBeVisible();
+  await page.getByRole("button", { name: "Historial", exact: true }).click();
+  await page.getByRole("button", { name: "Volver a tareas" }).click();
+  await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha` })).toBeVisible();
+  const todayRead = page.waitForResponse((response) => response.url().includes("/api/tasks?date="));
+  await page.getByRole("button", { name: "Hoy", exact: true }).click();
+  await todayRead;
+  await expect(page).toHaveURL(/\/tareas$/);
+});
