@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { libraryEnabled } from "@/lib/library/config";
+export const dynamic = "force-dynamic";
 import styles from "./platform.module.css";
 
 export default function Home() {
@@ -34,6 +36,12 @@ export default function Home() {
             <span className={styles.cardCopy}>Anoten lo que hace falta y compartan las compras.</span>
             <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
           </Link>
+          {libraryEnabled() && <Link className={styles.appCard} href="/biblioteca" aria-label="Abrir Biblioteca familiar">
+            <span className={`${styles.appIcon} ${styles.lavender}`} aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v15M3 4c4-1 7 0 9 2 2-2 5-3 9-2v14c-4-1-7 0-9 2-2-2-5-3-9-2z" /></svg></span>
+            <span className={styles.cardTitle}>Biblioteca familiar</span>
+            <span className={styles.cardCopy}>Guarden obras, miradas y recuerdos compartidos.</span>
+            <span className={styles.cardArrow}>Explorar <span aria-hidden="true">→</span></span>
+          </Link>}
           <Link className={`${styles.appCard} ${styles.familyCard}`} href="/familia">
             <span className={`${styles.appIcon} ${styles.mint}`}>⌂</span>
             <span className={styles.cardTitle}>Mi familia</span>
