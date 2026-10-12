@@ -41,3 +41,11 @@
 .reference { text-decoration:underline; text-underline-offset:3px; }
 @media(max-width:600px) { .page { padding:0 14px 36px; }.header { padding:8px 0; }.header nav { margin-left:0; }.header nav a { padding:0 8px; }.heading { flex-wrap:wrap; }.card { padding:18px; }.filters { padding:14px; }.filters label { flex-basis:calc(50% - 12px); }.filters label:first-child { flex-basis:100%; } }
 @media(prefers-reduced-motion:reduce) { .page * { transition:none!important; } }
+
+.body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.contributions { list-style: none; padding: 0; display: grid; gap: 1rem; }
+.check { display: flex; align-items: center; gap: .65rem; min-height: 44px; }
+.check input { width: 20px; min-height: 20px; }
+.dateFields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .75rem; }
+.page textarea { width: 100%; padding: .8rem; border: 1px solid #78918a; border-radius: .5rem; font: inherit; resize: vertical; }
+.page fieldset { min-width: 0; }
