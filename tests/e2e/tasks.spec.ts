@@ -290,6 +290,7 @@ test("175 daily cards preserve loaded pages and scroll after a revision", async 
   await expect(cards).toHaveCount(175);
   await expect.poll(async () => Math.abs(((await anchor.boundingBox())?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(3);
   expect(await anchor.getAttribute("data-task-key")).toBe(key);
+  await pool.query("DELETE FROM tasks WHERE family_id=$1 AND title LIKE 'Scroll %'", [familyId]);
 });
 
 test("a delayed response from the previous date cannot replace the selected day", async ({ page }) => {
@@ -346,7 +347,7 @@ test("potential pending pages refresh atomically and recover an obsolete cursor"
   ) INSERT INTO task_occurrences(task_id,family_id,due_date,title_snapshot,assignment_mode_snapshot)
     SELECT id,$1,$3,title,'shared' FROM created`, [familyId, memberId, today]);
   await page.goto(`/tareas?fecha=${next.toISOString().slice(0, 10)}`);
-  const section = page.locator("section").filter({ has: page.getByRole("button", { name: /Podrían seguir pendientes/ }) });
+  const section = page.locator("section").filter({ has: page.getByRole("button", { name: /Podrían seguir pendientes/ }) }).last();
   await section.getByRole("button", { name: /Podrían seguir pendientes/ }).click();
   const cards = section.locator("[data-task-key]");
   await expect(cards).toHaveCount(50);
