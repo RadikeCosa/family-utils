@@ -9,8 +9,8 @@ const expected = journal.entries.map((entry, index) => {
   return { timestamp: String(entry.when), hash: createHash("sha256").update(readFileSync(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url))).digest("hex") };
 });
 if (process.argv.includes("--applied")) {
-  const { loadEnvConfig } = await import("@next/env");
-  loadEnvConfig(process.cwd());
+  const env = await import("@next/env");
+  env.default.loadEnvConfig(process.cwd());
   const connectionString = process.env.DATABASE_URL_UNPOOLED;
   if (!connectionString) throw new Error("DATABASE_URL_UNPOOLED required to verify applied migrations");
   const pool = new pg.Pool({ connectionString });
