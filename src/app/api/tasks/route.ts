@@ -1,10 +1,10 @@
-import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lt, lte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, families, members, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { FAMILY_TIME_ZONE, getFamilyDay, taskListEtag } from "@/lib/tasks/family-day";
+import { FAMILY_TIME_ZONE, familyDayInterval, getFamilyDay, isTaskDateInRange, taskLogicalKey, taskListEtag } from "@/lib/tasks/family-day";
 import { materializeOccurrences } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
@@ -33,13 +33,26 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const today = getFamilyDay(now);
-  await materializeOccurrences(member.familyId, now);
+  const params = new URL(request.url).searchParams;
+  const selectedDate = params.has("date") ? params.get("date") : today;
+  if (!isTaskDateInRange(selectedDate, today)) return NextResponse.json({ error: "La fecha no es válida o queda fuera del período permitido." }, { status: 400 });
+  if (!params.has("date")) await materializeOccurrences(member.familyId, now);
+  const interval = familyDayInterval(selectedDate);
   const [familyState] = await getDb().select({ revision: families.revision })
     .from(families)
     .where(eq(families.id, member.familyId))
     .limit(1);
   const revision = familyState?.revision ?? member.familyRevision;
-  const etag = taskListEtag(member.familyId, revision, today);
+  let offset = 0;
+  if (params.has("cursor")) {
+    try {
+      const cursor = JSON.parse(Buffer.from(params.get("cursor")!, "base64url").toString("utf8"));
+      if (cursor.date !== selectedDate || cursor.revision !== revision) return NextResponse.json({ error: "La lista cambió. Actualizamos las tareas.", code: "STALE_CURSOR" }, { status: 409 });
+      if (!Number.isSafeInteger(cursor.offset) || cursor.offset < 0) throw new Error("cursor");
+      offset = cursor.offset;
+    } catch { return NextResponse.json({ error: "El cursor no es válido." }, { status: 400 }); }
+  }
+  const etag = taskListEtag(member.familyId, revision, today, selectedDate, String(offset));
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
   }
@@ -67,6 +80,7 @@ export async function GET(request: Request) {
       editedByName: editor.name,
       updatedAt: tasks.updatedAt,
       dueDate: occurrences.dueDate,
+      generationDate: occurrences.generationDate,
       responsibilityMemberId: occurrences.responsibilityMemberId,
       claimedByMemberId: occurrences.claimedByMemberId,
       status: occurrences.status,
@@ -79,15 +93,20 @@ export async function GET(request: Request) {
     .innerJoin(editor, eq(tasks.editedByMemberId, editor.id))
     .where(and(
       eq(occurrences.familyId, member.familyId),
-      ne(tasks.status, "archived"),
-      ne(occurrences.status, "archived"),
-      or(eq(occurrences.status, "open"), and(
-        eq(occurrences.status, "completed"),
-        eq(sql<string>`(${occurrences.completedAt} AT TIME ZONE ${FAMILY_TIME_ZONE})::date`, today),
-      )),
+      selectedDate < today
+        ? or(eq(occurrences.dueDate, selectedDate), and(eq(occurrences.status, "completed"), gte(occurrences.completedAt, interval.startsAt), lt(occurrences.completedAt, interval.endsAt)))
+        : and(ne(tasks.status, "archived"), ne(occurrences.status, "archived"), or(
+          and(eq(occurrences.status, "open"), or(isNull(occurrences.dueDate), lte(occurrences.dueDate, selectedDate))),
+          and(eq(occurrences.status, "completed"), gte(occurrences.completedAt, interval.startsAt), lt(occurrences.completedAt, interval.endsAt)),
+        )),
+      sql`NOT EXISTS (SELECT 1 FROM audit_events a WHERE a.family_id = ${member.familyId} AND a.entity_type = 'occurrence' AND a.entity_id = ${occurrences.id} AND a.action = 'superseded_by_task_edit')`,
     ))
-    .orderBy(sql`CASE WHEN ${occurrences.status} = 'open' THEN 0 ELSE 1 END`, asc(occurrences.dueDate), asc(occurrences.id))
-    .limit(150);
+    .orderBy(asc(occurrences.dueDate), asc(occurrences.id));
+
+  const occurrenceIds = data.filter((item) => item.status === "archived").map((item) => item.id);
+  const causes = occurrenceIds.length ? await getDb().select({ entityId: auditEvents.entityId, action: auditEvents.action }).from(auditEvents)
+    .where(and(eq(auditEvents.familyId, member.familyId), eq(auditEvents.entityType, "occurrence"), inArray(auditEvents.entityId, occurrenceIds), eq(auditEvents.action, "skip"))) : [];
+  const skippedIds = new Set(causes.map((item) => item.entityId));
 
   const snapshotMemberIds = [...new Set(data.flatMap((item) => item.assigneeIdsSnapshot ?? []))];
   const taskIds = [...new Set(data.map((item) => item.taskId))];
@@ -111,10 +130,17 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     familyDay: today,
+    selectedDate,
     timeZone: FAMILY_TIME_ZONE,
     memberId: member.memberId,
     revision,
-    tasks: data.map(({ assigneeIdsSnapshot, ...item }) => ({
+    total: data.length,
+    counts: { open: data.filter((item) => item.status === "open").length, completed: data.filter((item) => item.status === "completed").length },
+    nextCursor: offset + 50 < data.length ? Buffer.from(JSON.stringify({ date: selectedDate, revision, offset: offset + 50 })).toString("base64url") : null,
+    tasks: data.slice(offset, offset + 50).map(({ assigneeIdsSnapshot, ...item }) => ({
+      kind: "occurrence",
+      key: taskLogicalKey(item.taskId, item.responsibilityMemberId, item.generationDate),
+      skipped: skippedIds.has(item.id),
       ...item,
       taskAssignees: configuredByTask.get(item.taskId) ?? [],
       assignees: (assigneeIdsSnapshot ?? []).flatMap((memberId) => {

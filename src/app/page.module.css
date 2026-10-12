@@ -100,3 +100,10 @@
   .cardMore { min-height: 40px; padding-inline: 4px; }
   .cardMore[aria-label^="Editar"] { font-size: 11px; }
 }
+
+.dateNav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 20px 0; }
+.dateNav button, .dateNav input { min-width: 44px; min-height: 44px; border: 1px solid #c9c8c4; border-radius: 12px; background: white; color: #343b38; padding: 8px 12px; font: inherit; }
+.dateNav button { cursor: pointer; }
+.dateNav button:disabled { opacity: .5; cursor: default; }
+.dateNav :focus-visible { outline: 3px solid #386c54; outline-offset: 3px; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
