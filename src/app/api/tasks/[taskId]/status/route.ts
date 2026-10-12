@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { auditEvents, occurrences, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { getFamilyDay } from "@/lib/tasks/rules";
-import { materializeOccurrences } from "@/lib/tasks/materialize";
+import { materializeInTransaction } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ taskId: string }> };
@@ -123,12 +123,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       before: current,
       after: updated,
     });
+    await materializeInTransaction(tx, member.familyId, now, taskId);
     await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
     return { kind: "ok" as const, task: updated, shouldMaterialize: action === "restore" && !!current.repeatWeekdays?.length };
   });
 
   if (result.kind === "missing") return NextResponse.json({ error: "Task not found" }, { status: 404 });
   if (result.kind === "conflict") return NextResponse.json({ error: "This task changed. Refresh and try again." }, { status: 409 });
-  if (result.shouldMaterialize) await materializeOccurrences(member.familyId);
   return NextResponse.json(result.task);
 }

@@ -1,119 +1,49 @@
-import { and, desc, eq, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { auditEvents, members, occurrences, taskAssignees, tasks } from "@/db/schema";
-import { getFamilyDay } from "@/lib/tasks/rules";
+import { auditEvents, occurrences, tasks } from "@/db/schema";
+import { getFamilyDay } from "./family-day";
+import { expectedOccurrences, occurrenceValues, type TaskConnection, type TaskTransaction } from "./schedule-server";
 
-function addDays(day: string, offset: number): string {
-  const [year, month, date] = day.split("-").map(Number);
-  const value = new Date(Date.UTC(year, month - 1, date + offset));
-  return value.toISOString().slice(0, 10);
+async function expiring(db: TaskConnection, familyId: string, today: string, taskId?: string) {
+  return db.select({ id: occurrences.id }).from(occurrences).innerJoin(tasks, eq(occurrences.taskId, tasks.id)).where(and(
+    eq(occurrences.familyId, familyId), eq(occurrences.status, "open"), lt(occurrences.dueDate, today),
+    eq(occurrences.carryPolicySnapshot, "expires_daily"), eq(tasks.status, "active"), sql`cardinality(${tasks.repeatWeekdays}) > 0`, taskId ? eq(tasks.id, taskId) : undefined,
+  ));
 }
 
-function weekday(day: string): number {
-  return new Date(`${day}T00:00:00.000Z`).getUTCDay();
-}
-
-export async function materializeOccurrences(familyId: string, now: Date = new Date()): Promise<void> {
+export async function needsTaskSync(db: TaskConnection, familyId: string, now = new Date(), taskId?: string): Promise<boolean> {
   const today = getFamilyDay(now);
-  await getDb().transaction(async (tx) => {
-    const scheduledTasks = await tx.select().from(tasks)
-      .where(and(eq(tasks.familyId, familyId), eq(tasks.status, "active"), isNull(tasks.archivedAt), isNull(tasks.finalizedAt)))
-      .for("update");
-    let changed = false;
+  const expired = await expiring(db, familyId, today, taskId);
+  const expected = await expectedOccurrences(db, familyId, today, today, taskId);
+  return expired.length > 0 || expected.some((item) => item.generationDate <= today);
+}
 
-    for (const task of scheduledTasks) {
-      const weekdays = task.repeatWeekdays ?? [];
-      if (weekdays.length === 0) continue;
+// Caller owns the transaction and revision bump. Writes and sync share this service.
+export async function materializeInTransaction(tx: TaskTransaction, familyId: string, now = new Date(), taskId?: string): Promise<boolean> {
+  const today = getFamilyDay(now);
+  await tx.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.familyId, familyId), eq(tasks.status, "active"), isNull(tasks.archivedAt), sql`cardinality(${tasks.repeatWeekdays}) > 0`, taskId ? eq(tasks.id, taskId) : undefined)).orderBy(asc(tasks.id)).for("update");
+  let changed = false;
+  const expiredIds = (await expiring(tx, familyId, today, taskId)).map((item) => item.id);
+  if (expiredIds.length) {
+    const expired = await tx.update(occurrences).set({ status: "missed", version: sql`${occurrences.version} + 1` }).where(and(eq(occurrences.status, "open"), inArray(occurrences.id, expiredIds))).returning();
+    for (const item of expired) await tx.insert(auditEvents).values({ familyId, actorMemberId: null, entityType: "occurrence", entityId: item.id, action: "expired", before: { status: "open", dueDate: item.dueDate }, after: { status: "missed", dueDate: item.dueDate } });
+    changed = expired.length > 0;
+  }
+  const expected = await expectedOccurrences(tx, familyId, today, today, taskId);
+  for (const item of expected) {
+    if (item.generationDate > today) continue;
+    const inserted = await tx.insert(occurrences).values(occurrenceValues(item)).onConflictDoNothing().returning({ id: occurrences.id });
+    changed ||= inserted.length > 0;
+  }
+  return changed;
+}
 
-      if (task.carryPolicy === "expires_daily") {
-        const expired = await tx.update(occurrences)
-          .set({ status: "missed", version: sql`${occurrences.version} + 1` })
-          .where(and(eq(occurrences.taskId, task.id), eq(occurrences.status, "open"), lt(occurrences.dueDate, today)))
-          .returning();
-        for (const occurrence of expired) {
-          await tx.insert(auditEvents).values({
-            familyId,
-            actorMemberId: null,
-            entityType: "occurrence",
-            entityId: occurrence.id,
-            action: "expired",
-            before: { status: "open", dueDate: occurrence.dueDate },
-            after: { status: "missed", dueDate: occurrence.dueDate },
-          });
-        }
-        changed ||= expired.length > 0;
-      }
-
-      const allAssignments = await tx.select({ memberId: taskAssignees.memberId, archivedAt: members.archivedAt })
-        .from(taskAssignees)
-        .innerJoin(members, eq(taskAssignees.memberId, members.id))
-        .where(and(eq(taskAssignees.taskId, task.id), eq(members.familyId, familyId)));
-      const activeAssigneeIds = allAssignments.filter((assignment) => !assignment.archivedAt).map((assignment) => assignment.memberId);
-      if (task.assignmentMode === "individual" && activeAssigneeIds.length === 0) continue;
-      if (task.assignmentMode === "shared" && allAssignments.length > 0 && activeAssigneeIds.length === 0) continue;
-
-      const baseStart = task.scheduledDate && task.scheduledDate > today ? task.scheduledDate : today;
-      const responsibilities = task.assignmentMode === "individual" ? activeAssigneeIds : [null];
-      for (const responsibilityMemberId of responsibilities) {
-        let start = task.carryPolicy === "carry_forward" ? task.scheduledDate ?? today : baseStart;
-        if (task.carryPolicy === "carry_forward") {
-          const responsibility = responsibilityMemberId ? eq(occurrences.responsibilityMemberId, responsibilityMemberId) : isNull(occurrences.responsibilityMemberId);
-          const pending = await tx.select({ id: occurrences.id }).from(occurrences)
-            .where(and(eq(occurrences.taskId, task.id), eq(occurrences.status, "open"), responsibility))
-            .limit(1);
-          if (pending.length > 0) continue;
-
-          const latestCompletion = await tx.select({ completedAt: occurrences.completedAt }).from(occurrences)
-            .where(and(
-              eq(occurrences.taskId, task.id),
-              eq(occurrences.status, "completed"),
-              responsibility,
-            ))
-            .orderBy(desc(occurrences.completedAt))
-            .limit(1);
-          const completedAt = latestCompletion[0]?.completedAt;
-          if (completedAt) {
-            const afterCompletion = addDays(getFamilyDay(completedAt), 1);
-            if (afterCompletion > start) start = afterCompletion;
-          }
-          const latestOmission = await tx.select({ generationDate: occurrences.generationDate }).from(occurrences)
-            .where(and(eq(occurrences.taskId, task.id), eq(occurrences.status, "archived"), lte(occurrences.generationDate, today), responsibility))
-            .orderBy(desc(occurrences.generationDate))
-            .limit(1);
-          const omittedDay = latestOmission[0]?.generationDate;
-          if (omittedDay) {
-            const afterOmission = addDays(omittedDay, 1);
-            if (afterOmission > start) start = afterOmission;
-          }
-        }
-
-        for (let offset = 0; offset < 8; offset += 1) {
-          const dueDate = addDays(start, offset);
-          if (!weekdays.includes(weekday(dueDate))) continue;
-          // A carried occasion starts on its scheduled day, never at completion.
-          // The existing open row remains the only pending item across later days.
-          if (task.carryPolicy === "carry_forward" && dueDate > today) break;
-
-          const inserted = await tx.insert(occurrences).values({
-            taskId: task.id,
-            familyId,
-            dueDate,
-            generationDate: dueDate,
-            titleSnapshot: task.title,
-            descriptionSnapshot: task.description,
-            scheduledTimeSnapshot: task.scheduledTime,
-            assignmentModeSnapshot: task.assignmentMode,
-            assigneeIdsSnapshot: activeAssigneeIds,
-            carryPolicySnapshot: task.carryPolicy,
-            carryForward: task.carryPolicy === "carry_forward",
-            responsibilityMemberId,
-          }).onConflictDoNothing().returning({ id: occurrences.id });
-          changed ||= inserted.length > 0;
-          if (task.carryPolicy === "carry_forward") break;
-        }
-      }
-    }
-
+export async function materializeOccurrences(familyId: string, now = new Date()): Promise<boolean> {
+  const db = getDb();
+  if (!await needsTaskSync(db, familyId, now)) return false;
+  return db.transaction(async (tx) => {
+    const changed = await materializeInTransaction(tx, familyId, now);
     if (changed) await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${familyId}`);
+    return changed;
   });
 }

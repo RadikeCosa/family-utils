@@ -107,3 +107,5 @@
 .dateNav button:disabled { opacity: .5; cursor: default; }
 .dateNav :focus-visible { outline: 3px solid #386c54; outline-offset: 3px; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.possibleSection { margin: 24px 0; }
+.possibleSection > div > p { color: #59625c; line-height: 1.5; }

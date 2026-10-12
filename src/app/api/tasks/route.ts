@@ -5,7 +5,9 @@ import { getDb } from "@/db";
 import { auditEvents, families, members, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { FAMILY_TIME_ZONE, familyDayInterval, getFamilyDay, isTaskDateInRange, taskLogicalKey, taskListEtag } from "@/lib/tasks/family-day";
-import { materializeOccurrences } from "@/lib/tasks/materialize";
+import { expectedOccurrences } from "@/lib/tasks/schedule-server";
+import { taskGenerationMode } from "@/lib/tasks/generation-mode";
+import { materializeInTransaction, materializeOccurrences } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
 
@@ -36,9 +38,11 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const selectedDate = params.has("date") ? params.get("date") : today;
   if (!isTaskDateInRange(selectedDate, today)) return NextResponse.json({ error: "La fecha no es válida o queda fuera del período permitido." }, { status: 400 });
-  if (!params.has("date")) await materializeOccurrences(member.familyId, now);
+  const generationMode = taskGenerationMode();
+  if (!params.has("date") && generationMode === "legacy_today") await materializeOccurrences(member.familyId, now);
   const interval = familyDayInterval(selectedDate);
-  const [familyState] = await getDb().select({ revision: families.revision })
+  return getDb().transaction(async (tx) => {
+  const [familyState] = await tx.select({ revision: families.revision })
     .from(families)
     .where(eq(families.id, member.familyId))
     .limit(1);
@@ -47,12 +51,12 @@ export async function GET(request: Request) {
   if (params.has("cursor")) {
     try {
       const cursor = JSON.parse(Buffer.from(params.get("cursor")!, "base64url").toString("utf8"));
-      if (cursor.date !== selectedDate || cursor.revision !== revision) return NextResponse.json({ error: "La lista cambió. Actualizamos las tareas.", code: "STALE_CURSOR" }, { status: 409 });
+      if (cursor.date !== selectedDate || cursor.revision !== revision || cursor.section !== (params.get("section") ?? "daily")) return NextResponse.json({ error: "La lista cambió. Actualizamos las tareas.", code: "STALE_CURSOR" }, { status: 409 });
       if (!Number.isSafeInteger(cursor.offset) || cursor.offset < 0) throw new Error("cursor");
       offset = cursor.offset;
     } catch { return NextResponse.json({ error: "El cursor no es válido." }, { status: 400 }); }
   }
-  const etag = taskListEtag(member.familyId, revision, today, selectedDate, String(offset));
+  const etag = taskListEtag(member.familyId, revision, today, selectedDate, `${params.get("section") ?? "daily"}-${offset}`, generationMode);
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
   }
@@ -96,7 +100,7 @@ export async function GET(request: Request) {
       selectedDate < today
         ? or(eq(occurrences.dueDate, selectedDate), and(eq(occurrences.status, "completed"), gte(occurrences.completedAt, interval.startsAt), lt(occurrences.completedAt, interval.endsAt)))
         : and(ne(tasks.status, "archived"), ne(occurrences.status, "archived"), or(
-          and(eq(occurrences.status, "open"), or(isNull(occurrences.dueDate), lte(occurrences.dueDate, selectedDate))),
+          and(eq(occurrences.status, "open"), or(isNull(occurrences.dueDate), and(lte(occurrences.dueDate, selectedDate), or(eq(occurrences.dueDate, selectedDate), eq(occurrences.carryPolicySnapshot, "carry_forward"), sql`coalesce(cardinality(${tasks.repeatWeekdays}), 0) = 0`)))),
           and(eq(occurrences.status, "completed"), gte(occurrences.completedAt, interval.startsAt), lt(occurrences.completedAt, interval.endsAt)),
         )),
       sql`NOT EXISTS (SELECT 1 FROM audit_events a WHERE a.family_id = ${member.familyId} AND a.entity_type = 'occurrence' AND a.entity_id = ${occurrences.id} AND a.action = 'superseded_by_task_edit')`,
@@ -104,19 +108,21 @@ export async function GET(request: Request) {
     .orderBy(asc(occurrences.dueDate), asc(occurrences.id));
 
   const occurrenceIds = data.filter((item) => item.status === "archived").map((item) => item.id);
-  const causes = occurrenceIds.length ? await getDb().select({ entityId: auditEvents.entityId, action: auditEvents.action }).from(auditEvents)
+  const causes = occurrenceIds.length ? await tx.select({ entityId: auditEvents.entityId, action: auditEvents.action }).from(auditEvents)
     .where(and(eq(auditEvents.familyId, member.familyId), eq(auditEvents.entityType, "occurrence"), inArray(auditEvents.entityId, occurrenceIds), eq(auditEvents.action, "skip"))) : [];
   const skippedIds = new Set(causes.map((item) => item.entityId));
 
-  const snapshotMemberIds = [...new Set(data.flatMap((item) => item.assigneeIdsSnapshot ?? []))];
-  const taskIds = [...new Set(data.map((item) => item.taskId))];
+  const expected = selectedDate >= today ? await expectedOccurrences(tx, member.familyId, today, selectedDate) : [];
+  const forecasts = expected.filter((item) => item.task.carryPolicy === "expires_daily" || item.generationDate === selectedDate || (selectedDate === today && item.generationDate <= today));
+  const snapshotMemberIds = [...new Set([...data.flatMap((item) => item.assigneeIdsSnapshot ?? []), ...forecasts.flatMap((item) => item.task.assigneeIds)])];
+  const taskIds = [...new Set([...data.map((item) => item.taskId), ...forecasts.map((item) => item.task.id)])];
   const people = snapshotMemberIds.length
-    ? await getDb().select({ id: members.id, name: members.name }).from(members)
+    ? await tx.select({ id: members.id, name: members.name }).from(members)
       .where(and(eq(members.familyId, member.familyId), inArray(members.id, snapshotMemberIds)))
     : [];
   const peopleById = new Map(people.map((person) => [person.id, person.name]));
   const configuredAssignments = taskIds.length
-    ? await getDb().select({ taskId: taskAssignees.taskId, memberId: members.id, name: members.name })
+    ? await tx.select({ taskId: taskAssignees.taskId, memberId: members.id, name: members.name })
       .from(taskAssignees)
       .innerJoin(members, eq(taskAssignees.memberId, members.id))
       .where(and(eq(members.familyId, member.familyId), isNull(members.archivedAt), inArray(taskAssignees.taskId, taskIds)))
@@ -128,27 +134,41 @@ export async function GET(request: Request) {
     configuredByTask.set(assignment.taskId, current);
   }
 
+  const items = data.map(({ assigneeIdsSnapshot, ...item }) => ({
+    ...item,
+    kind: "occurrence" as const,
+    key: taskLogicalKey(item.taskId, item.responsibilityMemberId, item.generationDate),
+    skipped: skippedIds.has(item.id),
+    taskAssignees: configuredByTask.get(item.taskId) ?? [],
+    assignees: (assigneeIdsSnapshot ?? []).map((id) => ({ memberId: id, name: peopleById.get(id) ?? "Integrante archivado" })),
+  }));
+  const preview = forecasts.map(({ task, responsibilityMemberId, generationDate, key }) => ({
+    id: null, kind: "forecast" as const, key, taskId: task.id, taskStatus: task.status, taskVersion: task.version,
+    title: task.title, description: task.description, taskTitle: task.title, taskDescription: task.description,
+    taskScheduledDate: task.scheduledDate, taskScheduledTime: task.scheduledTime, taskAssignmentMode: task.assignmentMode,
+    repeatWeekdays: task.repeatWeekdays, carryPolicy: task.carryPolicy, assignmentMode: task.assignmentMode,
+    dueDate: generationDate, generationDate, scheduledTime: task.scheduledTime, responsibilityMemberId,
+    claimedByMemberId: null, completedByMemberId: null, completedAt: null, status: "open" as const,
+    version: null, taskAssignees: configuredByTask.get(task.id) ?? [],
+    assignees: task.assigneeIds.map((id) => ({ memberId: id, name: peopleById.get(id) ?? "Integrante archivado" })),
+  }));
+  const possible = selectedDate > today ? items.filter((item) => item.status === "open" && (!item.dueDate || item.dueDate < selectedDate) && (!item.repeatWeekdays?.length || item.carryPolicy === "carry_forward")) : [];
+  const possibleKeys = new Set(possible.map((item) => item.key));
+  const daily = [...items.filter((item) => !possibleKeys.has(item.key) && !(selectedDate > today && item.status === "open" && item.dueDate && item.dueDate < selectedDate)), ...preview];
+  daily.sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "") || (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? "") || a.key.localeCompare(b.key));
+  possible.sort((a, b) => a.key.localeCompare(b.key));
+  const section = params.get("section") ?? "daily";
+  if (section !== "daily" && section !== "possible") return NextResponse.json({ error: "Sección inválida." }, { status: 400 });
+  const list = section === "possible" ? possible : daily;
   return NextResponse.json({
-    familyDay: today,
-    selectedDate,
-    timeZone: FAMILY_TIME_ZONE,
-    memberId: member.memberId,
-    revision,
-    total: data.length,
-    counts: { open: data.filter((item) => item.status === "open").length, completed: data.filter((item) => item.status === "completed").length },
-    nextCursor: offset + 50 < data.length ? Buffer.from(JSON.stringify({ date: selectedDate, revision, offset: offset + 50 })).toString("base64url") : null,
-    tasks: data.slice(offset, offset + 50).map(({ assigneeIdsSnapshot, ...item }) => ({
-      kind: "occurrence",
-      key: taskLogicalKey(item.taskId, item.responsibilityMemberId, item.generationDate),
-      skipped: skippedIds.has(item.id),
-      ...item,
-      taskAssignees: configuredByTask.get(item.taskId) ?? [],
-      assignees: (assigneeIdsSnapshot ?? []).flatMap((memberId) => {
-        const name = peopleById.get(memberId);
-        return name ? [{ memberId, name }] : [];
-      }),
-    })),
+    familyDay: today, selectedDate, timeZone: FAMILY_TIME_ZONE, generationMode,
+    familyId: member.familyId, memberId: member.memberId, revision,
+    total: daily.length, possibleTotal: possible.length,
+    counts: { open: daily.filter((item) => item.status === "open").length, completed: daily.filter((item) => item.status === "completed").length },
+    nextCursor: offset + 50 < list.length ? Buffer.from(JSON.stringify({ date: selectedDate, revision, section, offset: offset + 50 })).toString("base64url") : null,
+    tasks: list.slice(offset, offset + 50),
   }, { headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
 export async function POST(request: Request) {
@@ -220,7 +240,7 @@ export async function POST(request: Request) {
     const validAssignmentMode = assignmentMode as "shared" | "individual";
     const validCarryPolicy = carryPolicy as "expires_daily" | "carry_forward";
     const responsibilities = validAssignmentMode === "individual" ? assigneeIds : [null];
-    const firstOccurrences = await tx.insert(occurrences).values(responsibilities.map((responsibilityMemberId) => ({
+    const firstOccurrences = weekdays.length ? [] : await tx.insert(occurrences).values(responsibilities.map((responsibilityMemberId) => ({
       taskId: task.id,
       familyId: member.familyId,
       dueDate: firstDueDate,
@@ -243,6 +263,7 @@ export async function POST(request: Request) {
       action: "created",
       after: { ...task, assigneeIds },
     });
+    await materializeInTransaction(tx, member.familyId, new Date(), task.id);
     await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
     return { task, occurrences: firstOccurrences };
   }).catch((error: unknown) => {

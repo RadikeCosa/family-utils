@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { auditEvents, members, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { getFamilyDay } from "@/lib/tasks/rules";
-import { materializeOccurrences } from "@/lib/tasks/materialize";
+import { materializeInTransaction } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ taskId: string }> };
@@ -150,7 +150,8 @@ export async function PATCH(request: Request, context: RouteContext) {
         before: { ...occurrence, task: beforeTask },
         after: { ...updatedOccurrence, editorId: member.memberId, editedAt: now },
       });
-      await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
+      await materializeInTransaction(tx, member.familyId, now, taskId);
+    await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
       return { kind: "ok" as const, task: updatedTask[0], occurrence: updatedOccurrence, shouldMaterialize: false };
     }
 
@@ -227,6 +228,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       before: beforeTask,
       after: afterTask,
     });
+    await materializeInTransaction(tx, member.familyId, now, taskId);
     await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
     return { kind: "ok" as const, task: updatedTask, occurrences: createdOccurrences, shouldMaterialize: !!weekdays.length };
   });
@@ -236,6 +238,5 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (result.kind === "invalid-assignees") return NextResponse.json({ error: "Elegí responsables de esta familia." }, { status: 400 });
   if (result.kind === "past-date") return NextResponse.json({ error: "Elegí hoy o una fecha futura para esta ocasión." }, { status: 400 });
   if (result.kind === "conflict") return NextResponse.json({ error: "La tarea cambió. Actualizá y volvé a intentar." }, { status: 409 });
-  if (result.shouldMaterialize) await materializeOccurrences(member.familyId);
   return NextResponse.json({ task: result.task, occurrences: result.occurrences ?? [result.occurrence] });
 }

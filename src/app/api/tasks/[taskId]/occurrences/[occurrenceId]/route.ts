@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
+import { getFamilyDay } from "@/lib/tasks/family-day";
+import { materializeInTransaction } from "@/lib/tasks/materialize";
 import { canUndoCompletion } from "@/lib/tasks/rules";
 
 export const runtime = "nodejs";
@@ -37,6 +39,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       .for("update")
       .limit(1);
     if (!current || current.status === "archived") return { kind: "missing" as const };
+    const today = getFamilyDay();
+    if (current.status === "missed" || (current.status === "open" && current.dueDate && current.dueDate > today) || (current.status === "open" && task.repeatWeekdays?.length && current.carryPolicySnapshot === "expires_daily" && current.dueDate && current.dueDate < today)) return { kind: "forbidden" as const };
+    if (action === "undo" && current.completedAt && getFamilyDay(current.completedAt) !== today) return { kind: "forbidden" as const };
     if (current.version !== expectedVersion) return { kind: "conflict" as const };
 
     if (action === "claim") {
@@ -95,6 +100,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       before: current,
       after: updated,
     });
+    await materializeInTransaction(tx, member.familyId, new Date(), taskId);
     await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
     return { kind: "ok" as const, occurrence: updated };
   });

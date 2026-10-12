@@ -25,3 +25,22 @@ test("logical key has a fixed wire format and round trips", () => {
   assert.deepEqual(parseTaskLogicalKey(taskLogicalKey("task", "member", null)), ["task", "member", null]);
   assert.throws(() => parseTaskLogicalKey('["task",null,"bad"]'));
 });
+
+import { expectedOccurrenceDay } from "./schedule.ts";
+const emptyHistory = { open: false, latestCompletion: null, latestOmission: null };
+
+test("carry forecasts and real generation share the completion/omission calendar", () => {
+  const schedule = { repeatWeekdays: [1, 4], scheduledDate: "2026-09-01", carryPolicy: "carry_forward" as const };
+  const completed = { ...emptyHistory, latestCompletion: new Date("2026-10-06T03:30:00Z") };
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-06", "2026-10-08", completed), "2026-10-08");
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-08", "2026-10-08", completed), "2026-10-08");
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-08", "2026-10-12", { ...completed, latestOmission: "2026-10-08" }), "2026-10-12");
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-08", "2026-10-12", { ...completed, open: true }), null);
+});
+
+test("daily expiry forecasts select only the requested day, never retroactive", () => {
+  const schedule = { repeatWeekdays: [1, 4], scheduledDate: "2026-10-01", carryPolicy: "expires_daily" as const };
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-06", "2026-10-08", emptyHistory), "2026-10-08");
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-06", "2026-10-07", emptyHistory), null);
+  assert.equal(expectedOccurrenceDay(schedule, "2026-10-06", "2026-10-05", emptyHistory), null);
+});
