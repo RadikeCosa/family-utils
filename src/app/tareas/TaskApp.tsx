@@ -88,6 +88,9 @@ export default function Home() {
   const [possibleOpen, setPossibleOpen] = useState(false);
   const [possibleLoading, setPossibleLoading] = useState(false);
   const possibleSequence = useRef(0);
+  const possibleLoadedCount = useRef(50);
+  const possibleOpenRef = useRef(false);
+  const refreshPossible = useRef<(() => Promise<void>) | null>(null);
   const [syncNotice, setSyncNotice] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
   const [manualRetryUsed, setManualRetryUsed] = useState(false);
@@ -192,6 +195,7 @@ export default function Home() {
       setNextCursor(body.nextCursor);
       setCounts(body.counts);
       setPossibleTotal(body.possibleTotal ?? 0);
+      if (!cursor && possibleOpenRef.current) void refreshPossible.current?.();
       if (requestedDate === body.familyDay && !cursor && !readOnly) void synchronize(body.familyId, body.generationMode);
       if (requestedDate > body.familyDay) {
         try {
@@ -237,22 +241,43 @@ export default function Home() {
     queueMicrotask(() => void refresh(true));
   }, [dateInitialized, selectedDate, refresh]);
 
-  async function loadPossible(cursor?: string) {
+  const loadPossible = useCallback(async (cursor?: string) => {
     const sequence = ++possibleSequence.current;
+    const anchors = [...document.querySelectorAll<HTMLElement>("[data-task-key]")].map((element) => ({ key: element.dataset.taskKey, top: element.getBoundingClientRect().top })).filter((item) => item.top >= 0);
     setPossibleLoading(true);
     try {
-      const params = new URLSearchParams({ date: selectedDate, section: "possible" });
-      if (cursor) params.set("cursor", cursor);
-      let response = await fetch(`/api/tasks?${params}`, { cache: "no-store" });
-      if (response.status === 409) { params.delete("cursor"); cursor = undefined; response = await fetch(`/api/tasks?${params}`, { cache: "no-store" }); }
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "No se pudieron cargar los pendientes.");
-      if (sequence !== possibleSequence.current) return;
-      setPossibleTasks((current) => cursor ? [...current, ...data.tasks] : data.tasks);
+      let append = !!cursor;
+      let restarted = false;
+      let pageCursor = cursor;
+      const items: Task[] = [];
+      let data;
+      do {
+        const params = new URLSearchParams({ date: selectedDate, section: "possible" });
+        if (pageCursor) params.set("cursor", pageCursor);
+        const response = await fetch(`/api/tasks?${params}`, { cache: "no-store" });
+        data = await response.json();
+        if (sequence !== possibleSequence.current || selectedDate !== dateRef.current) return;
+        if (response.status === 409 && !restarted) { restarted = true; append = false; items.length = 0; pageCursor = undefined; continue; }
+        if (!response.ok) throw new Error(data.error ?? "No se pudieron cargar los pendientes.");
+        items.push(...data.tasks);
+        pageCursor = data.nextCursor ?? undefined;
+      } while ((!append && pageCursor && items.length < possibleLoadedCount.current) || (restarted && !data.tasks));
+      setPossibleTasks((current) => append ? [...current, ...items] : items);
+      possibleLoadedCount.current = append ? possibleLoadedCount.current + items.length : Math.max(50, items.length);
       setPossibleCursor(data.nextCursor); setPossibleTotal(data.possibleTotal);
+      requestAnimationFrame(() => {
+        if (sequence !== possibleSequence.current) return;
+        const elements = [...document.querySelectorAll<HTMLElement>("[data-task-key]")];
+        for (const anchor of anchors) {
+          const element = elements.find((item) => item.dataset.taskKey === anchor.key);
+          if (element) { window.scrollBy(0, element.getBoundingClientRect().top - anchor.top); break; }
+        }
+      });
     } catch (caught) { if (sequence === possibleSequence.current) setError(caught instanceof Error ? caught.message : "No se pudieron cargar los pendientes."); }
     finally { if (sequence === possibleSequence.current) setPossibleLoading(false); }
-  }
+  }, [selectedDate]);
+
+  useEffect(() => { refreshPossible.current = loadPossible; return () => { refreshPossible.current = null; }; }, [loadPossible]);
 
   function navigateDate(day: string, follow = false) {
     if (!isTaskDateInRange(day, familyDay)) return;
@@ -261,6 +286,7 @@ export default function Home() {
     dateRef.current = day;
     loadedCount.current = 50;
     etagRef.current = null; lastRead.current = null;
+    possibleOpenRef.current = false; possibleLoadedCount.current = 50;
     setPossibleOpen(false); setPossibleTasks([]); setPossibleCursor(null); possibleSequence.current += 1;
     setTasks([]); setCounts({ open: 0, completed: 0 }); setNextCursor(null);
     setSelectedDate(day); setError("");
@@ -545,6 +571,7 @@ export default function Home() {
           </div>}
           {!showHistory && selectedDate > familyDay && possibleTotal > 0 && <section className={styles.possibleSection}>
             <button className={styles.filterButton} aria-expanded={possibleOpen} onClick={() => {
+              possibleOpenRef.current = !possibleOpen;
               setPossibleOpen(!possibleOpen);
               if (!possibleOpen) {
                 void loadPossible();
@@ -556,7 +583,7 @@ export default function Home() {
               }
             }}>Podrían seguir pendientes ({possibleTotal})</button>
             {possibleOpen && <div><p>Se muestran si siguen pendientes al llegar esta fecha. Podés gestionarlas desde Hoy.</p>
-              {possibleTasks.map((task) => <article className={styles.taskCard} key={task.key}><div className={styles.taskInfo}><h3>{task.title}</h3><p>{task.dueDate ?? "Sin fecha"} · Pendiente potencial</p><span className={styles.taskPeople}>{task.assignees.map((person) => person.name).join(", ")}</span></div></article>)}
+              {possibleTasks.map((task) => <article className={styles.taskCard} key={task.key} data-task-key={task.key}><div className={styles.taskInfo}><h3>{task.title}</h3><p>{task.dueDate ?? "Sin fecha"} · Pendiente potencial</p><span className={styles.taskPeople}>{task.assignees.map((person) => person.name).join(", ")}</span></div></article>)}
               {possibleLoading && <p role="status">Cargando pendientes…</p>}
               {possibleCursor && <button className={styles.filterButton} disabled={possibleLoading} onClick={() => void loadPossible(possibleCursor)}>Cargar más pendientes</button>}
             </div>}

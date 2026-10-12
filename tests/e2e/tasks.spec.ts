@@ -225,3 +225,29 @@ test("choosing today explicitly generates a missing daily occasion through the s
   await todayRead;
   await expect(page).toHaveURL(/\/tareas$/);
 });
+
+test("potential pending pages refresh atomically and recover an obsolete cursor", async ({ page }) => {
+  const today = getFamilyDay();
+  const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 5);
+  await pool.query(`WITH created AS (
+    INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id)
+    SELECT $1, 'Potential ' || n, $2, $2 FROM generate_series(1,175) n RETURNING id,title
+  ) INSERT INTO task_occurrences(task_id,family_id,due_date,title_snapshot,assignment_mode_snapshot)
+    SELECT id,$1,$3,title,'shared' FROM created`, [familyId, memberId, today]);
+  await page.goto(`/tareas?fecha=${next.toISOString().slice(0, 10)}`);
+  const section = page.locator("section").filter({ has: page.getByRole("button", { name: /Podrían seguir pendientes/ }) });
+  await section.getByRole("button", { name: /Podrían seguir pendientes/ }).click();
+  const cards = section.locator("[data-task-key]");
+  await expect(cards).toHaveCount(50);
+  await section.getByRole("button", { name: "Cargar más pendientes" }).click();
+  await expect(cards).toHaveCount(100);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await section.getByRole("button", { name: "Cargar más pendientes" }).click();
+  await expect(cards).toHaveCount(100);
+  await expect(section.getByRole("button", { name: "Cargar más pendientes" })).toBeEnabled();
+  await pool.query("UPDATE task_occurrences SET title_snapshot=title_snapshot || ' actualizado' WHERE family_id=$1 AND title_snapshot LIKE 'Potential %'", [familyId]);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(cards.first().getByRole("heading")).toContainText("actualizado");
+  await expect(cards).toHaveCount(100);
+});
