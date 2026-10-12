@@ -18,8 +18,8 @@ test.beforeEach(async ({ page }) => {
   pool = new pg.Pool({ connectionString }); userIds = [];
   familyId = (await pool.query("INSERT INTO families(name) VALUES($1) RETURNING id", [`shopping-e2e-${randomUUID()}`])).rows[0].id;
   async function identity(name: string) {
-    const api = await playwrightRequest.newContext({ baseURL });
-    const prepared = await api.post("/api/access/prepare", { headers: { Origin: baseURL, "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 200) + 1}` } });
+    const api = await playwrightRequest.newContext({ baseURL, extraHTTPHeaders: { "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}::1` } });
+    const prepared = await api.post("/api/access/prepare", { headers: { Origin: baseURL } });
     expect(prepared.status(), await prepared.text()).toBe(200);
     const user = (await (await api.get("/api/auth/get-session")).json()).user;
     userIds.push(user.id);
