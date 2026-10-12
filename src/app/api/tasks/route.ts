@@ -38,7 +38,8 @@ export async function GET(request: Request) {
   if (!isTaskDateInRange(selectedDate, today)) return NextResponse.json({ error: "La fecha no es válida o queda fuera del período permitido." }, { status: 400 });
   if (!params.has("date")) await materializeOccurrences(member.familyId, now);
   const interval = familyDayInterval(selectedDate);
-  const [familyState] = await getDb().select({ revision: families.revision })
+  return getDb().transaction(async (tx) => {
+  const [familyState] = await tx.select({ revision: families.revision })
     .from(families)
     .where(eq(families.id, member.familyId))
     .limit(1);
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
   }
 
   const editor = alias(members, "task_editor");
-  const data = await getDb()
+  const data = await tx
     .select({
       id: occurrences.id,
       taskId: tasks.id,
@@ -104,19 +105,19 @@ export async function GET(request: Request) {
     .orderBy(asc(occurrences.dueDate), asc(occurrences.id));
 
   const occurrenceIds = data.filter((item) => item.status === "archived").map((item) => item.id);
-  const causes = occurrenceIds.length ? await getDb().select({ entityId: auditEvents.entityId, action: auditEvents.action }).from(auditEvents)
+  const causes = occurrenceIds.length ? await tx.select({ entityId: auditEvents.entityId, action: auditEvents.action }).from(auditEvents)
     .where(and(eq(auditEvents.familyId, member.familyId), eq(auditEvents.entityType, "occurrence"), inArray(auditEvents.entityId, occurrenceIds), eq(auditEvents.action, "skip"))) : [];
   const skippedIds = new Set(causes.map((item) => item.entityId));
 
   const snapshotMemberIds = [...new Set(data.flatMap((item) => item.assigneeIdsSnapshot ?? []))];
   const taskIds = [...new Set(data.map((item) => item.taskId))];
   const people = snapshotMemberIds.length
-    ? await getDb().select({ id: members.id, name: members.name }).from(members)
+    ? await tx.select({ id: members.id, name: members.name }).from(members)
       .where(and(eq(members.familyId, member.familyId), inArray(members.id, snapshotMemberIds)))
     : [];
   const peopleById = new Map(people.map((person) => [person.id, person.name]));
   const configuredAssignments = taskIds.length
-    ? await getDb().select({ taskId: taskAssignees.taskId, memberId: members.id, name: members.name })
+    ? await tx.select({ taskId: taskAssignees.taskId, memberId: members.id, name: members.name })
       .from(taskAssignees)
       .innerJoin(members, eq(taskAssignees.memberId, members.id))
       .where(and(eq(members.familyId, member.familyId), isNull(members.archivedAt), inArray(taskAssignees.taskId, taskIds)))
@@ -149,6 +150,7 @@ export async function GET(request: Request) {
       }),
     })),
   }, { headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
 export async function POST(request: Request) {
