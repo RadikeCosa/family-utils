@@ -11,6 +11,7 @@ export default function LibraryApp({ workId }: { workId?: string }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState("");
+  const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const library = useLibrary(workId, filters);
   const { data, loading, busy, error } = library;
@@ -22,7 +23,7 @@ export default function LibraryApp({ workId }: { workId?: string }) {
     {error && <p className={styles.error} role="alert">{error} <button onClick={() => void library.refresh()}>Reintentar</button></p>}
     {library.hasChanges && <p className={styles.notice} role="status">Hay cambios en la biblioteca. <button onClick={() => void library.refresh()}>Actualizar</button></p>}
     {loading && !data && <p role="status">Cargando biblioteca…</p>}
-    {adding && data && <section className={styles.card}><WorkForm key={`${data.familyId}:${data.currentMemberId}:new`} scope={`${data.familyId}:${data.currentMemberId}:new-work`} busy={busy} onCancel={() => setAdding(false)} onSave={async (input) => { const result = await library.mutate("", "POST", input); if (!result) return false; setAdding(false); router.push(`/biblioteca/${result.id}`); return true; }} /></section>}
+    {adding && data && <section className={styles.card}><WorkForm key={`${data.familyId}:${data.currentMemberId}:new`} scope={`${data.familyId}:${data.currentMemberId}:new-work`} busy={busy} duplicates={library.duplicates} onCancel={() => { setAdding(false); library.clearDuplicates(); }} onSave={async (input) => { const result = await library.mutate("", "POST", input); if (!result) return false; setAdding(false); router.push(`/biblioteca/${result.id}`); return true; }} /></section>}
     {!workId && data && "works" in data && <>
       <form className={styles.filters} onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const params = new URLSearchParams(); for (const key of ["kind", "status", "archived"]) if (form.get(key)) params.set(key, String(form.get(key))); if (search.trim()) params.set("q", search.trim()); setFilters(params.toString()); }}>
         <label>Buscar una obra<input type="search" value={search} placeholder="Título o creador" onChange={(event) => setSearch(event.target.value)} /></label>
@@ -33,6 +34,13 @@ export default function LibraryApp({ workId }: { workId?: string }) {
       {data.works.length ? <ul className={styles.grid}>{data.works.map((item) => <li key={item.id}><Link className={styles.workCard} href={`/biblioteca/${item.id}`}><span className={styles.icon}><WorkIcon /></span><span className={styles.eyebrow}>{KIND_LABELS[item.kind]}</span><h2>{item.title}</h2><p>{[item.creator, item.year].filter(Boolean).join(" · ") || "Por descubrir"}</p><span className={styles.open}>Abrir ficha →</span></Link></li>)}</ul> : <section className={styles.empty}><WorkIcon /><h2>{filters ? "No encontramos obras con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{filters ? "Probá otro título o ampliá los filtros." : "Agregá una película, un libro, una canción o ese juego que siempre compartimos."}</p></section>}
       {data.nextCursor && <button disabled={loading} onClick={() => void library.more()}>{loading ? "Cargando…" : "Cargar más obras"}</button>}
     </>}
-    {work && <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.referenceUrl && <p><a className={styles.reference} href={work.referenceUrl} target="_blank" rel="noopener noreferrer">Abrir enlace de referencia ↗</a></p>}</section>}
+    {work && data && <>
+      <div className={styles.actions}>
+        {!work.archivedAt && <button disabled={busy} onClick={() => { setEditing(!editing); library.clearDuplicates(); }}>Editar ficha</button>}
+        <button disabled={busy} onClick={async () => { if (window.confirm(work.archivedAt ? "¿Restaurar esta ficha?" : "¿Archivar esta ficha? Se conservan todos sus aportes.")) await library.mutate(`/${work.id}`, "PATCH", { action: work.archivedAt ? "restore" : "archive", expectedVersion: work.version }); }}>{work.archivedAt ? "Restaurar ficha" : "Archivar ficha"}</button>
+      </div>
+      {work.archivedAt && <p className={styles.notice}>Ficha archivada. Podés restaurarla o retirar tus aportes.</p>}
+      {editing && !work.archivedAt && <section className={styles.card}><WorkForm key={`${data.familyId}:${data.currentMemberId}:${work.id}`} scope={`${data.familyId}:${data.currentMemberId}:${work.id}:edit-work`} work={work} busy={busy} duplicates={library.duplicates} onCancel={() => { setEditing(false); library.clearDuplicates(); }} onSave={async (input) => { if (!await library.mutate(`/${work.id}`, "PATCH", { ...input, action: "edit" })) return false; setEditing(false); return true; }} /></section>}
+      <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.referenceUrl && <p><a className={styles.reference} href={work.referenceUrl} target="_blank" rel="noopener noreferrer">Abrir enlace de referencia ↗</a></p>}</section></>}
   </main>;
 }
