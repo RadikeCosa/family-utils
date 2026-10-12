@@ -4,7 +4,7 @@ import { getPool } from "@/db";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
 import { libraryEnabled } from "./config";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor";
-import { normalizeLibraryText, UUID_PATTERN, workInput } from "./rules";
+import { normalizeLibraryText, personalInput, UUID_PATTERN, workInput } from "./rules";
 import { PERSONAL_STATUSES, WORK_KINDS, type LibraryWork, type WorkKind, type PersonalEntry } from "./types";
 
 class LibraryError extends Error {
@@ -93,7 +93,7 @@ async function record(tx: PoolClient, actor: MemberContext, entityType: string, 
   await tx.query('INSERT INTO audit_events(family_id,actor_member_id,entity_type,entity_id,action,"after") VALUES($1,$2,$3,$4,$5,$6::jsonb)', [actor.familyId, actor.memberId, entityType, entityId, action, JSON.stringify(metadata)]);
   await tx.query("UPDATE families SET library_revision=library_revision+1 WHERE id=$1", [actor.familyId]);
 }
-export async function mutateLibrary(request: Request, command: "create" | "manage", workId?: string) {
+export async function mutateLibrary(request: Request, command: "create" | "manage" | "personal", workId?: string) {
   if (!libraryEnabled()) return libraryUnavailable();
   let tx: PoolClient | undefined;
   try {
@@ -105,6 +105,23 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
     let body: Record<string, unknown>;
     try { body = await request.json(); if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(); } catch { fail(400, "INVALID", "Datos inválidos."); }
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
+    if (command === "personal") {
+      const work = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR SHARE", [workId, actor.familyId])).rows[0];
+      if (!work) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      await activeActor(tx, actor);
+      if (work.archived_at) fail(403, "ARCHIVED", "Restaurá la ficha antes de cambiar tu estado o valoración.");
+      const input = personalInput(body);
+      if (!input) fail(400, "INVALID", "Revisá el estado y las estrellas.");
+      const previous = (await tx.query("SELECT version FROM library_personal WHERE work_id=$1 AND member_id=$2 FOR UPDATE", [workId, actor.memberId])).rows[0];
+      if ((previous?.version ?? 0) !== body.expectedVersion) fail(409, "CONFLICT", "Tus datos cambiaron. Actualizá y revisalos antes de reintentar.");
+      if (previous) await tx.query("UPDATE library_personal SET status=$1,rating=$2,version=version+1,updated_at=now() WHERE work_id=$3 AND member_id=$4", [input.status, input.rating, workId, actor.memberId]);
+      else {
+        const result = await tx.query("INSERT INTO library_personal(family_id,work_id,member_id,status,rating) VALUES($1,$2,$3,$4,$5) ON CONFLICT(work_id,member_id) DO NOTHING RETURNING id", [actor.familyId, workId, actor.memberId, input.status, input.rating]);
+        if (!result.rows.length) fail(409, "CONFLICT", "Tus datos cambiaron. Actualizá y revisalos antes de reintentar.");
+      }
+      await record(tx, actor, "library_personal", workId!, "updated", input);
+      await tx.query("COMMIT"); return NextResponse.json({ id: workId });
+    }
     let current: WorkRow | undefined;
     if (command !== "create") {
       current = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR UPDATE", [workId, actor.familyId])).rows[0];

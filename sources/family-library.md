@@ -74,7 +74,8 @@ ascender bloqueos para actualizar actividad. Versiones esperadas por entidad.
   satisfactorias. Pendiente de ensayo remoto e integración.
 - Etapa 2b: duplicados, edición compartida y archivo/restauración implementados;
   pendiente de ensayo remoto e integración.
-- Las etapas 3–5 todavía no están implementadas.
+- Etapa 3: estados y estrellas personales implementados; pendiente de ensayo remoto
+  e integración. Las etapas 4–5 todavía no están implementadas.
 
 El número de migración se decide al integrar. La segunda rama rebasa y regenera
 SQL, journal y snapshot sobre main. No modificar migraciones ya integradas/aplicadas.
