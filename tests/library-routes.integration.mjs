@@ -20,7 +20,7 @@ async function start(port, enabled) {
 test("library gates and real authenticated family endpoints", { skip: !connectionString && "requires isolated PostgreSQL", timeout: 120_000 }, async (t) => {
   const disabled = await start(3340, false);
   try {
-    for (const [path, method] of [["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
+    for (const [path, method] of [["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"], ["/api/library/123", "PATCH"], ["/api/library/123/personal", "PUT"], ["/api/library/123/contributions", "POST"], ["/api/library/123/contributions/123", "PATCH"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
     assert.ok(!(await fetch(disabled.origin).then((value) => value.text())).includes('href="/biblioteca"'));
   } finally { disabled.server.kill(); }
   const { server, origin } = await start(3341, true);

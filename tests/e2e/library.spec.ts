@@ -105,6 +105,8 @@ test("mobile memories preserve partial dates, drafts, accessible spoilers and re
   await expect(show).toHaveAttribute("aria-expanded","false");
   await expect(page.getByText("Una tarde inolvidable 👨‍👩‍👧‍👦",{exact:true})).toBeHidden();
   await expect(page.getByText("Experiencia: 2015",{exact:true})).toBeVisible();
+  await page.setViewportSize({width:320,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   const result=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
   expect(result.violations).toEqual([]);
   await show.click();

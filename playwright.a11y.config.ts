@@ -18,7 +18,7 @@ export default defineConfig({
   },
   webServer: process.env.A11Y_BASE_URL ? undefined : {
     command: `npm run start -- -p ${port}`,
-    env: { ...process.env, BETTER_AUTH_URL: `http://localhost:${port}` },
+    env: { ...process.env, LIBRARY_ENABLED: "true", BETTER_AUTH_URL: `http://localhost:${port}` },
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
     timeout: 120_000,
