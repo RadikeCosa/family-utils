@@ -300,7 +300,12 @@ test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, ba
         const context = await browser.newContext({ storageState: scenario.storageState, viewport: { width, height: 900 } });
         const page = await context.newPage();
         for (const route of scenario.routes) {
-          await page.goto(route, { waitUntil: "networkidle" });
+          const apiPath = ({ "/familia": "/api/family", "/tareas": "/api/tasks", "/menus": "/api/meals", "/compras": "/api/shopping" } as Record<string, string>)[route];
+          const dataReady = apiPath ? page.waitForResponse((response) => new URL(response.url()).pathname === apiPath && response.ok()) : null;
+          await page.goto(route, { waitUntil: "domcontentloaded" });
+          if (dataReady) await dataReady;
+          await expect(page.locator("main")).toBeVisible();
+          if (route === "/tareas") await expect(page.getByLabel("Ir a una fecha")).toBeVisible();
           await expect(page).toHaveURL((url) => url.pathname === route);
           const results = await new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
