@@ -88,6 +88,26 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       assert.equal((await detail()).activityAt, before.activityAt, "edits and archive do not change activity");
       assert.equal((await request(outsider, `/${another}`, "PATCH", { action: "archive", expectedVersion: 1 })).status, 404);
     });
+    await t.test("personal values are independent, nullable and conflict-protected", async () => {
+      const activity = (await detail()).activityAt;
+      await ok(owner, `/${workId}/personal`, "PUT", { status: "finished", rating: 5, expectedVersion: 0 });
+      await ok(peer, `/${workId}/personal`, "PUT", { status: "pending", rating: null, expectedVersion: 0 });
+      const values = (await detail()).personal;
+      assert.equal(values.find((entry) => entry.memberId === owner.id).rating, 5);
+      assert.equal(values.find((entry) => entry.memberId === peer.id).status, "pending");
+      assert.equal((await request(admin, `/${workId}/personal`, "PUT", { status: "pending", rating: 9, expectedVersion: 0 })).status, 400);
+      const outcomes = await Promise.all([2,3].map((rating) => request(owner, `/${workId}/personal`, "PUT", { status: "finished", rating, expectedVersion: 1 })));
+      assert.deepEqual(outcomes.map((value) => value.status).sort(), [200,409]);
+      await ok(owner, `/${workId}/personal`, "PUT", { status: null, rating: null, expectedVersion: 2 });
+      assert.equal((await detail()).personal.find((entry) => entry.memberId === owner.id).rating, null);
+      assert.equal((await detail()).activityAt, activity);
+      assert.ok((await ok(peer, "?status=pending")).works.some((work) => work.id === workId));
+      assert.ok(!(await ok(owner, "?status=pending")).works.some((work) => work.id === workId));
+      const version = (await detail()).version;
+      await ok(peer, `/${workId}`, "PATCH", { action: "archive", expectedVersion: version });
+      assert.equal((await request(owner, `/${workId}/personal`, "PUT", { status: "pending", rating: 1, expectedVersion: 3 })).status, 403);
+      await ok(peer, `/${workId}`, "PATCH", { action: "restore", expectedVersion: version + 1 });
+    });
     await t.test("revoked device loses library access", async () => {
       await pool.query("UPDATE member_devices SET revoked_at=now() WHERE auth_user_id=$1", [peer.userId]);
       assert.equal((await request(peer)).status, 403);

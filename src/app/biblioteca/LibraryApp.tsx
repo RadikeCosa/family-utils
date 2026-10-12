@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { KIND_LABELS, PERSONAL_STATUSES, STATUS_LABELS, WORK_KINDS } from "@/lib/library/types";
 import { useLibrary } from "./useLibrary";
 import WorkForm from "./WorkForm";
+import PersonalForm from "./PersonalForm";
 import styles from "./library.module.css";
 function WorkIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v15M3 4c4-1 7 0 9 2 2-2 5-3 9-2v14c-4-1-7 0-9 2-2-2-5-3-9-2z" /></svg>; }
 export default function LibraryApp({ workId }: { workId?: string }) {
@@ -41,6 +42,9 @@ export default function LibraryApp({ workId }: { workId?: string }) {
       </div>
       {work.archivedAt && <p className={styles.notice}>Ficha archivada. Podés restaurarla o retirar tus aportes.</p>}
       {editing && !work.archivedAt && <section className={styles.card}><WorkForm key={`${data.familyId}:${data.currentMemberId}:${work.id}`} scope={`${data.familyId}:${data.currentMemberId}:${work.id}:edit-work`} work={work} busy={busy} duplicates={library.duplicates} onCancel={() => { setEditing(false); library.clearDuplicates(); }} onSave={async (input) => { if (!await library.mutate(`/${work.id}`, "PATCH", { ...input, action: "edit" })) return false; setEditing(false); return true; }} /></section>}
-      <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.referenceUrl && <p><a className={styles.reference} href={work.referenceUrl} target="_blank" rel="noopener noreferrer">Abrir enlace de referencia ↗</a></p>}</section></>}
+      <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.referenceUrl && <p><a className={styles.reference} href={work.referenceUrl} target="_blank" rel="noopener noreferrer">Abrir enlace de referencia ↗</a></p>}</section>
+      <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
+      <section className={styles.card}><h2>Las miradas de la familia</h2>{work.personal.length ? <ul>{work.personal.map((entry) => <li key={entry.memberId}><strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>: {entry.status ? STATUS_LABELS[entry.status] : "Sin estado"} · {entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</li>)}</ul> : <p>Todavía no hay estados ni valoraciones.</p>}</section>
+    </>}
   </main>;
 }

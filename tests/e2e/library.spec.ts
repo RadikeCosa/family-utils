@@ -74,3 +74,18 @@ test("mobile shared management: duplicate confirmation, edit and archive/restore
   await page.getByRole("button", { name: "Restaurar ficha" }).click();
   await expect(page.getByRole("button", { name: "Editar ficha", exact: true })).toBeVisible();
 });
+
+test("mobile personal experience can be set and cleared", async ({ page }) => {
+  const response = await api.post("/api/library", { data: { title: "Mi lectura", kind: "book" } });
+  const id = (await response.json()).id;
+  await page.goto(`/biblioteca/${id}`);
+  await page.getByRole("combobox", { name: "Mi estado", exact: true }).selectOption("in_progress");
+  await page.getByRole("combobox", { name: "Mi valoración", exact: true }).selectOption("4");
+  await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
+  await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
+  await expect(page.getByText("En curso · 4/5 estrellas", { exact: false })).toBeVisible();
+  await page.getByRole("combobox", { name: "Mi estado", exact: true }).selectOption("");
+  await page.getByRole("combobox", { name: "Mi valoración", exact: true }).selectOption("");
+  await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
+  await expect(page.getByText("Sin estado · Sin valorar", { exact: false })).toBeVisible();
+});
