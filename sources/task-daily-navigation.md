@@ -25,3 +25,15 @@ Las migraciones de índices son aditivas. Las excepciones futuras se conservan a
 ## Revisión de pendientes potenciales
 
 La sección plegada «Podrían seguir pendientes» permanece visible hasta seis meses. Durante los primeros 14 días desde la primera visita futura se registran únicamente contadores locales de visitas y aperturas, por familia y dispositivo, en `task-future-use:<familyId>`; no se guardan textos de tareas ni se envían estos datos. Si hubo visitas y ninguna apertura, revisar con el usuario reducir el horizonte a 30 días. No cambiarlo automáticamente.
+
+## Planificación futura
+
+Crear una tarea desde el futuro precarga su fecha. Una rutina futura no persiste ocasiones ordinarias hasta el día real. Para editar una previsión diaria, el PATCH de tarea recibe `scope: "occurrence"`, `expectedTaskVersion` y `forecast: { generationDate, responsibilityMemberId }`, además de los campos editados. Valida la programación bajo bloqueo de tarea, comprueba colisiones y materializa y edita la excepción en la misma transacción. Una previsión ya materializada o una versión obsoleta devuelve 409; no se sobrescribe.
+
+Las estimaciones de rutinas que conservan pendientes solo permiten editar la programación. La edición de serie mantiene su alcance desde Hoy y lo explica con ambas fechas en el formulario. No permite completar ni asumir una ocasión futura por API. Las excepciones se identifican por su generación original aunque cambie su vencimiento o responsabilidad.
+
+## Validación de la implementación
+
+Validado el 12/10/2026 contra PostgreSQL 18 aislado: lint, tipos, build, 36 pruebas unitarias/invariantes/planes de consulta, 35 pruebas de rutas, 34 casos móviles (iPhone y Android) y tres auditorías de accesibilidad. Incluye 175 tarjetas con continuidad visual, recuperación de cursores en ambas secciones, respuestas fuera de orden, medianoche, otra zona del dispositivo y sincronización rápida, lenta, fallida y con timeout.
+
+La prueba de rendimiento carga 29.208 ocasiones y eventos distribuidos en diez años. Confirma los índices de vencimiento, finalización y causa mediante EXPLAIN ANALYZE; informa tamaño de los índices y duración de inserción de auditoría. En la ejecución local, las consultas diarias midieron 0,044 y 0,024 ms; insertar los 29.208 eventos con índices tomó 288 ms. Un sync sin trabajo respondió en 10 ms, manteniendo filas, auditoría y revisión y sin esperar bloqueos explícitos de fila. Estas mediciones corresponden al servicio aislado de pruebas.

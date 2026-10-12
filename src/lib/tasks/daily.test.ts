@@ -45,6 +45,7 @@ test("daily expiry forecasts select only the requested day, never retroactive", 
   assert.equal(expectedOccurrenceDay(schedule, "2026-10-06", "2026-10-05", emptyHistory), null);
 });
 
+
 test("historical daylight saving transitions do not move the start into the prior day", () => {
   for (const day of ["2007-12-30", "2008-10-19", "2009-03-15"]) {
     const { startsAt, endsAt } = familyDayInterval(day);

@@ -4,6 +4,8 @@ import { getDb } from "@/db";
 import { auditEvents, members, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { getFamilyDay } from "@/lib/tasks/rules";
+import { expectedOccurrences, occurrenceValues } from "@/lib/tasks/schedule-server";
+import { isTaskDateInRange } from "@/lib/tasks/family-day";
 import { materializeInTransaction } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
@@ -45,6 +47,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   const expectedTaskVersion = body.expectedTaskVersion;
   const occurrenceId = typeof body.occurrenceId === "string" ? body.occurrenceId : "";
   const expectedOccurrenceVersion = body.expectedOccurrenceVersion;
+  const forecast = body.forecast && typeof body.forecast === "object" ? body.forecast as Record<string, unknown> : null;
+  if (forecast && (!isTaskDateInRange(forecast.generationDate, getFamilyDay()) || forecast.generationDate < getFamilyDay() || !(forecast.responsibilityMemberId === null || typeof forecast.responsibilityMemberId === "string"))) return NextResponse.json({ error: "La previsión no es válida." }, { status: 400 });
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const dueDateValue = body.dueDate == null || body.dueDate === "" ? null : body.dueDate;
@@ -75,7 +79,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     carryPolicy = body.carryPolicy;
     if (carryPolicy === "carry_forward" && !weekdays.length) return NextResponse.json({ error: "El pendiente conservado requiere días de repetición." }, { status: 400 });
   }
-  if (scope === "occurrence" && (!occurrenceId || !Number.isSafeInteger(expectedOccurrenceVersion))) {
+  if (scope === "occurrence" && !forecast && (!occurrenceId || !Number.isSafeInteger(expectedOccurrenceVersion))) {
     return NextResponse.json({ error: "La ocasión cambió. Actualizá y volvé a intentar." }, { status: 409 });
   }
 
@@ -102,12 +106,29 @@ export async function PATCH(request: Request, context: RouteContext) {
     const now = new Date();
 
     if (scope === "occurrence") {
-      const [occurrence] = await tx.select().from(occurrences)
+      if (dueDateValue && dueDateValue < getFamilyDay(now)) return { kind: "past-date" as const };
+      let occurrence: typeof occurrences.$inferSelect | undefined;
+      if (forecast) {
+        if (task.carryPolicy !== "expires_daily" || !task.repeatWeekdays?.length) return { kind: "conflict" as const };
+        const generationDate = forecast.generationDate as string;
+        const expected = (await expectedOccurrences(tx, member.familyId, getFamilyDay(now), generationDate, taskId))
+          .find((item) => item.generationDate === generationDate && item.responsibilityMemberId === forecast.responsibilityMemberId);
+        if (!expected) return { kind: "conflict" as const };
+        const responsibility = assignmentMode === "individual" ? assigneeIds[0] : null;
+        const [duplicate] = await tx.select({ id: occurrences.id }).from(occurrences).where(and(
+          eq(occurrences.taskId, taskId), eq(occurrences.generationDate, generationDate), ne(occurrences.status, "archived"),
+          responsibility ? eq(occurrences.responsibilityMemberId, responsibility) : isNull(occurrences.responsibilityMemberId),
+        )).limit(1);
+        if (duplicate) return { kind: "conflict" as const };
+        [occurrence] = await tx.insert(occurrences).values(occurrenceValues(expected)).returning();
+      } else {
+        [occurrence] = await tx.select().from(occurrences)
         .where(and(eq(occurrences.id, occurrenceId), eq(occurrences.taskId, taskId), eq(occurrences.familyId, member.familyId)))
         .for("update")
         .limit(1);
+      }
       if (!occurrence || occurrence.status !== "open") return { kind: "conflict" as const };
-      if (occurrence.version !== expectedOccurrenceVersion) return { kind: "conflict" as const };
+      if (!forecast && occurrence.version !== expectedOccurrenceVersion) return { kind: "conflict" as const };
       if (dueDateValue && dueDateValue < getFamilyDay(now)) return { kind: "past-date" as const };
       if (assignmentMode === "individual" && occurrence.generationDate) {
         const [duplicate] = await tx.select({ id: occurrences.id }).from(occurrences)
@@ -138,7 +159,7 @@ export async function PATCH(request: Request, context: RouteContext) {
           responsibilityMemberId,
           version: sql`${occurrences.version} + 1`,
         })
-        .where(and(eq(occurrences.id, occurrence.id), eq(occurrences.version, expectedOccurrenceVersion)))
+        .where(and(eq(occurrences.id, occurrence.id), eq(occurrences.version, occurrence.version)))
         .returning();
       if (!updatedTask.length || !updatedOccurrence) return { kind: "conflict" as const };
       await tx.insert(auditEvents).values({
@@ -151,7 +172,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         after: { ...updatedOccurrence, editorId: member.memberId, editedAt: now },
       });
       await materializeInTransaction(tx, member.familyId, now, taskId);
-    await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
+      await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
       return { kind: "ok" as const, task: updatedTask[0], occurrence: updatedOccurrence, shouldMaterialize: false };
     }
 

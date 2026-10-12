@@ -62,7 +62,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error("No se pudo conectar. Revisá tu conexión e intentá otra vez.");
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "No se pudo completar la acción.");
+  if (!response.ok) throw Object.assign(new Error(typeof body.error === "string" ? body.error : "No se pudo completar la acción."), { status: response.status });
   return body as T;
 }
 
@@ -279,6 +279,11 @@ export default function Home() {
 
   useEffect(() => { refreshPossible.current = loadPossible; return () => { refreshPossible.current = null; }; }, [loadPossible]);
 
+  useEffect(() => {
+    if (!editingTask || busy || syncState !== "synced" || tasks.some((task) => task.key === editingTask.key)) return;
+    queueMicrotask(() => { setEditingTask(null); setNotice("La programación cambió y esta ocasión ya no está disponible."); });
+  }, [tasks, editingTask, busy, syncState]);
+
   function navigateDate(day: string, follow = false) {
     if (!isTaskDateInRange(day, familyDay)) return;
     followsToday.current = follow;
@@ -392,6 +397,7 @@ export default function Home() {
       scope,
       expectedTaskVersion: editingTask.taskVersion,
       occurrenceId: editingTask.id,
+      forecast: editingTask.kind === "forecast" && scope === "occurrence" ? { generationDate: editingTask.generationDate, responsibilityMemberId: editingTask.responsibilityMemberId } : undefined,
       expectedOccurrenceVersion: editingTask.version,
       title: editTitle,
       description: editDescription,
@@ -406,7 +412,13 @@ export default function Home() {
       await requestJson(`/api/tasks/${editingTask.taskId}`, { method: "PATCH", body: JSON.stringify(body) });
       setEditingTask(null);
       await refresh(true);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo guardar la edición."); }
+    } catch (caught) {
+      if (caught instanceof Error && "status" in caught && caught.status === 409) {
+        setEditingTask(null);
+        setNotice("La tarea cambió mientras la editabas. Actualizamos la lista; abrila de nuevo para revisar los cambios.");
+        await refresh(true, undefined, true);
+      } else setError(caught instanceof Error ? caught.message : "No se pudo guardar la edición.");
+    }
     finally { setBusy(false); }
   }
 
@@ -441,7 +453,7 @@ export default function Home() {
 
   function openTaskEditor(task: Task) {
     setError("");
-    const scope = task.repeatWeekdays?.length ? "occurrence" : "future";
+    const scope = task.repeatWeekdays?.length && !(task.kind === "forecast" && task.carryPolicy === "carry_forward") ? "occurrence" : "future";
     setEditScope(scope);
     setEditAssignmentMode(scope === "occurrence" ? task.assignmentMode : task.taskAssignmentMode);
     setEditAssigneeIds(scope === "occurrence"
@@ -528,8 +540,8 @@ export default function Home() {
           {isToday && syncNotice && <p role="status">Puede faltar actualizar las tareas de hoy. {syncFailed && !manualRetryUsed && <button className={styles.filterButton} onClick={() => { if (family) void synchronize(family.id, generationModeRef.current, true); }}>Reintentar actualización</button>}</p>}
           {notice && <p role="status">{notice}</p>}
           <div className={styles.summaryGrid}>
-            <div className={`${styles.summaryCard} ${styles.summaryPrimary}`}><div className={styles.summaryIcon}>◷</div><div><span>{isToday ? "Para hoy" : "Pendientes de la fecha"}</span><strong>{openCount} <small>tareas</small></strong></div><div className={styles.progressTrack}><div style={{ width: `${openCount + completeCount ? Math.round(completeCount / (openCount + completeCount) * 100) : 0}%` }} /></div><p>Todo a su ritmo, sin apuro.</p></div>
-            <div className={styles.summaryCard}><div className={`${styles.summaryIcon} ${styles.iconGreen}`}>✓</div><div><span>Completadas en la fecha</span><strong>{completeCount} <small>tareas</small></strong></div><div className={styles.miniAvatars}><i>✓</i><i>✓</i><i>+</i></div><p>Buen trabajo en equipo.</p></div>
+            <div className={`${styles.summaryCard} ${styles.summaryPrimary}`}><div className={styles.summaryIcon}>◷</div><div><span>{isToday ? "Para hoy" : "Pendientes"}</span><strong>{openCount} <small>tareas</small></strong></div><div className={styles.progressTrack}><div style={{ width: `${openCount + completeCount ? Math.round(completeCount / (openCount + completeCount) * 100) : 0}%` }} /></div><p>Todo a su ritmo, sin apuro.</p></div>
+            <div className={styles.summaryCard}><div className={`${styles.summaryIcon} ${styles.iconGreen}`}>✓</div><div><span>Completadas</span><strong>{completeCount} <small>tareas</small></strong></div><div className={styles.miniAvatars}><i>✓</i><i>✓</i><i>+</i></div><p>Buen trabajo en equipo.</p></div>
             <div className={`${styles.summaryCard} ${styles.summaryQuote}`}><span className={styles.quoteMark}>“</span><p>Las pequeñas cosas<br />también cuentan.</p><span className={styles.quoteBy}>— para hoy</span></div>
           </div>
 
@@ -552,7 +564,7 @@ export default function Home() {
               const individualOwner = task.responsibilityMemberId ? members.find((person) => person.id === task.responsibilityMemberId)?.name : null;
               const people = task.assignmentMode === "individual"
                 ? individualOwner ?? "Responsable archivado"
-                : task.assignees.map((person) => person.name).join(", ") || (task.claimedByMemberId ? members.find((person) => person.id === task.claimedByMemberId)?.name ?? "Asumida" : "Disponible para asumir");
+                : task.assignees.map((person) => person.name).join(", ") || (task.claimedByMemberId ? members.find((person) => person.id === task.claimedByMemberId)?.name ?? "Asumida" : isToday ? "Disponible para asumir" : "Sin responsables asignados");
               const meta = task.dueDate ? `${task.dueDate === familyDay ? "Hoy" : task.dueDate}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}` : task.scheduledTime ? `Hoy · ${task.scheduledTime}` : "Sin fecha";
               const tone = ["lavender", "mint", "peach"][index % 3];
               return <article className={`${styles.taskCard} ${isComplete ? styles.taskDone : ""}`} key={task.key ?? task.id} data-task-key={task.key ?? task.id}>
@@ -564,7 +576,7 @@ export default function Home() {
                 <div className={styles.taskInfo}><h3>{task.title}</h3><p>{meta}{isComplete && task.completedAt ? ` · Completada el ${getFamilyDay(new Date(task.completedAt))}` : ""}</p><span className={styles.taskPeople}>{isComplete ? `Hecha por ${members.find((person) => person.id === task.completedByMemberId)?.name ?? "un integrante"}` : people}</span>{task.editedByName && <small className={styles.editedBy}>Editada por {task.editedByName}</small>}</div>
                 {available && <button className={styles.claimButton} disabled={busy} onClick={() => void performOccurrence(task, "claim")}>Asumir</button>}
                 {isComplete && <span className={styles.taskStatus}>Completada</span>}
-                {!past && task.kind !== "forecast" && !isComplete && task.status === "open" && task.taskStatus === "active" && <button className={styles.cardMore} aria-label={`Editar: ${task.title}`} onClick={() => openTaskEditor(task)}>Editar</button>}
+                {!past && !(isToday && task.kind === "forecast") && !isComplete && task.status === "open" && task.taskStatus === "active" && <button className={styles.cardMore} aria-label={`Editar: ${task.title}`} onClick={() => openTaskEditor(task)}>Editar</button>}
                 {isToday && task.kind !== "forecast" && <button className={styles.cardMore} aria-label={`Más opciones: ${task.title}`} onClick={() => setTaskOptions(task)}>···</button>}
               </article>;
             })}
@@ -597,7 +609,7 @@ export default function Home() {
       {showCreate && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowCreate(false); }}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="create-title"><button className={styles.modalClose} onClick={() => setShowCreate(false)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>TAREAS Y RUTINAS</p><h2 id="create-title">Una cosa a la vez</h2><p className={styles.modalIntro}>Empezá con el nombre. Lo demás es opcional.</p><form className={styles.taskForm} onSubmit={createTask}>
         <label>Nombre<input name="title" required maxLength={160} placeholder="Por ejemplo, poner la mesa" /></label>
         <label>Nota <span>(opcional)</span><textarea name="description" rows={2} maxLength={3000} placeholder="Un detalle útil para quien la haga" /></label>
-        <div className={styles.formRow}><label>Fecha <span>(opcional)</span><input name="dueDate" type="date" /></label><label>Horario <span>(opcional)</span><input name="scheduledTime" type="time" /></label></div>
+        <div className={styles.formRow}><label>Fecha <span>(opcional)</span><input name="dueDate" type="date" defaultValue={selectedDate > familyDay ? selectedDate : ""} min={familyDay} max={bounds.latest} /></label><label>Horario <span>(opcional)</span><input name="scheduledTime" type="time" /></label></div>
         <label>Responsables <span>(opcional)</span><select name="assignmentMode" defaultValue="shared"><option value="shared">Tarea compartida o disponible</option><option value="individual">Una tarea por persona elegida</option></select></label>
         <div className={styles.assigneeChoices}>{members.map((person) => <label key={person.id}><input type="checkbox" name="assignee" value={person.id} /> {person.name}</label>)}</div>
         <fieldset><legend>Repetición <span>(opcional)</span></legend><div className={styles.weekdayChoices}>{weekdayOptions.map(([day,label]) => <label key={day}><input type="checkbox" name="weekday" value={day} />{label}</label>)}</div></fieldset>
@@ -606,10 +618,11 @@ export default function Home() {
       </form></section></div>}
 
       {editingTask && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingTask(null); }}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="edit-title"><button className={styles.modalClose} onClick={() => setEditingTask(null)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>EDITAR TAREA O RUTINA</p><h2 id="edit-title">{editingTask.title}</h2><p className={styles.modalIntro}>Los cambios quedan registrados con quién los hizo y cuándo.</p><form className={styles.taskForm} onSubmit={saveTaskEdit}>
-        {editingTask.repeatWeekdays?.length ? <label>Aplicar cambios<select value={editScope} onChange={(event) => changeEditScope(event.target.value as "occurrence" | "future")}><option value="occurrence">Solo esta ocasión</option><option value="future">Esta programación desde hoy</option></select></label> : <p className={styles.modalIntro}>Se actualizará esta tarea desde hoy.</p>}
+        {editingTask.repeatWeekdays?.length && !(editingTask.kind === "forecast" && editingTask.carryPolicy === "carry_forward") ? <label>Aplicar cambios<select value={editScope} onChange={(event) => changeEditScope(event.target.value as "occurrence" | "future")}><option value="occurrence">Solo esta ocasión</option><option value="future">Programación desde hoy</option></select></label> : <p className={styles.modalIntro}>Se actualizará la programación desde hoy.</p>}
+        {editScope === "future" && <p className={styles.modalIntro}>Los cambios aplican desde hoy, {labelTaskDay(familyDay)}{selectedDate > familyDay ? `, no desde ${labelTaskDay(selectedDate)}` : ""}.</p>}
         <label>Nombre<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} required maxLength={160} /></label>
         <label>Nota <span>(opcional)</span><textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} rows={2} maxLength={3000} /></label>
-        <div className={styles.formRow}><label>Fecha <span>(opcional)</span><input value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} type="date" /></label><label>Horario <span>(opcional)</span><input value={editScheduledTime} onChange={(event) => setEditScheduledTime(event.target.value)} type="time" /></label></div>
+        <div className={styles.formRow}><label>Fecha <span>(opcional)</span><input value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} type="date" max={bounds.latest} /></label><label>Horario <span>(opcional)</span><input value={editScheduledTime} onChange={(event) => setEditScheduledTime(event.target.value)} type="time" /></label></div>
         <label>Responsables<select value={editAssignmentMode} onChange={(event) => { const value = event.target.value as "shared" | "individual"; setEditAssignmentMode(value); if (value === "individual" && editScope === "occurrence" && editAssigneeIds.length > 1) setEditAssigneeIds((current) => current.slice(0, 1)); }}><option value="shared">Compartida o disponible</option><option value="individual">Una ocasión por persona</option></select></label>
         <div className={styles.assigneeChoices}>{members.map((person) => <label key={person.id}><input type="checkbox" checked={editAssigneeIds.includes(person.id)} onChange={() => toggleEditAssignee(person.id)} /> {person.name}</label>)}</div>
         {editAssignmentMode === "individual" && editScope === "occurrence" && <p className={styles.modalIntro}>Para esta ocasión elegí una sola persona.</p>}
