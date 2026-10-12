@@ -1,0 +1,86 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import pg from "pg";
+const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATABASE_URL required");
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function start(port, enabled) {
+  const origin = `http://localhost:${port}`;
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, LIBRARY_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "library-test-only-secret-not-production", CODE_PEPPER: "library-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
+  for (let i = 0; ; i++) {
+    if (server.exitCode !== null) throw new Error("Library test server failed");
+    try { if ((await fetch(origin)).ok) break; } catch { /* Wait for listening. */ }
+    if (i > 100) { server.kill(); throw new Error("Server startup timeout"); }
+    await delay(100);
+  }
+  return { origin, server };
+}
+test("library gates and real authenticated family endpoints", { skip: !connectionString && "requires isolated PostgreSQL", timeout: 120_000 }, async (t) => {
+  const disabled = await start(3340, false);
+  try {
+    for (const [path, method] of [["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
+    assert.ok(!(await fetch(disabled.origin).then((value) => value.text())).includes('href="/biblioteca"'));
+  } finally { disabled.server.kill(); }
+  const { server, origin } = await start(3341, true);
+  const pool = new pg.Pool({ connectionString });
+  const users = [], families = [];
+  async function family() { const { rows: [row] } = await pool.query("INSERT INTO families(name) VALUES($1) RETURNING id", [`library-${randomUUID()}`]); families.push(row.id); return row.id; }
+  async function identity(familyId, role = "member") {
+    const response = await fetch(`${origin}/api/access/prepare`, { method: "POST", headers: { Origin: origin, "x-forwarded-for": `192.0.2.${users.length + 51}` } });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
+    const session = await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: cookie } }).then((value) => value.json()); users.push(session.user.id);
+    const { rows: [member] } = await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,$2,$3) RETURNING id", [familyId, `Test ${users.length}`, role]);
+    await pool.query("INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)", [member.id, session.user.id]);
+    return { cookie, id: member.id, userId: session.user.id };
+  }
+  async function request(person, path = "", method = "GET", body, extra = {}) {
+    const response = await fetch(`${origin}/api/library${path}`, { method, headers: { Cookie: person?.cookie ?? "", Origin: origin, ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, etag: response.headers.get("etag"), body: response.status === 304 ? null : await response.json() };
+  }
+  async function ok(person, path, method, body) { const result = await request(person, path, method, body); assert.ok([200, 201].includes(result.status), JSON.stringify(result)); return result.body; }
+  try {
+    const familyId = await family(), owner = await identity(familyId), peer = await identity(familyId), admin = await identity(familyId, "administrator"), outsider = await identity(await family());
+    let workId;
+    const detail = async () => (await ok(owner, `/${workId}`)).work;
+    await t.test("anonymous profiles participate and family boundaries hold", async () => {
+      assert.equal((await request(null)).status, 403);
+      assert.ok((await fetch(origin).then((value) => value.text())).includes('href="/biblioteca"'));
+      workId = (await ok(owner, "", "POST", { title: "Canción del verano", creator: "María", kind: "music" })).id;
+      assert.equal((await detail()).title, "Canción del verano");
+      assert.equal((await ok(peer)).works.length, 1);
+      assert.equal((await ok(outsider)).works.length, 0);
+      assert.equal((await request(outsider, `/${workId}`)).status, 404);
+      assert.equal((await request(owner, "", "POST", { title: "x", kind: "invalid" })).status, 400);
+      assert.equal((await request(owner, "", "POST", { title: "x", kind: "book", referenceUrl: "javascript:alert(1)" })).status, 400);
+      assert.equal((await ok(owner, "?q=cancion")).works.length, 1);
+      assert.equal((await ok(owner, "?q=MARIA")).works.length, 1);
+      const state = await request(owner);
+      assert.equal((await request(owner, "", "GET", undefined, { "If-None-Match": state.etag })).status, 304);
+    });
+    await t.test("collection keyset pages remain usable when revision changes", async () => {
+      await pool.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,created_by_member_id,updated_by_member_id) SELECT $1,'Paged '||n,'paged '||n,'book',$2,$2 FROM generate_series(1,110) n", [familyId, owner.id]);
+      const first = await ok(owner, "?kind=book"); assert.equal(first.works.length, 50); assert.ok(first.nextCursor);
+      await ok(peer, "", "POST", { title: "New activity", kind: "movie" });
+      const second = await ok(owner, `?kind=book&cursor=${encodeURIComponent(first.nextCursor)}`); assert.equal(second.works.length, 50);
+      assert.equal(new Set([...first.works, ...second.works].map((work) => work.id)).size, 100);
+      assert.equal((await request(owner, `?kind=music&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
+      assert.equal((await request(outsider, `?kind=book&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
+      const third = await ok(owner, `?kind=book&cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.works.length, 10); assert.equal(third.nextCursor, null);
+    });
+    await t.test("revoked device loses library access", async () => {
+      await pool.query("UPDATE member_devices SET revoked_at=now() WHERE auth_user_id=$1", [peer.userId]);
+      assert.equal((await request(peer)).status, 403);
+      assert.equal((await request(peer, "", "POST", { title: "Denied", kind: "book" })).status, 403);
+    });
+    void admin;
+  } finally {
+    server.kill();
+    for (const table of ["library_companions", "library_contributions", "library_personal", "library_works", "audit_events"]) await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
+    if (families.length) await pool.query("DELETE FROM families WHERE id=ANY($1::uuid[])", [families]);
+    if (users.length) await pool.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [users]);
+    await pool.end();
+  }
+});

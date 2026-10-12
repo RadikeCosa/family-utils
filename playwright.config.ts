@@ -20,6 +20,6 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 45_000,
-    env: { BETTER_AUTH_URL: baseURL },
+    env: { BETTER_AUTH_URL: baseURL, LIBRARY_ENABLED: "true" },
   },
 });
