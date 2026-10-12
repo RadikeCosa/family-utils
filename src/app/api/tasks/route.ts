@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   }
 
   const editor = alias(members, "task_editor");
-  const data = await getDb()
+  const data = await tx
     .select({
       id: occurrences.id,
       taskId: tasks.id,
@@ -196,7 +196,7 @@ export async function POST(request: Request) {
   if (!title || title.length > 160 || (description && description.length > 3000)) {
     return NextResponse.json({ error: "Task name is required (160 characters max)" }, { status: 400 });
   }
-  if (dueDate !== null && !validDate(dueDate)) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+  if (dueDate !== null && (!isTaskDateInRange(dueDate, getFamilyDay()) || dueDate < getFamilyDay())) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   if (scheduledTime !== null && (typeof scheduledTime !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduledTime))) {
     return NextResponse.json({ error: "Invalid time" }, { status: 400 });
   }

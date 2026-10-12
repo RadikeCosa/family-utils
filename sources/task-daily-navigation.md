@@ -25,3 +25,9 @@ Las migraciones de índices son aditivas. Las excepciones futuras se conservan a
 ## Revisión de pendientes potenciales
 
 La sección plegada «Podrían seguir pendientes» permanece visible hasta seis meses. Durante los primeros 14 días desde la primera visita futura se registran únicamente contadores locales de visitas y aperturas, por familia y dispositivo, en `task-future-use:<familyId>`; no se guardan textos de tareas ni se envían estos datos. Si hubo visitas y ninguna apertura, revisar con el usuario reducir el horizonte a 30 días. No cambiarlo automáticamente.
+
+## Planificación futura
+
+Crear una tarea desde el futuro precarga su fecha. Una rutina futura no persiste ocasiones ordinarias hasta el día real. Para editar una previsión diaria, el PATCH de tarea recibe `scope: "occurrence"`, `expectedTaskVersion` y `forecast: { generationDate, responsibilityMemberId }`, además de los campos editados. Valida la programación bajo bloqueo de tarea, comprueba colisiones y materializa y edita la excepción en la misma transacción. Una previsión ya materializada o una versión obsoleta devuelve 409; no se sobrescribe.
+
+Las estimaciones de rutinas que conservan pendientes solo permiten editar la programación. La edición de serie mantiene su alcance desde Hoy y lo explica con ambas fechas en el formulario. No permite completar ni asumir una ocasión futura por API. Las excepciones se identifican por su generación original aunque cambie su vencimiento o responsabilidad.

@@ -139,6 +139,68 @@ test("daily task routes", { skip: !connectionString && "requires isolated Postgr
       assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count, "1");
     });
 
+    await t.test("future routine creation stays virtual and single-occasion edits persist once", async () => {
+      const date = addTaskDays(today, 7);
+      const create = await fetch(`${origin}/api/tasks`, { method: "POST", headers, body: JSON.stringify({ title: "Future routine", dueDate: date, repeatWeekdays: [0,1,2,3,4,5,6], assignmentMode: "shared", assigneeIds: [], carryPolicy: "expires_daily" }) });
+      assert.equal(create.status, 201, await create.clone().text());
+      const task = (await create.json()).task;
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count, "0");
+      const forecast = (await get(`?date=${date}`).then((response) => response.json())).tasks.find((item) => item.taskId === task.id);
+      assert.equal(forecast.kind, "forecast");
+      const body = { scope: "occurrence", expectedTaskVersion: task.version, forecast: { generationDate: date, responsibilityMemberId: null }, title: "Exception", description: "Only this date", dueDate: date, scheduledTime: "10:00", assignmentMode: "shared", assigneeIds: [] };
+      const edit = () => fetch(`${origin}/api/tasks/${task.id}`, { method: "PATCH", headers, body: JSON.stringify(body) });
+      const concurrent = await Promise.all([edit(), edit()]);
+      assert.deepEqual(concurrent.map((response) => response.status).sort(), [200,409]);
+      const result = (await get(`?date=${date}`).then((response) => response.json())).tasks.filter((item) => item.taskId === task.id);
+      assert.equal(result.length, 1); assert.equal(result[0].kind, "occurrence"); assert.equal(result[0].title, "Exception");
+      assert.equal(result[0].key, forecast.key);
+      const invalidAction = await fetch(`${origin}/api/tasks/${task.id}/occurrences/${result[0].id}`, { method: "PATCH", headers, body: JSON.stringify({ action: "complete", expectedVersion: result[0].version }) });
+      assert.equal(invalidAction.status, 403);
+      await sync();
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count, "1");
+    });
+
+    await t.test("moving an exception suppresses its original forecast and recovery mode respects it", async () => {
+      const date = addTaskDays(today, 8), movedDate = addTaskDays(today, 9);
+      const created = await fetch(`${origin}/api/tasks`, { method: "POST", headers, body: JSON.stringify({ title: "Movable", dueDate: date, repeatWeekdays: [0,1,2,3,4,5,6] }) }).then((response) => response.json());
+      const response = await fetch(`${origin}/api/tasks/${created.task.id}`, { method: "PATCH", headers, body: JSON.stringify({ scope: "occurrence", expectedTaskVersion: created.task.version, forecast: { generationDate: date, responsibilityMemberId: null }, title: "Moved exception", dueDate: movedDate, assignmentMode: "shared", assigneeIds: [] }) });
+      assert.equal(response.status, 200, await response.text());
+      assert.equal((await get(`?date=${date}`).then((response) => response.json())).tasks.filter((item) => item.taskId === created.task.id).length, 0);
+      const future = await get(`?date=${movedDate}`).then((response) => response.json());
+      assert.equal(future.tasks.filter((item) => item.taskId === created.task.id && item.title === "Moved exception").length, 1);
+      // A separate ordinary occasion of the next day remains valid.
+      await startServer("legacy_today");
+      await get();
+      assert.equal((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [created.task.id])).rows[0].count, "1");
+      await startServer("explicit_sync");
+    });
+
+    await t.test("omissions stay suppressed while a series edit replaces obsolete occasions", async () => {
+      const created = await fetch(`${origin}/api/tasks`, { method: "POST", headers, body: JSON.stringify({ title: "Omitted", dueDate: today, repeatWeekdays: [0,1,2,3,4,5,6] }) }).then((response) => response.json());
+      const { rows: [occasion] } = await pool.query("SELECT * FROM task_occurrences WHERE task_id=$1 AND generation_date=$2", [created.task.id, today]);
+      assert.equal((await fetch(`${origin}/api/tasks/${created.task.id}/occurrences/${occasion.id}`, { method: "PATCH", headers, body: JSON.stringify({ action: "skip", expectedVersion: occasion.version }) })).status, 200);
+      const before = await state(); await sync(); assert.deepEqual(await state(), before);
+      assert.equal((await get(`?date=${today}`).then((response) => response.json())).tasks.filter((item) => item.taskId === created.task.id).length, 0);
+      const regular = await fetch(`${origin}/api/tasks`, { method: "POST", headers, body: JSON.stringify({ title: "Old series", dueDate: today, repeatWeekdays: [0,1,2,3,4,5,6] }) }).then((response) => response.json());
+      assert.equal((await fetch(`${origin}/api/tasks/${regular.task.id}`, { method: "PATCH", headers, body: JSON.stringify({ scope: "future", expectedTaskVersion: regular.task.version, title: "New series", dueDate: today, assignmentMode: "shared", assigneeIds: [], repeatWeekdays: [0,1,2,3,4,5,6], carryPolicy: "expires_daily" }) })).status, 200);
+      const rows = (await get(`?date=${today}`).then((response) => response.json())).tasks.filter((item) => item.taskId === regular.task.id);
+      assert.equal(rows.length, 1); assert.equal(rows[0].title, "New series");
+    });
+
+    await t.test("failed exception edit rolls back its materialization, version and audit", async () => {
+      const date = addTaskDays(today, 12);
+      const created = await fetch(`${origin}/api/tasks`, { method: "POST", headers, body: JSON.stringify({ title: "Rollback exception", dueDate: date, repeatWeekdays: [0,1,2,3,4,5,6] }) }).then((response) => response.json());
+      const before = await state();
+      await pool.query(`CREATE FUNCTION fail_daily_exception() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.task_id = '${created.task.id}'::uuid AND NEW.title_snapshot = 'Fail this edit' THEN RAISE EXCEPTION 'test-only forced exception failure'; END IF; RETURN NEW; END $$`);
+      await pool.query("CREATE TRIGGER fail_daily_exception BEFORE UPDATE ON task_occurrences FOR EACH ROW EXECUTE FUNCTION fail_daily_exception()");
+      try {
+        const response = await fetch(`${origin}/api/tasks/${created.task.id}`, { method: "PATCH", headers, body: JSON.stringify({ scope: "occurrence", expectedTaskVersion: created.task.version, forecast: { generationDate: date, responsibilityMemberId: null }, title: "Fail this edit", dueDate: date, assignmentMode: "shared", assigneeIds: [] }) });
+        assert.equal(response.status, 500);
+        assert.deepEqual(await state(), before);
+        assert.equal((await pool.query("SELECT version FROM tasks WHERE id=$1", [created.task.id])).rows[0].version, created.task.version);
+      } finally { await pool.query("DROP TRIGGER fail_daily_exception ON task_occurrences"); await pool.query("DROP FUNCTION fail_daily_exception()"); }
+    });
+
   } finally {
     server?.kill("SIGTERM");
     if (server && server.exitCode === null) await new Promise((resolve) => server.once("exit", resolve));

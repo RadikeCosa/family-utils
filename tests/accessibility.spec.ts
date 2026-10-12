@@ -288,6 +288,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
 });
 
 test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, baseURL }) => {
+  test.setTimeout(Math.max(120_000, widths.length * 30_000));
   const fixture = await createFixture(baseURL!, browser);
   const failures: string[] = [];
   try {
@@ -327,4 +328,32 @@ test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, ba
   } finally {
     await removeFixture(fixture);
   }
+});
+
+test("navegación diaria accesible en pasado y futuro", async ({ browser, baseURL }) => {
+  const fixture = await createFixture(baseURL!, browser);
+  try {
+    const page = await fixture.context.newPage();
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
+    const day = new Date(`${today}T12:00:00Z`);
+    for (const offset of [-1, 7]) {
+      day.setTime(Date.parse(`${today}T12:00:00Z`) + offset * 86400_000);
+      for (const width of [320, 375, 820]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${baseURL}/tareas?fecha=${day.toISOString().slice(0, 10)}`, { waitUntil: "networkidle" });
+        const date = page.getByLabel("Ir a una fecha");
+        await expect(date).toBeVisible();
+        await date.focus();
+        await expect(date).toBeFocused();
+        for (const name of ["Día anterior", "Día siguiente", "Hoy"]) {
+          const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+          expect(box?.height).toBeGreaterThanOrEqual(44);
+          expect(box?.width).toBeGreaterThanOrEqual(44);
+        }
+        expect(await inspectControls(page)).toEqual([]);
+        expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
+      }
+    }
+  } finally { await removeFixture(fixture); }
 });

@@ -40,6 +40,14 @@ llega ese día. Si ayer quedó pendiente, hoy continúa la misma ocasión; no se
 crea una segunda. Una ocasión completada se muestra como hecha durante el día
 familiar de Buenos Aires y después permanece en el historial.
 
+Las tareas permiten navegar diez años hacia atrás y seis meses hacia adelante.
+Hoy sigue automáticamente el día de Buenos Aires; elegir una fecha la fija.
+El pasado consulta registros existentes y es de lectura. Una finalización
+posterior al vencimiento aparece también como actividad en el día de cierre.
+El futuro muestra previsiones sin escribir en la base y separa los pendientes
+potenciales. Las excepciones futuras se guardan al editar solo esa ocasión;
+las acciones de completar, asumir y omitir se realizan desde Hoy.
+
 Editar permite distinguir la ocasión actual de la programación futura.
 Finalizar una rutina detiene las ocasiones futuras y conserva los pendientes.
 Archivar además oculta las tareas pendientes de las vistas activas. Restaurar

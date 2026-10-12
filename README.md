@@ -61,6 +61,7 @@ gane.
 - [Definición del producto](sources/product-brief.md)
 - [Plan histórico de implementación](sources/next-steps.md)
 - [Compras: contratos, migración y operación](sources/shopping-lists.md)
+- [Tareas: navegación diaria, sincronización y recuperación](sources/task-daily-navigation.md)
 
 Los nombres, calendarios y asignaciones de una familia son configuración
 privada; la documentación del repositorio usa roles genéricos y ejemplos

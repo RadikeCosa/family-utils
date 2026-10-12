@@ -50,16 +50,15 @@ export function labelTaskDay(day: string) {
 export function familyDayInterval(day: string): { startsAt: Date; endsAt: Date } {
   const midnight = (date: string) => {
     const target = Date.parse(`${date}T00:00:00Z`);
-    let instant = target;
-    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: FAMILY_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const parts = formatter.formatToParts(new Date(instant));
-      const part = (type: string) => parts.find((item) => item.type === type)?.value;
-      const represented = Date.parse(`${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}Z`);
-      if (represented === target) break;
-      instant += target - represented;
+    let lower = target - 36 * 60 * 60 * 1000;
+    let upper = target + 36 * 60 * 60 * 1000;
+    // First instant belonging to the civil day, including historical midnight DST gaps.
+    while (upper - lower > 1) {
+      const middle = Math.floor((lower + upper) / 2);
+      if (getFamilyDay(new Date(middle)) < date) lower = middle;
+      else upper = middle;
     }
-    return new Date(instant);
+    return new Date(upper);
   };
   return { startsAt: midnight(day), endsAt: midnight(addTaskDays(day, 1)) };
 }

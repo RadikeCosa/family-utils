@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { expect, request as playwrightRequest, test, type APIRequestContext } from "@playwright/test";
 import pg from "pg";
-import { getFamilyDay, taskListEtag } from "../../src/lib/tasks/family-day";
+import { addTaskDays, getFamilyDay, taskListEtag } from "../../src/lib/tasks/family-day";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) {
@@ -126,7 +126,7 @@ test("a completed routine moves to history at Buenos Aires midnight", async ({ p
   await expect(page.getByText("Hecha por Test member")).toHaveCount(0);
 });
 
-async function mockDaily(page: import("@playwright/test").Page, sync: "fast" | "slow" | "fail" = "fast") {
+async function mockDaily(page: import("@playwright/test").Page, sync: "fast" | "slow" | "fail" | "timeout" = "fast") {
   await page.clock.install({ time: new Date("2026-10-12T15:00:00Z") });
   let generated = false;
   let syncCalls = 0;
@@ -134,6 +134,7 @@ async function mockDaily(page: import("@playwright/test").Page, sync: "fast" | "
     const url = new URL(route.request().url());
     if (url.pathname === "/api/tasks/sync") {
       syncCalls++;
+      if (sync === "timeout") return;
       if (sync === "fail") return route.abort("failed");
       if (sync === "slow") await new Promise((resolve) => setTimeout(resolve, 1200));
       generated = true;
@@ -203,4 +204,114 @@ test("family date stays in Buenos Aires on a device in Auckland", async ({ brows
     await expect(page.getByLabel("Ir a una fecha")).toHaveValue("2026-10-12");
     await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
   } finally { await context.close(); }
+});
+
+test("future creation and single-occasion editing persist an exception without duplicating its forecast", async ({ page }, testInfo) => {
+  const today = getFamilyDay();
+  const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 7);
+  const date = next.toISOString().slice(0, 10);
+  const title = `Future UI ${randomUUID().slice(0, 6)}`;
+  await page.goto(`/tareas?fecha=${date}`);
+  await page.getByRole("button", { name: "Nueva tarea" }).click();
+  const create = page.getByRole("dialog");
+  await expect(create.getByLabel("Fecha", { exact: false })).toHaveValue(date);
+  await create.getByLabel("Nombre", { exact: true }).fill(title);
+  for (const input of await create.locator('input[name="weekday"]').all()) await input.check();
+  await create.getByRole("button", { name: "Crear tarea" }).click();
+  await expect(create).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  const { rows: [task] } = await pool.query("SELECT id,title FROM tasks WHERE family_id=$1 AND title=$2", [familyId, title]);
+  expect((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count).toBe("0");
+  await page.screenshot({ path: testInfo.outputPath("future-tasks.png"), fullPage: true });
+  await page.getByRole("button", { name: `Editar: ${title}`, exact: true }).click();
+  const edit = page.getByRole("dialog");
+  await edit.getByLabel("Aplicar cambios").selectOption("future");
+  await expect(edit.getByText(/Los cambios aplican desde hoy.*no desde/)).toBeVisible();
+  await edit.getByLabel("Aplicar cambios").selectOption("occurrence");
+  await edit.getByLabel("Nombre", { exact: true }).fill(`${title} excepción`);
+  await edit.getByRole("button", { name: "Guardar cambios" }).click();
+  await expect(edit).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: `${title} excepción`, exact: true })).toHaveCount(1);
+  expect((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count).toBe("1");
+  expect((await pool.query("SELECT title FROM tasks WHERE id=$1", [task.id])).rows[0].title).toBe(title);
+  await expect(page.getByRole("button", { name: new RegExp(`Marcar ${title}`) })).toHaveCount(0);
+});
+
+test("slow sync delays its notice and then replaces the forecast", async ({ page }) => {
+  await mockDaily(page, "slow");
+  await page.goto("/tareas");
+  await expect(page.getByText("Pendiente de actualizar", { exact: true })).toBeVisible();
+  await expect(page.getByText("Puede faltar actualizar las tareas de hoy.", { exact: false })).toHaveCount(0);
+  await page.clock.fastForward(850);
+  await expect(page.getByText("Puede faltar actualizar las tareas de hoy.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
+  await expect(page.getByText("Puede faltar actualizar las tareas de hoy.", { exact: false })).toHaveCount(0);
+});
+
+test("sync timeout keeps the reading usable and automatic retries respect the interval", async ({ page }) => {
+  const syncCalls = await mockDaily(page, "timeout");
+  await page.goto("/tareas");
+  await expect(page.getByText("Pendiente de actualizar", { exact: true })).toBeVisible();
+  await page.clock.fastForward(5_100);
+  await expect(page.getByRole("button", { name: "Reintentar actualización" })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByLabel("Ir a una fecha")).toBeEnabled();
+  expect(syncCalls()).toBe(1);
+  await page.getByRole("button", { name: "Reintentar actualización" }).click();
+  await page.clock.fastForward(5_100);
+  await expect(page.getByRole("button", { name: "Reintentar actualización" })).toHaveCount(0);
+  expect(syncCalls()).toBe(2);
+});
+
+
+test("175 daily cards preserve loaded pages and scroll after a revision", async ({ page }) => {
+  const date = addTaskDays(getFamilyDay(), -20);
+  await pool.query(`WITH created AS (
+    INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id)
+    SELECT $1, 'Scroll ' || n, $2, $2 FROM generate_series(1,175) n RETURNING id,title
+  ) INSERT INTO task_occurrences(task_id,family_id,due_date,title_snapshot,assignment_mode_snapshot)
+    SELECT id,$1,$3,title,'shared' FROM created`, [familyId, memberId, date]);
+  await page.goto(`/tareas?fecha=${date}`);
+  const cards = page.locator("[data-task-key]");
+  await expect(cards).toHaveCount(50);
+  for (const count of [100, 150, 175]) {
+    await page.getByRole("button", { name: "Cargar más", exact: true }).click();
+    await expect(cards).toHaveCount(count);
+  }
+  const anchor = cards.nth(85);
+  await anchor.scrollIntoViewIfNeeded();
+  const before = await anchor.boundingBox();
+  const key = await anchor.getAttribute("data-task-key");
+  const title = await anchor.getByRole("heading").innerText();
+  await pool.query("UPDATE task_occurrences SET title_snapshot=title_snapshot || ' actualizado' WHERE family_id=$1 AND due_date=$2", [familyId, date]);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(anchor.getByRole("heading")).toHaveText(`${title} actualizado`);
+  await expect(cards).toHaveCount(175);
+  await expect.poll(async () => Math.abs(((await anchor.boundingBox())?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(3);
+  expect(await anchor.getAttribute("data-task-key")).toBe(key);
+});
+
+test("a delayed response from the previous date cannot replace the selected day", async ({ page }) => {
+  await mockDaily(page);
+  let release!: () => void;
+  let arrived!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const requested = new Promise<void>((resolve) => { arrived = resolve; });
+  await page.route("**/api/tasks?date=2026-10-13", async (route) => {
+    arrived();
+    await held;
+    await route.fallback();
+  });
+  await page.goto("/tareas");
+  await expect(page.getByRole("button", { name: "Marcar Calendario compartido como hecha" })).toBeVisible();
+  await page.getByLabel("Ir a una fecha").fill("2026-10-13");
+  await requested;
+  await page.getByLabel("Ir a una fecha").fill("2026-10-14");
+  await expect(page.locator("[data-task-key] p")).toContainText("2026-10-14");
+  const oldResponse = page.waitForResponse((response) => response.url().endsWith("date=2026-10-13"));
+  release();
+  await oldResponse;
+  await expect(page.getByLabel("Ir a una fecha")).toHaveValue("2026-10-14");
+  await expect(page.locator("[data-task-key] p")).toContainText("2026-10-14");
 });
