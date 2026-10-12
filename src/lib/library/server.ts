@@ -4,7 +4,7 @@ import { getPool } from "@/db";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
 import { libraryEnabled } from "./config";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor";
-import { normalizeLibraryText, personalInput, UUID_PATTERN, workInput } from "./rules";
+import { contributionInput, normalizeLibraryText, personalInput, UUID_PATTERN, workInput } from "./rules";
 import { PERSONAL_STATUSES, WORK_KINDS, type LibraryWork, type WorkKind, type PersonalEntry } from "./types";
 
 class LibraryError extends Error {
@@ -67,8 +67,18 @@ export async function readLibrary(request: Request, workId?: string) {
       const { rows } = await tx.query<WorkRow>(`SELECT w.*, ${activityColumn} FROM library_works w WHERE w.id=$1 AND w.family_id=$2`, [workId, actor.familyId]);
       if (!rows.length) fail(404, "NOT_FOUND", "No encontramos esa obra.");
       const [work] = await mapWorks(tx, rows);
+      const values: unknown[] = [workId, actor.familyId];
+      let after = "";
+      if (cursor) { values.push(cursor.at, cursor.id); after = " AND (c.created_at,c.id)<($3::timestamptz,$4::uuid)"; }
+      const contributionRows = (await tx.query(`SELECT c.*,to_char(c.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS published_at,
+        ARRAY(SELECT member_id FROM library_companions WHERE contribution_id=c.id ORDER BY member_id) AS companion_ids
+        FROM library_contributions c WHERE c.work_id=$1 AND c.family_id=$2 AND c.retired_at IS NULL${after} ORDER BY c.created_at DESC,c.id DESC LIMIT 51`, values)).rows;
+      const page = contributionRows.slice(0,50), last = page.at(-1);
+      const contributionPage = { contributions: page.map((entry) => ({ id: entry.id, authorMemberId: entry.author_member_id, body: entry.body, spoiler: entry.spoiler,
+        experience: { year: entry.experience_year, month: entry.experience_month, day: entry.experience_day }, companionIds: entry.companion_ids, version: entry.version, createdAt: entry.published_at, updatedAt: entry.updated_at.toISOString() })),
+        nextCursor: contributionRows.length > 50 && last ? encodeCursor(scope,last.published_at,last.id) : null };
       await tx.query("COMMIT");
-      return NextResponse.json({ ...base, work, contributions: [], nextCursor: null }, { headers });
+      return NextResponse.json({ ...base, work, ...contributionPage }, { headers });
     }
     const values: unknown[] = [actor.familyId];
     const where = ["w.family_id=$1", archived ? "w.archived_at IS NOT NULL" : "w.archived_at IS NULL"];
@@ -93,7 +103,7 @@ async function record(tx: PoolClient, actor: MemberContext, entityType: string, 
   await tx.query('INSERT INTO audit_events(family_id,actor_member_id,entity_type,entity_id,action,"after") VALUES($1,$2,$3,$4,$5,$6::jsonb)', [actor.familyId, actor.memberId, entityType, entityId, action, JSON.stringify(metadata)]);
   await tx.query("UPDATE families SET library_revision=library_revision+1 WHERE id=$1", [actor.familyId]);
 }
-export async function mutateLibrary(request: Request, command: "create" | "manage" | "personal", workId?: string) {
+export async function mutateLibrary(request: Request, command: "create" | "manage" | "personal" | "contribute", workId?: string, contributionId?: string) {
   if (!libraryEnabled()) return libraryUnavailable();
   let tx: PoolClient | undefined;
   try {
@@ -102,9 +112,41 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
     const actor = await getMemberContext(request.headers);
     if (!actor) fail(403, "NO_ACCESS", "Ingresá a tu familia.");
     if (workId && !UUID_PATTERN.test(workId)) fail(400, "INVALID", "Identificador inválido.");
+    if (contributionId && !UUID_PATTERN.test(contributionId)) fail(400, "INVALID", "Identificador inválido.");
     let body: Record<string, unknown>;
     try { body = await request.json(); if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(); } catch { fail(400, "INVALID", "Datos inválidos."); }
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
+    if (command === "contribute") {
+      const work = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR SHARE", [workId, actor.familyId])).rows[0];
+      if (!work) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      await activeActor(tx, actor);
+      const previous = contributionId ? (await tx.query("SELECT * FROM library_contributions WHERE id=$1 AND work_id=$2 AND family_id=$3 AND retired_at IS NULL FOR UPDATE", [contributionId, workId, actor.familyId])).rows[0] : null;
+      if (contributionId && !previous) fail(404, "NOT_FOUND", "No encontramos ese aporte.");
+      if (previous && previous.author_member_id !== actor.memberId) fail(403, "NOT_AUTHOR", "Solo el autor puede editar o retirar su aporte.");
+      if (previous && previous.version !== body.expectedVersion) fail(409, "CONFLICT", "El aporte cambió. Revisá la versión actual antes de reintentar.");
+      if (previous && body.action === "retire") {
+        await tx.query("UPDATE library_contributions SET retired_at=now(),updated_at=now(),version=version+1 WHERE id=$1", [contributionId]);
+        await record(tx, actor, "library_contribution", contributionId!, "retired", { workId });
+        await tx.query("COMMIT"); return NextResponse.json({ id: contributionId });
+      }
+      if (work.archived_at) fail(403, "ARCHIVED", "Restaurá la ficha antes de publicar o editar aportes.");
+      if (previous && body.action !== "edit") fail(400, "INVALID", "Acción inválida.");
+      const input = contributionInput(body);
+      if (!input) fail(400, "INVALID", "Revisá el texto, la fecha y la compañía.");
+      if (input.companionIds.length) {
+        const companions = await tx.query("SELECT id FROM members WHERE family_id=$1 AND id=ANY($2::uuid[])", [actor.familyId, input.companionIds]);
+        if (companions.rows.length !== input.companionIds.length) fail(400, "INVALID", "La compañía debe pertenecer a tu familia.");
+      }
+      const values = [input.body,input.spoiler,input.experience.year,input.experience.month,input.experience.day];
+      const id: string = previous ? previous.id : (await tx.query("INSERT INTO library_contributions(body,spoiler,experience_year,experience_month,experience_day,family_id,work_id,author_member_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id", [...values,actor.familyId,workId,actor.memberId])).rows[0].id;
+      if (previous) {
+        await tx.query("UPDATE library_contributions SET body=$1,spoiler=$2,experience_year=$3,experience_month=$4,experience_day=$5,version=version+1,updated_at=now() WHERE id=$6", [...values,id]);
+        await tx.query("DELETE FROM library_companions WHERE contribution_id=$1", [id]);
+      }
+      for (const memberId of input.companionIds) await tx.query("INSERT INTO library_companions(family_id,contribution_id,member_id) VALUES($1,$2,$3)", [actor.familyId,id,memberId]);
+      await record(tx, actor, "library_contribution", id, previous ? "edited" : "published", { workId, spoiler: input.spoiler, experience: input.experience, companionIds: input.companionIds });
+      await tx.query("COMMIT"); return NextResponse.json({ id }, { status: previous ? 200 : 201 });
+    }
     if (command === "personal") {
       const work = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR SHARE", [workId, actor.familyId])).rows[0];
       if (!work) fail(404, "NOT_FOUND", "No encontramos esa obra.");

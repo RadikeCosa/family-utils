@@ -75,7 +75,9 @@ ascender bloqueos para actualizar actividad. Versiones esperadas por entidad.
 - Etapa 2b: duplicados, edición compartida y archivo/restauración implementados;
   pendiente de ensayo remoto e integración.
 - Etapa 3: estados y estrellas personales implementados; pendiente de ensayo remoto
-  e integración. Las etapas 4–5 todavía no están implementadas.
+  e integración.
+- Etapa 4: aportes, fechas parciales, compañía, spoilers y retirada lógica implementados.
+  API y ocho recorridos móviles satisfactorios, incluidas comprobaciones Axe. Etapa 5 pendiente.
 
 El número de migración se decide al integrar. La segunda rama rebasa y regenera
 SQL, journal y snapshot sobre main. No modificar migraciones ya integradas/aplicadas.
@@ -84,8 +86,11 @@ y timestamps aplicados; una migración saltada por Drizzle debe fallar explícit
 
 Ensayo: una rama Neon schema-only, reconstruida desde migraciones y fixtures, sin
 copiar filas productivas ni resetear desde producción. Verificar vaciado antes de
-crear credenciales exclusivas Preview; todavía pendiente de acceso remoto. El
-navegador integrado no tiene pestañas abiertas en la comprobación de esta entrega.
+crear credenciales exclusivas Preview. Rama `library-rehearsal-2026-10-12`
+(`br-young-star-b55g74w9`), PostgreSQL 18, Free: creada schema-only, verificadas
+23 tablas con cero filas, reconstruida desde cero y verificadas las 11 migraciones
+con sus hashes y timestamps. Rol exclusivo `library_preview_20261012`, sin
+permisos de crear roles o bases; credenciales nunca versionadas. Preview pendiente.
 
 Antes de cada migración productiva: respaldo diario satisfactorio. Prueba de
 restauración única cubierta por la evidencia anterior. Directa para migraciones;

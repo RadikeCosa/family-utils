@@ -89,3 +89,29 @@ test("mobile personal experience can be set and cleared", async ({ page }) => {
   await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
   await expect(page.getByText("Sin estado · Sin valorar", { exact: false })).toBeVisible();
 });
+
+test("mobile memories preserve partial dates, drafts, accessible spoilers and retirement", async ({ page }) => {
+  const response=await api.post("/api/library",{data:{title:"Nuestro juego",kind:"tabletop_game"}});
+  const id=(await response.json()).id;
+  await page.goto(`/biblioteca/${id}`);
+  await page.getByLabel("Tu aporte",{exact:true}).fill("Una tarde inolvidable 👨‍👩‍👧‍👦");
+  await page.reload();
+  await expect(page.getByLabel("Tu aporte",{exact:true})).toHaveValue("Una tarde inolvidable 👨‍👩‍👧‍👦");
+  await page.getByLabel("Contiene spoilers").check();
+  await page.getByLabel("Año",{exact:true}).fill("2015");
+  await page.getByLabel("Alex",{exact:true}).check();
+  await page.getByRole("button",{name:"Publicar aporte",exact:true}).click();
+  const show=page.getByRole("button",{name:"Mostrar spoiler"});
+  await expect(show).toHaveAttribute("aria-expanded","false");
+  await expect(page.getByText("Una tarde inolvidable 👨‍👩‍👧‍👦",{exact:true})).toBeHidden();
+  await expect(page.getByText("Experiencia: 2015",{exact:true})).toBeVisible();
+  const result=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
+  expect(result.violations).toEqual([]);
+  await show.click();
+  await expect(page.getByRole("button",{name:"Ocultar spoiler"})).toHaveAttribute("aria-expanded","true");
+  await expect(page.getByText("Una tarde inolvidable 👨‍👩‍👧‍👦",{exact:true})).toBeVisible();
+  page.once("dialog",(dialog)=>dialog.accept()); await page.getByRole("button",{name:"Archivar ficha",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Publicar aporte",exact:true})).toHaveCount(0);
+  page.once("dialog",(dialog)=>dialog.accept()); await page.getByRole("button",{name:"Retirar aporte",exact:true}).click();
+  await expect(page.getByText("Todavía no hay aportes. Cada mirada tiene su lugar.")).toBeVisible();
+});
