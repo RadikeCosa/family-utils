@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Browser, type BrowserContext
 import pg from "pg";
 
 const widths = process.env.A11Y_WIDTHS?.split(",").map(Number).filter(Number.isFinite) ?? [320, 360, 375, 430, 760, 761, 820, 821, 1280];
-const routes = ["/", "/acceso", "/familia", "/tareas", "/menus", "/compras"];
+const routes = ["/", "/acceso", "/familia", "/tareas", "/menus", "/compras", "/biblioteca"];
 const databaseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 let fixtureSequence = 0;
 

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createAuthClient } from "better-auth/react";
+import { createAuthClient } from "@/lib/family-auth-client";
+import { clearLibraryDrafts } from "@/lib/library/drafts";
 import styles from "../platform.module.css";
 
 const authClient = createAuthClient();
@@ -34,6 +35,8 @@ export default function AccessPage() {
   const sessionIsAnonymous = session?.user?.email.endsWith("@anonymous.family-utils.invalid") ?? false;
   const hasMembership = !!sessionUserId && membershipSessionId === sessionUserId;
   const canBootstrap = !!sessionUserId && bootstrapSessionId === sessionUserId;
+
+  useEffect(() => { if (!isPending && !sessionUserId) clearLibraryDrafts(); }, [isPending, sessionUserId]);
 
   useEffect(() => {
     let active = true;

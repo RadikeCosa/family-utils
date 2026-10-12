@@ -20,7 +20,7 @@ async function start(port, enabled) {
 test("library gates and real authenticated family endpoints", { skip: !connectionString && "requires isolated PostgreSQL", timeout: 120_000 }, async (t) => {
   const disabled = await start(3340, false);
   try {
-    for (const [path, method] of [["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
+    for (const [path, method] of [["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"], ["/api/library/123", "PATCH"], ["/api/library/123/personal", "PUT"], ["/api/library/123/contributions", "POST"], ["/api/library/123/contributions/123", "PATCH"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
     assert.ok(!(await fetch(disabled.origin).then((value) => value.text())).includes('href="/biblioteca"'));
   } finally { disabled.server.kill(); }
   const { server, origin } = await start(3341, true);
@@ -141,6 +141,27 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       const second=await ok(owner,`/${workId}?cursor=${encodeURIComponent(first.nextCursor)}`); assert.equal(second.contributions.length,50);
       assert.equal(new Set([...first.contributions,...second.contributions].map((entry)=>entry.id)).size,100);
       const third=await ok(owner,`/${workId}?cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.contributions.length,5);
+    });
+    await t.test("archive lock wins before publication and personal write", async () => {
+      const id=(await ok(owner,"","POST",{title:"Concurrent archive",kind:"book"})).id;
+      const blocker=await pool.connect();
+      try {
+        await blocker.query("BEGIN"); await blocker.query("SELECT id FROM library_works WHERE id=$1 FOR UPDATE",[id]);
+        const publish=request(owner,`/${id}/contributions`,"POST",{body:"No debe publicarse",spoiler:false,companionIds:[]});
+        const personal=request(peer,`/${id}/personal`,"PUT",{status:"pending",rating:1,expectedVersion:0});
+        await delay(100);
+        await blocker.query("UPDATE library_works SET archived_at=now(),version=version+1 WHERE id=$1",[id]);
+        await blocker.query("COMMIT");
+        assert.equal((await publish).status,403); assert.equal((await personal).status,403);
+        assert.equal(Number((await pool.query("SELECT count(*) n FROM library_contributions WHERE work_id=$1",[id])).rows[0].n),0);
+      } finally { await blocker.query("ROLLBACK");blocker.release(); }
+      const second=(await ok(owner,"","POST",{title:"Dependent lock",kind:"music"})).id;
+      const shared=await pool.connect();
+      try { await shared.query("BEGIN"); await shared.query("SELECT id FROM library_works WHERE id=$1 FOR SHARE",[second]);
+        let resolved=false; const archive=request(peer,`/${second}`,"PATCH",{action:"archive",expectedVersion:1}).then((result)=>{resolved=true;return result;});
+        await delay(100); assert.equal(resolved,false,"archive waits for dependent writes");
+        await shared.query("COMMIT"); assert.equal((await archive).status,200);
+      } finally {await shared.query("ROLLBACK");shared.release();}
     });
     await t.test("revoked device loses library access", async () => {
       await pool.query("UPDATE member_devices SET revoked_at=now() WHERE auth_user_id=$1", [peer.userId]);

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LibraryCollection, LibraryDetail } from "@/lib/library/types";
+import { clearLibraryDrafts } from "@/lib/library/drafts";
 export type LibraryData = LibraryCollection | LibraryDetail;
 export function useLibrary(workId: string | undefined, filters: string) {
   const router = useRouter();
@@ -32,8 +33,12 @@ export function useLibrary(workId: string | undefined, filters: string) {
       if (response.status === 304) return;
       const body = await response.json();
       if (!response.ok) {
-        if (response.status === 403) { current.current = null; setData(null); router.replace("/acceso"); }
+        if (response.status === 403) { clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); }
         throw new Error(body.error || "No se pudo cargar la biblioteca.");
+      }
+      clearLibraryDrafts(`${body.familyId}:${body.currentMemberId}`);
+      if (current.current && (body.familyId !== current.current.familyId || body.currentMemberId !== current.current.currentMemberId)) {
+        clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); router.refresh(); return;
       }
       if (mode === "probe" && current.current) { if (body.revision !== current.current.revision) setHasChanges(true); return; }
       const incoming = body as LibraryData;
@@ -59,7 +64,10 @@ export function useLibrary(workId: string | undefined, filters: string) {
     const serial = generation;
     return () => { clearTimeout(start); clearInterval(timer); pending.current?.abort(); serial.current++; window.removeEventListener("pointerdown", active); window.removeEventListener("keydown", active); window.removeEventListener("focus", resume); window.removeEventListener("online", resume); document.removeEventListener("visibilitychange", resume); };
   }, [read]);
+  const writing = useRef(false);
   async function mutate(path: string, method: string, body: unknown): Promise<{ id: string } | null> {
+    if (writing.current) return null;
+    writing.current = true;
     setBusy(true); setError(""); setDuplicates([]);
     try {
       const response = await fetch(`/api/library${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -72,7 +80,7 @@ export function useLibrary(workId: string | undefined, filters: string) {
       }
       await read(); return result;
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo guardar. Conservamos tu borrador."); return null; }
-    finally { setBusy(false); }
+    finally { writing.current = false; setBusy(false); }
   }
   return { data, error, setError, duplicates, clearDuplicates: () => setDuplicates([]), busy, loading, hasChanges, refresh: () => read(), more: () => read("more"), mutate };
 }

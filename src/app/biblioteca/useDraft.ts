@@ -1,13 +1,9 @@
 "use client";
 import { useState } from "react";
-const PREFIX = "family-library-draft:v1:";
-export function clearLibraryDrafts() {
-  if (typeof window === "undefined") return;
-  try { for (const key of Object.keys(sessionStorage)) if (key.startsWith(PREFIX)) sessionStorage.removeItem(key); } catch { /* Storage may be disabled. */ }
-}
+import { libraryDraftKey } from "@/lib/library/drafts";
 export function useDraft<T extends Record<string, unknown>>(scope: string, initial: T) {
-  const key = `${PREFIX}${scope}`;
-  const [storageError, setStorageError] = useState(false);
+  const key = libraryDraftKey(scope);
+  const [storageError, setStorageError] = useState(() => { try { sessionStorage.getItem(key); return false; } catch { return true; } });
   const [draft, update] = useState<T>(() => {
     try {
       const value = JSON.parse(sessionStorage.getItem(key) ?? "null");

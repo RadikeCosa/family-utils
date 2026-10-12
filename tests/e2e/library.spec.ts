@@ -105,6 +105,8 @@ test("mobile memories preserve partial dates, drafts, accessible spoilers and re
   await expect(show).toHaveAttribute("aria-expanded","false");
   await expect(page.getByText("Una tarde inolvidable 👨‍👩‍👧‍👦",{exact:true})).toBeHidden();
   await expect(page.getByText("Experiencia: 2015",{exact:true})).toBeVisible();
+  await page.setViewportSize({width:320,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   const result=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
   expect(result.violations).toEqual([]);
   await show.click();
@@ -114,4 +116,19 @@ test("mobile memories preserve partial dates, drafts, accessible spoilers and re
   await expect(page.getByRole("button",{name:"Publicar aporte",exact:true})).toHaveCount(0);
   page.once("dialog",(dialog)=>dialog.accept()); await page.getByRole("button",{name:"Retirar aporte",exact:true}).click();
   await expect(page.getByText("Todavía no hay aportes. Cada mirada tiene su lugar.")).toBeVisible();
+});
+
+test("drafts are isolated by identity and cleared on sign out", async ({page}) => {
+  await page.goto("/biblioteca");
+  await page.evaluate(() => sessionStorage.setItem("family-library-draft:v1:other-family:other-profile:new-work", JSON.stringify({title:"Privado"})));
+  await page.reload();
+  await expect(page.getByRole("heading",{name:"Nuestra colección empieza acá"})).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("family-library-draft:v1:other-family:other-profile:new-work"))).toBeNull();
+  await page.getByRole("button",{name:"Agregar obra",exact:true}).click();
+  await page.getByLabel(/^Título/).fill("Mi borrador privado");
+  expect(await page.evaluate(() => Object.keys(sessionStorage).some((key)=>key.startsWith("family-library-draft:v1:")))).toBe(true);
+  await page.goto("/familia");
+  await page.getByRole("button",{name:"Salir",exact:true}).click();
+  await expect(page).toHaveURL(/\/acceso/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).some((key)=>key.startsWith("family-library-draft:v1:")))).toBe(false);
 });
