@@ -15,3 +15,5 @@ playwright-report/
 test-results/
 
 .agents/
+
+/test-results-a11y/

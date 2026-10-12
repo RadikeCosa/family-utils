@@ -315,3 +315,50 @@ test("a delayed response from the previous date cannot replace the selected day"
   await expect(page.getByLabel("Ir a una fecha")).toHaveValue("2026-10-14");
   await expect(page.locator("[data-task-key] p")).toContainText("2026-10-14");
 });
+
+test("choosing today explicitly generates a missing daily occasion through the shared loader", async ({ page }) => {
+  const today = getFamilyDay();
+  const prior = new Date(`${today}T12:00:00Z`); prior.setUTCDate(prior.getUTCDate() - 1);
+  const title = `Missing daily ${randomUUID().slice(0, 6)}`;
+  await pool.query(`INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id,scheduled_date,repeat_weekdays)
+    VALUES($1,$2,$3,$3,$4,ARRAY[0,1,2,3,4,5,6])`, [familyId, title, memberId, today]);
+  await page.goto(`/tareas?fecha=${prior.toISOString().slice(0, 10)}`);
+  await expect(page.getByText("Solo lectura", { exact: true })).toBeVisible();
+  await page.getByLabel("Ir a una fecha").fill(today);
+  await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha` })).toBeVisible();
+  await page.getByRole("button", { name: "Historial", exact: true }).click();
+  await page.getByRole("button", { name: "Volver a tareas" }).click();
+  await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha` })).toBeVisible();
+  const todayRead = page.waitForResponse((response) => response.url().includes("/api/tasks?date="));
+  await page.getByRole("button", { name: "Hoy", exact: true }).click();
+  await todayRead;
+  await expect(page).toHaveURL(/\/tareas$/);
+});
+
+test("potential pending pages refresh atomically and recover an obsolete cursor", async ({ page }) => {
+  const today = getFamilyDay();
+  const next = new Date(`${today}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 5);
+  await pool.query(`WITH created AS (
+    INSERT INTO tasks(family_id,title,created_by_member_id,edited_by_member_id)
+    SELECT $1, 'Potential ' || n, $2, $2 FROM generate_series(1,175) n RETURNING id,title
+  ) INSERT INTO task_occurrences(task_id,family_id,due_date,title_snapshot,assignment_mode_snapshot)
+    SELECT id,$1,$3,title,'shared' FROM created`, [familyId, memberId, today]);
+  await page.goto(`/tareas?fecha=${next.toISOString().slice(0, 10)}`);
+  const section = page.locator("section").filter({ has: page.getByRole("button", { name: /Podrían seguir pendientes/ }) });
+  await section.getByRole("button", { name: /Podrían seguir pendientes/ }).click();
+  const cards = section.locator("[data-task-key]");
+  await expect(cards).toHaveCount(50);
+  await section.getByRole("button", { name: "Cargar más pendientes" }).click();
+  await expect(cards).toHaveCount(100);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await section.getByRole("button", { name: "Cargar más pendientes" }).click();
+  await expect(cards).toHaveCount(100);
+  await expect(section.getByRole("button", { name: "Cargar más pendientes" })).toBeEnabled();
+  await pool.query("UPDATE task_occurrences SET title_snapshot=title_snapshot || ' actualizado' WHERE family_id=$1 AND title_snapshot LIKE 'Potential %'", [familyId]);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(cards.first().getByRole("heading")).toContainText("actualizado");
+  await expect(cards).toHaveCount(100);
+});
