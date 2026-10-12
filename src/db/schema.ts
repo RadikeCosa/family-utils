@@ -1,5 +1,7 @@
 import {
   boolean,
+  check,
+  foreignKey,
   date,
   index,
   integer,
@@ -97,6 +99,7 @@ export const families = pgTable("families", {
   revision: bigint("revision", { mode: "number" }).notNull().default(0),
   menusRevision: bigint("menus_revision", { mode: "number" }).notNull().default(0),
   shoppingRevision: bigint("shopping_revision", { mode: "number" }).notNull().default(0),
+  libraryRevision: bigint("library_revision", { mode: "number" }).notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -114,6 +117,7 @@ export const members = pgTable("members", {
   updatedAt: updatedAt(),
 }, (table) => [
   index("members_family_id_idx").on(table.familyId),
+  uniqueIndex("members_id_family_unique").on(table.id, table.familyId),
   uniqueIndex("members_google_email_unique_idx").on(sql`lower(${table.googleEmail})`).where(sql`${table.googleEmail} IS NOT NULL`),
 ]);
 
@@ -332,3 +336,94 @@ export const shoppingSuggestions = pgTable("shopping_suggestions", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (table) => [uniqueIndex("shopping_suggestions_family_name_unique").on(table.familyId, table.normalizedName)]);
+
+
+export const libraryWorks = pgTable("library_works", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id),
+  title: text("title").notNull(),
+  normalizedTitle: text("titulo_normalizado").notNull(),
+  kind: text("kind").notNull(),
+  creator: text("creator"),
+  normalizedCreator: text("creador_normalizado").notNull().default(""),
+  year: integer("year"),
+  referenceUrl: text("reference_url"),
+  createdByMemberId: uuid("created_by_member_id").notNull(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull(),
+  version: integer("version").notNull().default(1),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  uniqueIndex("library_works_id_family_unique").on(t.id, t.familyId),
+  index("library_works_duplicate_idx").on(t.familyId, t.kind, t.normalizedTitle),
+  index("library_works_family_created_idx").on(t.familyId, t.createdAt, t.id),
+  foreignKey({ columns: [t.createdByMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+  foreignKey({ columns: [t.updatedByMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+  check("library_works_title_length", sql`char_length(btrim(${t.title})) BETWEEN 1 AND 200`),
+  check("library_works_creator_length", sql`${t.creator} IS NULL OR char_length(${t.creator}) BETWEEN 1 AND 200`),
+  check("library_works_url", sql`${t.referenceUrl} IS NULL OR (char_length(${t.referenceUrl}) BETWEEN 1 AND 2048 AND ${t.referenceUrl} ~* '^https?://[^[:space:]]+$')`),
+  check("library_works_year", sql`${t.year} IS NULL OR ${t.year} BETWEEN 1 AND 9999`),
+  check("library_works_kind", sql`${t.kind} IN ('movie', 'series', 'book', 'music', 'art', 'video_game', 'tabletop_game')`),
+  check("library_works_version", sql`${t.version} > 0`),
+]);
+
+export const libraryPersonal = pgTable("library_personal", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull(),
+  workId: uuid("work_id").notNull(),
+  memberId: uuid("member_id").notNull(),
+  status: text("status"),
+  rating: integer("rating"),
+  version: integer("version").notNull().default(1),
+  updatedAt: updatedAt(),
+}, (t) => [
+  uniqueIndex("library_personal_work_member_unique").on(t.workId, t.memberId),
+  index("library_personal_member_status_idx").on(t.familyId, t.memberId, t.status),
+  foreignKey({ columns: [t.workId, t.familyId], foreignColumns: [libraryWorks.id, libraryWorks.familyId] }),
+  foreignKey({ columns: [t.memberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+  check("library_personal_status", sql`${t.status} IS NULL OR ${t.status} IN ('pending', 'in_progress', 'finished')`),
+  check("library_personal_rating", sql`${t.rating} IS NULL OR ${t.rating} BETWEEN 1 AND 5`),
+  check("library_personal_version", sql`${t.version} > 0`),
+]);
+
+export const libraryContributions = pgTable("library_contributions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull(),
+  workId: uuid("work_id").notNull(),
+  authorMemberId: uuid("author_member_id").notNull(),
+  body: text("body").notNull(),
+  spoiler: boolean("spoiler").notNull().default(false),
+  experienceYear: integer("experience_year"),
+  experienceMonth: integer("experience_month"),
+  experienceDay: integer("experience_day"),
+  version: integer("version").notNull().default(1),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  uniqueIndex("library_contributions_id_family_unique").on(t.id, t.familyId),
+  index("library_contributions_work_created_idx").on(t.workId, t.createdAt, t.id),
+  foreignKey({ columns: [t.workId, t.familyId], foreignColumns: [libraryWorks.id, libraryWorks.familyId] }),
+  foreignKey({ columns: [t.authorMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+  check("library_contributions_body_length", sql`char_length(btrim(${t.body})) BETWEEN 1 AND 5000`),
+  check("library_contributions_version", sql`${t.version} > 0`),
+  check("library_contributions_experience", sql`
+    (${t.experienceYear} IS NULL AND ${t.experienceMonth} IS NULL AND ${t.experienceDay} IS NULL)
+    OR (${t.experienceYear} BETWEEN 1 AND 9999 AND
+      ((${t.experienceMonth} IS NULL AND ${t.experienceDay} IS NULL) OR
+       (${t.experienceMonth} BETWEEN 1 AND 12 AND (${t.experienceDay} IS NULL OR
+        CASE WHEN ${t.experienceYear} BETWEEN 1 AND 9999 AND ${t.experienceMonth} BETWEEN 1 AND 12
+        THEN ${t.experienceDay} BETWEEN 1 AND extract(day from (make_date(${t.experienceYear}, ${t.experienceMonth}, 1) + interval '1 month - 1 day'))
+        ELSE false END)))) IS TRUE`),
+]);
+
+export const libraryCompanions = pgTable("library_companions", {
+  familyId: uuid("family_id").notNull(),
+  contributionId: uuid("contribution_id").notNull(),
+  memberId: uuid("member_id").notNull(),
+}, (t) => [
+  uniqueIndex("library_companions_unique").on(t.contributionId, t.memberId),
+  foreignKey({ columns: [t.contributionId, t.familyId], foreignColumns: [libraryContributions.id, libraryContributions.familyId] }),
+  foreignKey({ columns: [t.memberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+]);

@@ -66,3 +66,7 @@ gane.
 Los nombres, calendarios y asignaciones de una familia son configuración
 privada; la documentación del repositorio usa roles genéricos y ejemplos
 ficticios.
+
+## Biblioteca familiar
+
+Implementación por etapas y estado operativo en [Biblioteca familiar](sources/family-library.md).

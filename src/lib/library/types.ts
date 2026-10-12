@@ -1,0 +1,14 @@
+export const WORK_KINDS = ["movie", "series", "book", "music", "art", "video_game", "tabletop_game"] as const;
+export type WorkKind = typeof WORK_KINDS[number];
+export const PERSONAL_STATUSES = ["pending", "in_progress", "finished"] as const;
+export type PersonalStatus = typeof PERSONAL_STATUSES[number];
+export const KIND_LABELS: Record<WorkKind, string> = { movie: "Película", series: "Serie", book: "Libro", music: "Música", art: "Arte", video_game: "Videojuego", tabletop_game: "Juego de mesa o cartas" };
+export const STATUS_LABELS: Record<PersonalStatus, string> = { pending: "Pendiente", in_progress: "En curso", finished: "Terminada" };
+export type ExperienceDate = { year: number | null; month: number | null; day: number | null };
+export type WorkInput = { title: string; kind: WorkKind; creator: string | null; year: number | null; referenceUrl: string | null };
+export type LibraryProfile = { id: string; name: string; archivedAt: string | null };
+export type PersonalEntry = { memberId: string; status: PersonalStatus | null; rating: number | null; version: number };
+export type LibraryWork = WorkInput & { id: string; version: number; archivedAt: string | null; createdAt: string; updatedAt: string; activityAt: string; personal: PersonalEntry[] };
+export type Contribution = { id: string; authorMemberId: string; body: string; spoiler: boolean; experience: ExperienceDate; companionIds: string[]; version: number; createdAt: string; updatedAt: string };
+export type LibraryCollection = { currentMemberId: string; familyId: string; revision: number; members: LibraryProfile[]; works: LibraryWork[]; nextCursor: string | null };
+export type LibraryDetail = Omit<LibraryCollection, "works"> & { work: LibraryWork; contributions: Contribution[] };
