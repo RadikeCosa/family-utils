@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { auditEvents, mealSelections, mealSlots, mealSuggestions } from "@/db/schema";
+import { auditEvents, mealGroups, mealSlots, mealSuggestions } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { getDayInTimeZone, isUuid, mayManageSuggestion, mayEditMeal } from "@/lib/meals/rules";
 import { bumpMenusRevision, lockFamilyActor, lockMealSlot } from "@/lib/meals/server";
@@ -44,8 +44,8 @@ async function mutate(request: Request, context: RouteContext, withdraw: boolean
     if (!current || current.withdrawnAt) return { kind: "missing" as const };
     if (!mayManageSuggestion(currentActor.role, currentActor.memberId, current.authorMemberId)) return { kind: "forbidden" as const };
     if (current.version !== expectedVersion) return { kind: "conflict" as const };
-    const [selected] = await tx.select({ slotId: mealSelections.slotId }).from(mealSelections)
-      .where(and(eq(mealSelections.slotId, slot.id), eq(mealSelections.suggestionId, current.id))).limit(1);
+    const [selected] = await tx.select({ slotId: mealGroups.slotId }).from(mealGroups)
+      .where(and(eq(mealGroups.slotId, slot.id), eq(mealGroups.suggestionId, current.id))).limit(1);
     if (selected) return { kind: "selected" as const };
     const now = new Date();
     const [updated] = await tx.update(mealSuggestions).set(withdraw

@@ -1,129 +1,66 @@
 import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { families, mealAttendance, mealSelections, mealSlots, mealSuggestions, members } from "@/db/schema";
+import { families, mealDistributions, mealExceptions, mealGroups, mealRoutines, mealSlots, mealSuggestions, members } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { MEAL_TYPES, hasMealAttendance, addDays, getDayInTimeZone, isValidDate, startOfWeek } from "@/lib/meals/rules";
+import { MEAL_TYPES, hasMealAttendance, addDays, getDayInTimeZone, isValidDate, startOfWeek, resolveParticipation, routineFor } from "@/lib/meals/rules";
 
-export const runtime = "nodejs";
-
-export async function GET(request: Request) {
-  const actor = await getMemberContext(request.headers);
-  if (!actor) return NextResponse.json({ error: "No family access" }, { status: 403 });
-
-  const suppliedWeek = new URL(request.url).searchParams.get("weekStart");
-  if (suppliedWeek && !isValidDate(suppliedWeek)) return NextResponse.json({ error: "Invalid week" }, { status: 400 });
-  const weekStart = startOfWeek(suppliedWeek ?? getDayInTimeZone(new Date(), actor.familyTimeZone));
-  const weekEnd = addDays(weekStart, 6);
-  const db = getDb();
-  const [familyState] = await db.select({ menusRevision: families.menusRevision })
-    .from(families).where(eq(families.id, actor.familyId)).limit(1);
-  const revision = familyState?.menusRevision ?? 0;
-  const etag = `"menus-v2-${actor.familyId}-${weekStart}-r${revision}-${getDayInTimeZone(new Date(), actor.familyTimeZone)}"`;
-  if (request.headers.get("if-none-match") === etag) {
-    return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
-  }
-
-  const [activeMembers, allMembers, slots] = await Promise.all([
-    db.select({ id: members.id, name: members.name, role: members.role }).from(members)
-      .where(and(eq(members.familyId, actor.familyId), isNull(members.archivedAt))).orderBy(asc(members.createdAt)),
-    db.select({ id: members.id, name: members.name }).from(members).where(eq(members.familyId, actor.familyId)),
-    db.select().from(mealSlots).where(and(
-      eq(mealSlots.familyId, actor.familyId),
-      gte(mealSlots.mealDate, weekStart),
-      lte(mealSlots.mealDate, weekEnd),
-    )),
-  ]);
-  const slotIds = slots.map((slot) => slot.id);
-  const [suggestions, attendance, selections] = slotIds.length ? await Promise.all([
-    db.select({
-      id: mealSuggestions.id,
-      slotId: mealSuggestions.slotId,
-      authorMemberId: mealSuggestions.authorMemberId,
-      authorName: members.name,
-      title: mealSuggestions.title,
-      note: mealSuggestions.note,
-      version: mealSuggestions.version,
-      withdrawnAt: mealSuggestions.withdrawnAt,
-      createdAt: mealSuggestions.createdAt,
-      updatedAt: mealSuggestions.updatedAt,
-    }).from(mealSuggestions)
-      .innerJoin(members, eq(mealSuggestions.authorMemberId, members.id))
-      .where(inArray(mealSuggestions.slotId, slotIds))
-      .orderBy(asc(mealSuggestions.createdAt)),
-    db.select().from(mealAttendance).where(inArray(mealAttendance.slotId, slotIds)),
-    (() => {
-      const confirmer = alias(members, "meal_confirmer");
-      return db.select({
-        slotId: mealSelections.slotId,
-        suggestionId: mealSelections.suggestionId,
-        confirmedByMemberId: mealSelections.confirmedByMemberId,
-        confirmedByName: confirmer.name,
-        confirmedAt: mealSelections.confirmedAt,
-        version: mealSelections.version,
-      }).from(mealSelections).innerJoin(confirmer, eq(mealSelections.confirmedByMemberId, confirmer.id))
-        .where(inArray(mealSelections.slotId, slotIds));
-    })(),
-  ]) : [[], [], []];
-
-  const namesById = new Map(allMembers.map((profile) => [profile.id, profile.name]));
-  const suggestionsBySlot = new Map<string, typeof suggestions>();
-  for (const suggestion of suggestions) {
-    if (suggestion.withdrawnAt) continue;
-    suggestionsBySlot.set(suggestion.slotId, [...(suggestionsBySlot.get(suggestion.slotId) ?? []), suggestion]);
-  }
-  const attendanceBySlot = new Map<string, typeof attendance>();
-  for (const record of attendance) attendanceBySlot.set(record.slotId, [...(attendanceBySlot.get(record.slotId) ?? []), record]);
-  const selectionBySlot = new Map(selections.map((selection) => [selection.slotId, selection]));
-  const suggestionById = new Map(suggestions.map((suggestion) => [suggestion.id, suggestion]));
-  const slotByKey = new Map(slots.map((slot) => [`${slot.mealDate}:${slot.mealType}`, slot]));
-  const meals = Array.from({ length: 7 }, (_, offset) => addDays(weekStart, offset)).flatMap((day) => MEAL_TYPES.map((mealType) => {
-    const slot = slotByKey.get(`${day}:${mealType}`);
-    const slotAttendance = slot ? attendanceBySlot.get(slot.id) ?? [] : [];
-    const attendanceByMember = new Map(slotAttendance.map((record) => [record.memberId, record]));
-    const storedSelection = slot ? selectionBySlot.get(slot.id) : undefined;
-    const selectedSuggestion = storedSelection?.suggestionId ? suggestionById.get(storedSelection.suggestionId) : undefined;
-    return {
-      date: day,
-      mealType,
-      slotId: slot?.id ?? null,
-      attendance: (hasMealAttendance(mealType) ? activeMembers : []).map((profile) => {
-        const record = attendanceByMember.get(profile.id);
-        return {
-          memberId: profile.id,
-          status: record?.status ?? "unknown",
-          source: record?.status ? "manual" : "unknown",
-          version: record?.version ?? 0,
-          updatedByMemberId: record?.updatedByMemberId ?? null,
-          updatedByName: record?.updatedByMemberId ? namesById.get(record.updatedByMemberId) ?? "Integrante archivado" : null,
-          updatedAt: record?.updatedAt?.toISOString() ?? null,
-        };
-      }),
-      suggestions: slot ? suggestionsBySlot.get(slot.id) ?? [] : [],
-      selection: storedSelection?.suggestionId ? {
-        suggestionId: storedSelection.suggestionId,
-        title: selectedSuggestion?.title ?? null,
-        proposedById: selectedSuggestion?.authorMemberId ?? null,
-        proposedByName: selectedSuggestion?.authorName ?? null,
-        confirmedByMemberId: storedSelection.confirmedByMemberId,
-        confirmedByName: storedSelection.confirmedByName,
-        confirmedAt: storedSelection.confirmedAt,
-        version: storedSelection.version,
-      } : null,
-      selectionVersion: storedSelection?.version ?? 0,
-    };
-  }));
-
-  return NextResponse.json({
-    weekStart,
-    weekEnd,
-    today: getDayInTimeZone(new Date(), actor.familyTimeZone),
-    timeZone: actor.familyTimeZone,
-    revision,
-    currentMemberId: actor.memberId,
-    currentRole: actor.role,
-    members: activeMembers,
-    meals,
-  }, { headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
+export const runtime="nodejs";
+export async function GET(request:Request) {
+ const actor=await getMemberContext(request.headers);
+ if(!actor)return NextResponse.json({error:"No family access"},{status:403});
+ const supplied=new URL(request.url).searchParams.get("weekStart");
+ if(supplied&&!isValidDate(supplied))return NextResponse.json({error:"Invalid week"},{status:400});
+ const today=getDayInTimeZone(new Date(),actor.familyTimeZone);
+ const weekStart=startOfWeek(supplied??today),weekEnd=addDays(weekStart,6);
+ const db=getDb();
+ const [state]=await db.select({revision:families.menusRevision}).from(families).where(eq(families.id,actor.familyId)).limit(1);
+ const revision=state?.revision??0;
+ const etag=`"menus-v3-${actor.familyId}-${weekStart}-r${revision}-${today}"`;
+ if(request.headers.get("if-none-match")===etag)return new Response(null,{status:304,headers:{ETag:etag,"Cache-Control":"private, no-cache"}});
+ const [activeMembers,allMembers,slots,routines]=await Promise.all([
+  db.select({id:members.id,name:members.name,role:members.role}).from(members).where(and(eq(members.familyId,actor.familyId),isNull(members.archivedAt))).orderBy(asc(members.createdAt)),
+  db.select({id:members.id,name:members.name}).from(members).where(eq(members.familyId,actor.familyId)),
+  db.select().from(mealSlots).where(and(eq(mealSlots.familyId,actor.familyId),gte(mealSlots.mealDate,weekStart),lte(mealSlots.mealDate,weekEnd))),
+  db.select().from(mealRoutines).where(and(eq(mealRoutines.familyId,actor.familyId),lte(mealRoutines.startsOn,weekEnd))),
+ ]);
+ const ids=slots.map(s=>s.id);
+ const [ideas,groups,exceptions,distributions]=ids.length?await Promise.all([
+  db.select().from(mealSuggestions).where(inArray(mealSuggestions.slotId,ids)).orderBy(asc(mealSuggestions.createdAt)),
+  db.select().from(mealGroups).where(inArray(mealGroups.slotId,ids)).orderBy(asc(mealGroups.createdAt)),
+  db.select().from(mealExceptions).where(inArray(mealExceptions.slotId,ids)),
+  db.select().from(mealDistributions).where(inArray(mealDistributions.slotId,ids)),
+ ]):[[],[],[],[]];
+ const names=new Map(allMembers.map(m=>[m.id,m.name]));
+ const ideaById=new Map(ideas.map(idea=>[idea.id,idea]));
+ const slotByKey=new Map(slots.map(slot=>[`${slot.mealDate}:${slot.mealType}`,slot]));
+ const meals=Array.from({length:7},(_,offset)=>addDays(weekStart,offset)).flatMap(date=>MEAL_TYPES.map(mealType=>{
+  const slot=slotByKey.get(`${date}:${mealType}`);
+  const slotGroups=groups.filter(g=>g.slotId===slot?.id);
+  const main=slotGroups.find(g=>g.kind!=="packed");
+  const defaultPacked=slotGroups.find(g=>g.kind==="packed"&&g.isDefault);
+  const distribution=distributions.find(d=>d.slotId===slot?.id);
+  const overrides=exceptions.filter(e=>e.slotId===slot?.id);
+  const attendance=hasMealAttendance(mealType)?resolveParticipation({memberIds:activeMembers.map(m=>m.id),date,mealType,
+    homeId:main?.id??null,packedId:defaultPacked?.id??null,routines,exceptions:overrides.map(e=>({...e,updatedAt:e.updatedAt.toISOString()})),snapshot:distribution?.participants}):[];
+  const selectionFor=(group:typeof mealGroups.$inferSelect|undefined)=>{
+   if(!group)return null;
+   const source=group.followsHome?main:group;
+   const idea=source?.suggestionId?ideaById.get(source.suggestionId):undefined;
+   if(!idea)return null;
+   return {suggestionId:idea.id,title:idea.title,note:idea.note,proposedById:idea.authorMemberId,proposedByName:names.get(idea.authorMemberId)??null,
+    confirmedByMemberId:source!.confirmedByMemberId!,confirmedByName:names.get(source!.confirmedByMemberId!)??"Integrante archivado",confirmedAt:source!.confirmedAt,version:group.version};
+  };
+  const projected:Array<{id:string|null;kind:"home"|"packed"|"shared";name:string;isDefault:boolean;followsHome:boolean;selection:ReturnType<typeof selectionFor>;selectionVersion:number}>=slotGroups.map(g=>({id:g.id,kind:g.kind,name:g.name,isDefault:g.isDefault,followsHome:g.followsHome,selection:selectionFor(g),selectionVersion:g.version}));
+  if(!main)projected.unshift({id:null,kind:hasMealAttendance(mealType)?"home":"shared",name:hasMealAttendance(mealType)?"Casa":"Compartido",isDefault:true,followsHome:false,selection:null,selectionVersion:0});
+  if(!defaultPacked&&attendance.some(p=>p.status==="packed"&&!p.groupId))projected.push({id:null,kind:"packed",name:"Lunchera",isDefault:true,followsHome:false,selection:null,selectionVersion:0});
+  const origin=distribution?distribution.adjusted?"Guardada · ajustada":"Guardada":overrides.some(e=>activeMembers.some(m=>m.id===e.memberId))?"Ajustada para esta fecha":activeMembers.some(m=>routineFor(routines,m.id,mealType,date))?"Según rutina":"Por definir";
+  return {date,mealType,slotId:slot?.id??null,groups:projected,
+   attendance:attendance.map(p=>({...p,updatedByName:p.updatedByMemberId?names.get(p.updatedByMemberId)??null:null})),
+   distributionOrigin:origin,distributionSaved:!!distribution,
+   noRoutineMemberIds:hasMealAttendance(mealType)?activeMembers.filter(m=>!routineFor(routines,m.id,mealType,date)).map(m=>m.id):[],
+   suggestions:ideas.filter(idea=>idea.slotId===slot?.id&&!idea.withdrawnAt).map(idea=>({...idea,authorName:names.get(idea.authorMemberId)??"Integrante archivado"})),
+   selection:selectionFor(main),selectionVersion:main?.version??0};
+ }));
+ return NextResponse.json({weekStart,weekEnd,today,timeZone:actor.familyTimeZone,revision,currentMemberId:actor.memberId,currentRole:actor.role,members:activeMembers,meals},{headers:{ETag:etag,"Cache-Control":"private, no-cache"}});
 }

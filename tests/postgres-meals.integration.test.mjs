@@ -43,13 +43,13 @@ test("PostgreSQL meal selection is single-winner under concurrent confirmations"
         await client.query("BEGIN");
         await client.query("SELECT id FROM families WHERE id = $1 FOR UPDATE", [familyId]);
         await client.query("SELECT id FROM meal_slots WHERE id = $1 FOR UPDATE", [slot.id]);
-        const { rows: [current] } = await client.query("SELECT version FROM meal_selections WHERE slot_id = $1 FOR UPDATE", [slot.id]);
+        const { rows: [current] } = await client.query("SELECT version FROM meal_groups WHERE slot_id = $1 FOR UPDATE", [slot.id]);
         if ((current?.version ?? 0) !== 0) {
           await client.query("ROLLBACK");
           return 409;
         }
         await client.query(
-          "INSERT INTO meal_selections (slot_id, suggestion_id, confirmed_by_member_id) VALUES ($1, $2, $3)",
+          "INSERT INTO meal_groups (slot_id, kind, name, is_default, suggestion_id, confirmed_by_member_id, version) VALUES ($1, 'home', 'Casa', true, $2, $3, 1)",
           [slot.id, suggestion.id, memberId],
         );
         await client.query(
@@ -69,11 +69,11 @@ test("PostgreSQL meal selection is single-winner under concurrent confirmations"
     const outcomes = await Promise.all([confirm(adultA), confirm(adultB)]);
     assert.equal(outcomes.filter((status) => status === 200).length, 1);
     assert.equal(outcomes.filter((status) => status === 409).length, 1);
-    assert.equal((await pool.query("SELECT count(*) FROM meal_selections WHERE slot_id = $1", [slot.id])).rows[0].count, "1");
+    assert.equal((await pool.query("SELECT count(*) FROM meal_groups WHERE slot_id = $1", [slot.id])).rows[0].count, "1");
     assert.equal(Number((await pool.query("SELECT menus_revision FROM families WHERE id = $1", [familyId])).rows[0].menus_revision), 1);
   } finally {
     if (familyId) {
-      await pool.query("DELETE FROM meal_selections WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [familyId]);
+      await pool.query("DELETE FROM meal_groups WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [familyId]);
       await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [familyId]);
       await pool.query("DELETE FROM meal_slots WHERE family_id = $1", [familyId]);
       await pool.query("DELETE FROM audit_events WHERE family_id = $1", [familyId]);
@@ -107,10 +107,18 @@ test("four-meal migration preserves an existing lunch selection and attendance",
     const { rows: [idea] } = await pool.query("INSERT INTO meal_suggestions(slot_id,author_member_id,title) VALUES($1,$2,'Tarta') RETURNING id", [slot.id, member.id]);
     await pool.query("INSERT INTO meal_selections(slot_id,suggestion_id,confirmed_by_member_id,version) VALUES($1,$2,$3,3)", [slot.id, idea.id, member.id]);
     await pool.query("INSERT INTO meal_attendance(slot_id,member_id,status,updated_by_member_id) VALUES($1,$2,'present',$2)", [slot.id, member.id]);
+    const {rows:[unconfirmed]}=await pool.query("INSERT INTO meal_slots(family_id,meal_date,meal_type) VALUES($1,'2099-05-13','lunch') RETURNING id",[family.id]);
+    await pool.query("INSERT INTO meal_attendance(slot_id,member_id,status,updated_by_member_id) VALUES($1,$2,NULL,$2)",[unconfirmed.id,member.id]);
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
     const { rows: [saved] } = await pool.query("SELECT suggestion_id,version FROM meal_selections WHERE slot_id=$1", [slot.id]);
     assert.deepEqual(saved, { suggestion_id: idea.id, version: 3 });
     assert.equal((await pool.query("SELECT status FROM meal_attendance WHERE slot_id=$1", [slot.id])).rows[0].status, "present");
+    const group=(await pool.query("SELECT id,suggestion_id,version FROM meal_groups WHERE slot_id=$1 AND kind='home'",[slot.id])).rows[0];
+    assert.equal(group.suggestion_id,idea.id);assert.equal(group.version,3);
+    const snapshot=(await pool.query("SELECT participants FROM meal_distributions WHERE slot_id=$1",[slot.id])).rows[0].participants;
+    assert.equal(snapshot[0].status,"home");assert.equal(snapshot[0].groupId,group.id);
+    assert.equal(Number((await pool.query("SELECT count(*) FROM meal_exceptions WHERE slot_id=$1",[unconfirmed.id])).rows[0].count),0,"unknown migration must not create an exception");
+    assert.equal(Number((await pool.query("SELECT count(*) FROM meal_distributions WHERE slot_id=$1",[unconfirmed.id])).rows[0].count),0,"unconfirmed meals must not freeze unknowns");
     const types = (await pool.query("SELECT unnest(enum_range(NULL::meal_type))::text AS type")).rows.map((row) => row.type);
     assert.deepEqual(types, ["breakfast", "lunch", "snack", "dinner"]);
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });

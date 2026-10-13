@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MEAL_TYPES, MEAL_LABELS, hasMealAttendance, isMealType, canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
+import { resolveParticipation, routineFor, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, isMealType, canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
 
 test("meal attribution uses creator identity and handles repeated or missing names", () => {
   assert.equal(formatMealAttribution("a", "Ana", "b", "Ramiro"), "Propuesto por Ana · Confirmado por Ramiro");
@@ -56,4 +56,20 @@ test("four meals follow daily order and only lunch/dinner use attendance", () =>
   }
   assert.equal(isMealType("brunch"), false);
   assert.equal(isMealType(null), false);
+});
+
+
+test("historical routine versions, explicit unknown and snapshots have distinct precedence", () => {
+  const routines = [
+    {memberId:"child",mealType:"lunch" as const,startsOn:"2026-10-01",weekdays:["packed","packed","packed","packed","packed","away","home"] as const},
+    {memberId:"child",mealType:"lunch" as const,startsOn:"2026-12-01",weekdays:["home","home","home","home","home","home","home"] as const},
+  ];
+  const input = {memberIds:["child"],date:"2026-10-14",mealType:"lunch" as const,homeId:"house",packedId:"box",routines,exceptions:[]};
+  assert.equal(resolveParticipation(input)[0].status,"packed");
+  assert.equal(resolveParticipation({...input,date:"2026-12-02"})[0].status,"home");
+  assert.equal(routineFor(routines,"child","lunch","2026-09-30"),undefined);
+  assert.equal(resolveParticipation({...input,exceptions:[{memberId:"child",status:"unknown",groupId:null}]})[0].status,"unknown");
+  const snapshot = [{memberId:"child",status:"away" as const,groupId:null}];
+  assert.equal(resolveParticipation({...input,date:"2026-12-02",snapshot})[0].status,"away");
+  assert.equal(resolveParticipation({...input,routines:[]})[0].status,"unknown");
 });
