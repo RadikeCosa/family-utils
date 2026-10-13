@@ -49,9 +49,11 @@ test("fractions, cup sizes, interpreted input and swap", async ({ page }) => {
 });
 
 test("visible result is immediate and only announcements wait 300ms", async ({ page }) => {
-  await page.clock.install();
+  // Use one clock origin instead of comparing the runner's real time with
+  // the browser clock: CI scheduling can otherwise pause slightly in the past.
+  await page.clock.install({ time: new Date("2026-10-13T12:00:00Z") });
   await page.goto("/cocina");
-  await page.clock.pauseAt(new Date());
+  await page.clock.pauseAt(new Date("2026-10-13T13:00:00Z"));
   await page.getByLabel("Ingrediente", { exact: true }).selectOption("flour");
   const live = page.locator('[aria-live="polite"]');
   await expect(page.getByLabel("Resultado", { exact: true })).toContainText("125 g");

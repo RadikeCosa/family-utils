@@ -72,6 +72,11 @@ anchos entre 320 y 1280 px. Los recorridos del conversor comprueban también los
 de ejecución, fracciones copiadas, modo activo sin reinicio y el anuncio
 diferido al volver a una cantidad anterior.
 
+El primer CI remoto detectó una carrera en la preparación del reloj de la
+prueba de anuncios: comparar la hora real del proceso con la del navegador
+podía intentar pausar en el pasado. La prueba usa ahora un origen y una pausa
+fijos del mismo reloj, conservando las aserciones exactas de 299/300 ms.
+
 No incluye sustituciones, recetas completas, porciones, moldes ni integración
 con menús o compras. Mejora futura: guía de horno argentino (mínimo, moderado,
 fuerte y reguladores), con advertencia sobre diferencias entre modelos.
