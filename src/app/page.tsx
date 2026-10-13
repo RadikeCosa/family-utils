@@ -42,6 +42,12 @@ export default function Home() {
             <span className={styles.cardCopy}>Guarden obras, miradas y recuerdos compartidos.</span>
             <span className={styles.cardArrow}>Explorar <span aria-hidden="true">→</span></span>
           </Link>}
+          <Link className={styles.appCard} href="/cocina" aria-label="Abrir Conversor de cocina">
+            <span className={`${styles.appIcon} ${styles.peach}`} aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 3h14v18H5zM8 7h8M8 11h2m4 0h2m-8 4h2m4 0h2m-8 3h2m4 0h2" /></svg></span>
+            <span className={styles.cardTitle}>Conversor de cocina</span>
+            <span className={styles.cardCopy}>Convertí medidas, ingredientes y temperaturas.</span>
+            <span className={styles.cardArrow}>Convertir <span aria-hidden="true">→</span></span>
+          </Link>
           <Link className={`${styles.appCard} ${styles.familyCard}`} href="/familia">
             <span className={`${styles.appIcon} ${styles.mint}`}>⌂</span>
             <span className={styles.cardTitle}>Mi familia</span>

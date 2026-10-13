@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Browser, type BrowserContext
 import pg from "pg";
 
 const widths = process.env.A11Y_WIDTHS?.split(",").map(Number).filter(Number.isFinite) ?? [320, 360, 375, 430, 760, 761, 820, 821, 1280];
-const routes = ["/", "/acceso", "/familia", "/tareas", "/menus", "/compras", "/biblioteca"];
+const routes = ["/", "/acceso", "/cocina", "/familia", "/tareas", "/menus", "/compras", "/biblioteca"];
 const databaseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 let fixtureSequence = 0;
 
@@ -208,15 +208,15 @@ test("menús diario mantiene personas visibles e ideas junto a confirmar a 360 p
   } finally { await removeFixture(fixture); }
 });
 
-test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, baseURL }) => {
+test("contraste, foco y desbordamiento en las áreas públicas y familiares", async ({ browser, baseURL }) => {
   test.setTimeout(Math.max(120_000, widths.length * 30_000));
   const fixture = await createFixture(baseURL!, browser);
   const failures: string[] = [];
   try {
     for (const width of widths) {
       const scenarios = [
-        { routes: routes.slice(0, 2), storageState: undefined },
-        { routes: routes.slice(2), storageState: fixture.storageState },
+        { routes: routes.slice(0, 3), storageState: undefined },
+        { routes: routes.slice(3), storageState: fixture.storageState },
       ];
       for (const scenario of scenarios) {
         const context = await browser.newContext({ storageState: scenario.storageState, viewport: { width, height: 900 } });
@@ -227,6 +227,10 @@ test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, ba
           await page.goto(route, { waitUntil: "domcontentloaded" });
           if (dataReady) await dataReady;
           await expect(page.locator("main")).toBeVisible();
+          if (route === "/cocina") {
+            await page.getByLabel("Ingrediente", { exact: true }).selectOption("flour");
+            await expect(page.getByLabel("Resultado", { exact: true })).toContainText("125 g");
+          }
           if (route === "/tareas") await expect(page.getByLabel("Ir a una fecha")).toBeVisible();
           await expect(page).toHaveURL((url) => url.pathname === route);
           const results = await new AxeBuilder({ page })
