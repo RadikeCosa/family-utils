@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, mealAttendance, members } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { getDayInTimeZone, isMealType, isUuid, isValidDate } from "@/lib/meals/rules";
+import { hasMealAttendance, getDayInTimeZone, isMealType, isUuid, isValidDate } from "@/lib/meals/rules";
 import { bumpMenusRevision, lockFamilyActor, lockMealSlot } from "@/lib/meals/server";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function PUT(request: Request) {
   const mealType = body.mealType;
   const memberId = typeof body.memberId === "string" ? body.memberId : actor.memberId;
   const requestedStatus = body.status;
-  if (!isValidDate(date) || !isMealType(mealType) || !isUuid(memberId) || !["present", "absent", "unknown"].includes(String(requestedStatus))) {
+  if (!isValidDate(date) || !isMealType(mealType) || !hasMealAttendance(mealType) || !isUuid(memberId) || !["present", "absent", "unknown"].includes(String(requestedStatus))) {
     return NextResponse.json({ error: "Revisá la fecha, comida y asistencia." }, { status: 400 });
   }
   const status = requestedStatus as "present" | "absent" | "unknown";

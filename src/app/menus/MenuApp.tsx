@@ -5,11 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "@/lib/family-auth-client";
 import styles from "./menus.module.css";
-import { addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
+import { MEAL_TYPES, MEAL_LABELS, hasMealAttendance, type MealType, addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
 
 const authClient = createAuthClient();
 type Role = "administrator" | "member";
-type MealType = "lunch" | "dinner";
 type AttendanceStatus = "present" | "absent" | "unknown";
 type Profile = { id: string; name: string; role: Role };
 type Attendance = {
@@ -34,7 +33,8 @@ type Meal = {
 };
 type WeekData = { weekStart: string; weekEnd: string; today: string; timeZone: string; revision: number; currentMemberId: string; currentRole: Role; members: Profile[]; meals: Meal[] };
 type DialogState =
-  | { kind: "choose"; meal: Meal }
+  | { kind: "choose"; meal: Meal; suggestionId?: string }
+  | { kind: "attendance"; meal: Meal }
   | { kind: "propose"; meal: Meal }
   | { kind: "edit"; meal: Meal; suggestion: Suggestion }
   | { kind: "withdraw"; meal: Meal; suggestion: Suggestion }
@@ -43,13 +43,13 @@ type ApiError = Error & { status?: number; code?: string };
 
 function clientFamilyDay(timeZone = "America/Argentina/Buenos_Aires") { return getDayInTimeZone(new Date(), timeZone); }
 function labelDay(day: string) {
-  return new Intl.DateTimeFormat("es-AR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${day}T12:00:00.000Z`));
+  const label = new Intl.DateTimeFormat("es-AR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${day}T12:00:00.000Z`));
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 function labelTime(value: string) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(value));
 }
-function mealName(type: MealType) { return type === "lunch" ? "almuerzo" : "cena"; }
-function mealTitle(type: MealType) { return type === "lunch" ? "Almuerzo" : "Cena"; }
+function mealTitle(type: MealType) { return MEAL_LABELS[type]; }
 function statusLabel(status: AttendanceStatus) { return status === "present" ? "En casa" : status === "absent" ? "No estará" : "Sin respuesta"; }
 function countAttendance(meal: Meal) {
   const counts = { present: 0, absent: 0, unknown: 0 };
@@ -94,12 +94,14 @@ export default function MenuApp() {
   const [choice, setChoice] = useState("");
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
-  const [confirmInsideDialog, setConfirmInsideDialog] = useState(false);
+  const [expandedMeals, setExpandedMeals] = useState<Set<MealType>>(new Set());
+  const [expandedIdeas, setExpandedIdeas] = useState<Set<string>>(new Set());
   const etag = useRef("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
-  const focusedMealRefs = useRef<Record<MealType, HTMLElement | null>>({ lunch: null, dinner: null });
+  const dialogMealTypeRef = useRef<MealType>("lunch");
+  const focusedMealRefs = useRef<Record<MealType, HTMLElement | null>>({ breakfast: null, lunch: null, snack: null, dinner: null });
 
   const weekStart = startOfWeek(selectedDate);
   const admin = data?.currentRole === "administrator";
@@ -200,7 +202,10 @@ export default function MenuApp() {
       requestAnimationFrame(() => titleInputRef.current?.focus());
     } else if (!dialog && element?.open) {
       element.close();
-      requestAnimationFrame(() => openerRef.current?.focus());
+      requestAnimationFrame(() => {
+        if (openerRef.current?.isConnected) openerRef.current.focus();
+        else focusedMealRefs.current[dialogMealTypeRef.current]?.focus();
+      });
     }
   }, [dialog]);
 
@@ -214,12 +219,12 @@ export default function MenuApp() {
 
   function openDialog(state: DialogState, opener: HTMLElement) {
     openerRef.current = opener;
+    dialogMealTypeRef.current = state.meal.mealType;
     setDialogError("");
     setDialogBusy(false);
-    setConfirmInsideDialog(false);
     if (state.kind === "choose") {
       const selected = state.meal.selection?.suggestionId;
-      setChoice(selected ?? (state.meal.suggestions.length ? "" : "new"));
+      setChoice(state.suggestionId ?? selected ?? (state.meal.suggestions.length ? "" : "new"));
       setTitle(""); setNote("");
     } else if (state.kind === "propose") {
       setTitle(""); setNote("");
@@ -233,7 +238,6 @@ export default function MenuApp() {
     if (dialogBusy) return;
     setDialog(null);
     setDialogError("");
-    setConfirmInsideDialog(false);
   }
 
   async function perform(key: string, action: () => Promise<unknown>, success: string, keepDialog = false): Promise<boolean> {
@@ -244,7 +248,14 @@ export default function MenuApp() {
     setError(""); setNotice(""); setDialogError("");
     try {
       await action();
-      await refresh(true);
+      const latest = await refresh(true);
+      if (keepDialog && latest) {
+        setDialog((current) => {
+          if (!current) return current;
+          const meal = latest.meals.find((item) => item.date === current.meal.date && item.mealType === current.meal.mealType);
+          return meal ? { ...current, meal } : current;
+        });
+      }
       setNotice(success);
       if (!keepDialog) setDialog(null);
       return true;
@@ -276,7 +287,7 @@ export default function MenuApp() {
     await perform(key, () => jsonRequest("/api/meals/attendance", {
       method: "PUT",
       body: JSON.stringify({ date: meal.date, mealType: meal.mealType, memberId, status }),
-    }), "Asistencia actualizada.");
+    }), "Asistencia actualizada.", true);
   }
 
   async function saveChoice(event: React.FormEvent<HTMLFormElement>) {
@@ -353,7 +364,7 @@ export default function MenuApp() {
     <section className={styles.intro}>
       <p className={styles.eyebrow}>PLANIFICADOR FAMILIAR</p>
       <div className={styles.titleRow}>
-        <div><h1>¿Qué comemos?</h1><p>Un plan compartido para cada almuerzo y cena.</p></div>
+        <div><h1>¿Qué comemos?</h1><p>Un plan compartido para las comidas de cada día.</p></div>
         <div className={styles.dateNav} aria-label="Navegar por fecha">
           <button aria-label="Día anterior" onClick={() => navigateToDate(addDays(selectedDate, -1))}>←</button>
           <label className={styles.dateInput}><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => navigateToDate(event.target.value)} /></label>
@@ -367,69 +378,83 @@ export default function MenuApp() {
     </section>
 
     <section className={styles.mealList} aria-label={`Comidas del ${labelDay(selectedDate)}`}>
-      {(["lunch", "dinner"] as const).map((mealType) => {
+      {MEAL_TYPES.map((mealType) => {
         const meal = mealsByType.get(mealType);
+        const compact = !hasMealAttendance(mealType);
+        const expanded = !compact || expandedMeals.has(mealType);
         if (!weekReady || !meal || !data) return <article className={styles.mealCard} key={mealType}><h2>{mealTitle(mealType)}</h2><p className={styles.loading}>{!weekReady || loading ? "Cargando…" : "No se pudo cargar esta comida."}</p></article>;
         const past = selectedDate < today;
         const counts = countAttendance(meal);
         const allAbsent = meal.attendance.length > 0 && counts.present === 0 && counts.unknown === 0;
         const key = `${meal.date}-${meal.mealType}`;
-        const stateLabel = meal.selection ? "Comida elegida" : "Sin comida elegida";
-        return <article className={styles.mealCard} id={`meal-${mealType}`} tabIndex={-1} ref={(node) => { focusedMealRefs.current[mealType] = node; }} key={mealType}>
-          <header className={styles.mealHeading}><div><h2>{mealTitle(mealType)}</h2><span>{stateLabel}</span></div>
-            {admin && !past && <button className={styles.primaryButton} onClick={(event) => openDialog({ kind: "choose", meal }, event.currentTarget)}>{meal.selection ? "Cambiar comida" : "Elegir comida"}</button>}
+        const alternatives = meal.suggestions.filter((suggestion) => suggestion.id !== meal.selection?.suggestionId);
+        const visibleIdeas = expandedIdeas.has(key) ? alternatives : alternatives.slice(0, 3);
+        return <article className={`${styles.mealCard} ${compact ? styles.compactMeal : ""}`} id={`meal-${mealType}`} tabIndex={-1} ref={(node) => { focusedMealRefs.current[mealType] = node; }} key={mealType}>
+          <header className={styles.mealHeading}>
+            <div><h2>{mealTitle(mealType)}</h2>{compact && !expanded && <span>{meal.selection?.title ?? "Sin plan"}</span>}</div>
+            {compact && <button className={styles.expandButton} aria-expanded={expanded} aria-controls={`content-${mealType}`} onClick={() => setExpandedMeals((current) => {
+              const next = new Set(current);
+              if (next.has(mealType)) next.delete(mealType); else next.add(mealType);
+              return next;
+            })}>{expanded ? "Cerrar" : "Ver plan"}<span className={styles.srOnly}> de {mealTitle(mealType).toLowerCase()}</span></button>}
+            {expanded && admin && !past && (meal.selection
+              ? <details className={styles.actionsMenu}>
+                <summary aria-label={`Acciones de ${mealTitle(mealType).toLowerCase()}`}>⋯</summary>
+                <div className={styles.actionOptions}>
+                  <button onClick={(event) => {
+                    const menu = event.currentTarget.closest("details")!;
+                    menu.open = false;
+                    openDialog({ kind: "choose", meal }, menu.querySelector("summary")!);
+                  }}>Cambiar comida</button>
+                  <button onClick={(event) => {
+                    const menu = event.currentTarget.closest("details")!;
+                    menu.open = false;
+                    openDialog({ kind: "clear", meal }, menu.querySelector("summary")!);
+                  }}>Quitar elección</button>
+                </div>
+              </details>
+              : <button className={styles.primaryButton} onClick={(event) => openDialog({ kind: "choose", meal }, event.currentTarget)}>Elegir comida</button>)}
           </header>
-          {meal.selection ? <div className={styles.selectedMeal}>
-            <span className={styles.selectedEyebrow}>PLAN DE LA FAMILIA</span>
-            <strong>{meal.selection.title ?? "La idea elegida ya no está disponible"}</strong>
-            <small>{formatMealAttribution(meal.selection.proposedById, meal.selection.proposedByName, meal.selection.confirmedByMemberId, meal.selection.confirmedByName)} · {labelTime(meal.selection.confirmedAt)}</small>
-            {admin && !past && <button className={styles.textDanger} onClick={(event) => openDialog({ kind: "clear", meal }, event.currentTarget)}>Quitar elección</button>}
-          </div> : <p className={styles.noSelection}>Todavía no se eligió una comida para este horario.</p>}
+          <div id={`content-${mealType}`} hidden={!expanded}>
+            {meal.selection ? <div className={styles.selectedMeal}>
+              <span className={styles.selectedEyebrow}>COMIDA ELEGIDA</span>
+              <strong>{meal.selection.title ?? "La idea elegida ya no está disponible"}</strong>
+              <small>{formatMealAttribution(meal.selection.proposedById, meal.selection.proposedByName, meal.selection.confirmedByMemberId, meal.selection.confirmedByName)} · {labelTime(meal.selection.confirmedAt)}</small>
+            </div> : <p className={styles.noSelection}>Todavía no se eligió una comida para este horario.</p>}
 
-          <div className={styles.summaryRow}>
-            <p>{counts.present} en casa · {counts.absent} no estarán · {counts.unknown} sin responder</p>
-            {allAbsent && <span className={styles.warning}>Nadie figura en casa; podés elegir de todos modos.</span>}
-            {!allAbsent && counts.unknown > 0 && <span className={styles.muted}>{counts.unknown} sin responder</span>}
+            <section className={styles.ideasSection} aria-label={`Ideas para ${mealTitle(mealType).toLowerCase()}`}>
+              <div className={styles.ideasHeading}><h3>{meal.selection ? "Otras ideas" : "Ideas"}</h3>
+                {!past && <button className={styles.expandButton} onClick={(event) => openDialog({ kind: "propose", meal }, event.currentTarget)}>Proponer idea</button>}
+              </div>
+              <div className={styles.suggestions}>
+                {!alternatives.length && <p className={styles.empty}>{meal.selection ? "Podés proponer otra alternativa." : "Todavía no hay ideas. Podés proponer una."}</p>}
+                {visibleIdeas.map((suggestion) => {
+                  const canManage = !past && (admin || suggestion.authorMemberId === data.currentMemberId);
+                  return <div className={styles.suggestion} key={suggestion.id}>
+                    <div className={styles.suggestionText}><strong>{suggestion.title}</strong>{suggestion.note && <p>{suggestion.note}</p>}<small>Idea de {suggestion.authorName}</small></div>
+                    <div className={styles.suggestionActions}>
+                      {admin && !past && <button onClick={(event) => openDialog({ kind: "choose", meal, suggestionId: suggestion.id }, event.currentTarget)}>Elegir<span className={styles.srOnly}> {suggestion.title}</span></button>}
+                      {canManage && <>
+                        <button onClick={(event) => openDialog({ kind: "edit", meal, suggestion }, event.currentTarget)}>Editar<span className={styles.srOnly}> {suggestion.title}</span></button>
+                        <button onClick={(event) => openDialog({ kind: "withdraw", meal, suggestion }, event.currentTarget)}>Retirar<span className={styles.srOnly}> {suggestion.title}</span></button>
+                      </>}
+                    </div>
+                  </div>;
+                })}
+                {alternatives.length > 3 && <button className={styles.expandButton} aria-expanded={expandedIdeas.has(key)} onClick={() => setExpandedIdeas((current) => {
+                  const next = new Set(current);
+                  if (next.has(key)) next.delete(key); else next.add(key);
+                  return next;
+                })}>{expandedIdeas.has(key) ? "Ver menos" : `Ver todas (${alternatives.length})`}</button>}
+              </div>
+            </section>
+
+            {hasMealAttendance(mealType) && <div className={styles.summaryRow}>
+              <p>{counts.present} en casa · {counts.absent} no estarán · {counts.unknown} sin responder</p>
+              {!past && <button className={styles.expandButton} aria-label={`Editar asistencia de ${mealTitle(mealType).toLowerCase()}`} onClick={(event) => openDialog({ kind: "attendance", meal }, event.currentTarget)}>Editar</button>}
+              {allAbsent && <span className={styles.warning}>Nadie figura en casa; podés elegir de todos modos.</span>}
+            </div>}
           </div>
-
-          <details className={styles.details}>
-            <summary>Asistencia <span>Editar la de cualquier integrante</span></summary>
-            <div className={styles.attendanceList}>
-              {meal.attendance.map((record) => {
-                const person = data.members.find((candidate) => candidate.id === record.memberId);
-                if (!person) return null;
-                return <fieldset className={styles.attendancePerson} key={record.memberId}>
-                  <legend>{person.name}</legend>
-                  <div className={styles.statusChoices} role="radiogroup" aria-label={`Asistencia de ${person.name}`}>
-                    {(["present", "absent", "unknown"] as const).map((status) => <label className={styles.statusChoice} key={status}>
-                      <input type="radio" name={`attendance-${key}-${record.memberId}`} value={status} checked={record.status === status} disabled={past || busyKey.startsWith(`attendance-${key}-${record.memberId}`)} onChange={() => void updateAttendance(meal, record.memberId, status)} />
-                      <span>{statusLabel(status)}</span>
-                    </label>)}
-                  </div>
-                  {record.updatedByName && record.updatedAt && <small className={styles.attribution}>Actualizó {record.updatedByName} · {labelTime(record.updatedAt)}</small>}
-                </fieldset>;
-              })}
-            </div>
-          </details>
-
-          <details className={styles.details}>
-            <summary>Ideas <span>{meal.suggestions.length}</span></summary>
-            <div className={styles.suggestions}>
-              {!meal.suggestions.length && <p className={styles.empty}>Todavía no hay ideas. Podés proponer una.</p>}
-              {meal.suggestions.map((suggestion) => {
-                const selected = meal.selection?.suggestionId === suggestion.id;
-                const canManage = !past && (admin || suggestion.authorMemberId === data.currentMemberId) && !selected;
-                return <div className={`${styles.suggestion} ${selected ? styles.selectedSuggestion : ""}`} key={suggestion.id}>
-                  <div className={styles.suggestionText}><strong>{suggestion.title}</strong>{suggestion.note && <p>{suggestion.note}</p>}<small>Idea de {suggestion.authorName}{selected ? " · Elegida" : ""}</small></div>
-                  {canManage && <div className={styles.suggestionActions}>
-                    <button onClick={(event) => openDialog({ kind: "edit", meal, suggestion }, event.currentTarget)}>Editar</button>
-                    <button onClick={(event) => openDialog({ kind: "withdraw", meal, suggestion }, event.currentTarget)}>Retirar</button>
-                  </div>}
-                </div>;
-              })}
-              {!past && <button className={styles.secondaryButton} onClick={(event) => openDialog({ kind: "propose", meal }, event.currentTarget)}>Proponer idea</button>}
-            </div>
-          </details>
         </article>;
       })}
     </section>
@@ -439,7 +464,7 @@ export default function MenuApp() {
     <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="menu-dialog-title" onCancel={(event) => { event.preventDefault(); closeDialog(); }}>
       {dialog && <>
         <button className={styles.dialogClose} aria-label="Cerrar" onClick={closeDialog}>×</button>
-        <h2 id="menu-dialog-title">{dialog.kind === "choose" ? `${dialog.meal.selection ? "Cambiar" : "Elegir"} comida para el ${mealName(dialog.meal.mealType)}` : dialog.kind === "propose" ? `Proponer idea para el ${mealName(dialog.meal.mealType)}` : dialog.kind === "edit" ? "Editar idea" : dialog.kind === "withdraw" ? "Retirar idea" : "Quitar elección"}</h2>
+        <h2 id="menu-dialog-title">{dialog.kind === "choose" ? `${dialog.meal.selection ? "Cambiar" : "Elegir"} comida · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "propose" ? `Proponer idea · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "attendance" ? `Asistencia · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "edit" ? "Editar idea" : dialog.kind === "withdraw" ? "Retirar idea" : "Quitar elección"}</h2>
         <p className={styles.dialogDate}>{labelDay(dialog.meal.date)}</p>
         {dialog.kind === "choose" && <form onSubmit={(event) => void saveChoice(event)}>
           {dialog.meal.suggestions.length > 0 && <fieldset className={styles.choiceList}>
@@ -474,8 +499,29 @@ export default function MenuApp() {
         </>}
         {dialog.kind === "clear" && <>
           <p>Se quitará la comida elegida. La idea seguirá disponible para volver a elegirla.</p>
-          {confirmInsideDialog ? <DialogError message={dialogError} /> : null}
-          <div className={styles.dialogActions}>{confirmInsideDialog ? <><button className={styles.secondaryButton} onClick={() => setConfirmInsideDialog(false)}>Cancelar</button><button className={styles.textDanger} disabled={dialogBusy || selectedDate < today} onClick={() => void clearSelection()}>{dialogBusy ? "Quitando…" : "Sí, quitar elección"}</button></> : <><button className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.textDanger} disabled={selectedDate < today} onClick={() => setConfirmInsideDialog(true)}>Quitar elección</button></>}</div>
+          <DialogError message={dialogError} />
+          <div className={styles.dialogActions}><button className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.textDanger} disabled={dialogBusy || selectedDate < today} onClick={() => void clearSelection()}>{dialogBusy ? "Quitando…" : "Sí, quitar elección"}</button></div>
+        </>}
+        {dialog.kind === "attendance" && <>
+          <div className={styles.attendanceList}>
+            {dialog.meal.attendance.map((record) => {
+              const person = data?.members.find((candidate) => candidate.id === record.memberId);
+              if (!person) return null;
+              return <fieldset className={styles.attendancePerson} key={record.memberId}>
+                <legend>{person.name}</legend>
+                <div className={styles.statusChoices} role="radiogroup" aria-label={`Asistencia de ${person.name}`}>
+                  {(["present", "absent", "unknown"] as const).map((status) => <label className={styles.statusChoice} key={status}>
+                    <input type="radio" name={`attendance-${record.memberId}`} value={status} checked={record.status === status} disabled={dialogBusy || dialog.meal.date < today || busyKey !== ""} onChange={() => void updateAttendance(dialog.meal, record.memberId, status)} />
+                    <span>{statusLabel(status)}</span>
+                  </label>)}
+                </div>
+                {record.updatedByName && record.updatedAt && <small className={styles.attribution}>Actualizó {record.updatedByName} · {labelTime(record.updatedAt)}</small>}
+              </fieldset>;
+            })}
+          </div>
+          <p className={styles.muted} role="status">{dialogBusy ? "Guardando asistencia…" : "Los cambios se guardan al elegir una opción."}</p>
+          <DialogError message={dialogError} />
+          <div className={styles.dialogActions}><button className={styles.primaryButton} disabled={dialogBusy} onClick={closeDialog}>Listo</button></div>
         </>}
       </>}
     </dialog>

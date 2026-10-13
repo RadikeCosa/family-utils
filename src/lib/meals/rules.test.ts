@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
+import { MEAL_TYPES, MEAL_LABELS, hasMealAttendance, isMealType, canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
 
 test("meal attribution uses creator identity and handles repeated or missing names", () => {
   assert.equal(formatMealAttribution("a", "Ana", "b", "Ramiro"), "Propuesto por Ana · Confirmado por Ramiro");
@@ -44,4 +44,16 @@ test("menu dates allow ten years of history and six months ahead", () => {
   assert.equal(isMenuDateInRange("2026-09-30", "2026-09-30"), true);
   assert.equal(isMenuDateInRange("2027-03-31", "2026-09-30"), false);
   assert.equal(isMenuDateInRange("not-a-day", "2026-09-30"), false);
+});
+
+
+test("four meals follow daily order and only lunch/dinner use attendance", () => {
+  assert.deepEqual(MEAL_TYPES, ["breakfast", "lunch", "snack", "dinner"]);
+  for (const type of MEAL_TYPES) {
+    assert.equal(isMealType(type), true);
+    assert.equal(hasMealAttendance(type), type === "lunch" || type === "dinner");
+    assert.ok(MEAL_LABELS[type]);
+  }
+  assert.equal(isMealType("brunch"), false);
+  assert.equal(isMealType(null), false);
 });

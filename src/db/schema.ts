@@ -17,6 +17,7 @@ import {
   bigint,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { MEAL_TYPES } from "@/lib/meals/rules";
 import { FAMILY_TIME_ZONE, type CarryPolicy, type FamilyRole, type OccurrenceStatus, type TaskStatus } from "@/lib/tasks/rules";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -89,7 +90,7 @@ export const presenceRuleKindEnum = pgEnum("presence_rule_kind", ["weekly", "per
 export const accessCodePurposeEnum = pgEnum("access_code_purpose", ["invitation", "recovery"]);
 export const assignmentModeEnum = pgEnum("assignment_mode", ["shared", "individual"]);
 export const accessMethodEnum = pgEnum("access_method", ["google", "code"]);
-export const mealTypeEnum = pgEnum("meal_type", ["lunch", "dinner"]);
+export const mealTypeEnum = pgEnum("meal_type", MEAL_TYPES);
 export const mealAttendanceStatusEnum = pgEnum("meal_attendance_status", ["present", "absent"]);
 
 export const families = pgTable("families", {

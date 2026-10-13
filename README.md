@@ -7,7 +7,7 @@ pensado como una PWA para Android y iPhone.
 ## Estado
 
 La plataforma incluye una portada, acceso con Google o código, administración
-familiar, tareas y rutinas, propuestas y confirmación de almuerzos y cenas, y
+familiar, tareas y rutinas, propuestas y confirmación de las cuatro comidas diarias, y
 listas de compras con editores por perfil y sugerencias familiares. Las tres
 utilidades están disponibles en
 [family-utils-umber.vercel.app](https://family-utils-umber.vercel.app).

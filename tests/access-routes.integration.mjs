@@ -265,6 +265,25 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await history.json()).items.some((item) => item.taskId === pastTask.id), true);
     });
 
+    await t.test("members propose breakfast but cannot confirm it or register its attendance", async () => {
+      const date = "2099-05-12";
+      const proposed = await fetch(`${origin}/api/meals/suggestions`, {
+        method: "POST", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date, mealType: "breakfast", title: "Yogurt con frutas" }),
+      });
+      assert.equal(proposed.status, 201);
+      const confirmation = await fetch(`${origin}/api/meals/selection`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date, mealType: "breakfast", title: "Yogurt", expectedVersion: 0 }),
+      });
+      assert.equal(confirmation.status, 403);
+      const attendance = await fetch(`${origin}/api/meals/attendance`, {
+        method: "PUT", headers: { ...headers, Cookie: memberCookie },
+        body: JSON.stringify({ date, mealType: "breakfast", memberId: childId, status: "present" }),
+      });
+      assert.equal(attendance.status, 400);
+    });
+
     await t.test("recovery from a new PWA identity revokes the previous session, not the new one", async () => {
       const { rows: [oldDevice] } = await pool.query("SELECT auth_user_id FROM member_devices WHERE member_id=$1 AND revoked_at IS NULL", [childId]);
       const oldSession = (await pool.query("SELECT token FROM session WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1", [oldDevice.auth_user_id])).rows[0];
@@ -350,6 +369,31 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
         { proposedById: childId, proposedByName: "Member test", confirmedByMemberId: adminId, confirmedByName: "Admin test" },
       );
       assert.equal(selectedMeal.selection.title, "PRUEBA concurrencia");
+    });
+
+    await t.test("four-meal weeks are read-only, cache varies by week, and compact meals have no attendance", async () => {
+      const before = (await pool.query("SELECT count(*)::int AS count FROM meal_slots WHERE family_id=$1", [familyId])).rows[0].count;
+      const week = await fetch(`${origin}/api/meals?weekStart=2099-05-11`, { headers: { Cookie: memberCookie } });
+      assert.equal(week.status, 200);
+      const etag = week.headers.get("etag");
+      const data = await week.json();
+      assert.equal(data.meals.length, 28);
+      assert.deepEqual(data.meals.slice(0, 4).map((meal) => meal.mealType), ["breakfast", "lunch", "snack", "dinner"]);
+      assert.ok(data.meals.filter((meal) => ["breakfast", "snack"].includes(meal.mealType)).every((meal) => meal.attendance.length === 0));
+      const cached = await fetch(`${origin}/api/meals?weekStart=2099-05-11`, { headers: { Cookie: memberCookie, "If-None-Match": etag } });
+      assert.equal(cached.status, 304);
+      const nextWeek = await fetch(`${origin}/api/meals?weekStart=2099-05-18`, { headers: { Cookie: memberCookie, "If-None-Match": etag } });
+      assert.equal(nextWeek.status, 200);
+      assert.notEqual(nextWeek.headers.get("etag"), etag);
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM meal_slots WHERE family_id=$1", [familyId])).rows[0].count, before);
+      for (const mealType of ["breakfast", "snack"]) {
+        const confirmation = await fetch(`${origin}/api/meals/selection`, {
+          method: "PUT", headers: { ...headers, Cookie: memberCookie },
+          body: JSON.stringify({ date: "2099-05-12", mealType, title: "Frutas", expectedVersion: 0 }),
+        });
+        assert.equal(confirmation.status, 200);
+        assert.equal((await confirmation.json()).pendingAttendance, false);
+      }
     });
 
     await t.test("a failed selection after inserting a new idea rolls the whole transaction back", async () => {

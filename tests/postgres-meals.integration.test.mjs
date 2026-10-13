@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 
@@ -75,5 +80,45 @@ test("PostgreSQL meal selection is single-winner under concurrent confirmations"
       await pool.query("DELETE FROM families WHERE id = $1", [familyId]);
     }
     await pool.end();
+  }
+});
+
+
+test("four-meal migration preserves an existing lunch selection and attendance", { skip: !connectionString && "requires isolated PostgreSQL" }, async () => {
+  const admin = new pg.Pool({ connectionString });
+  const name = `meals_upgrade_${randomUUID().replaceAll("-", "")}`;
+  const temporary = await mkdtemp(join(tmpdir(), "meals-migrations-"));
+  const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
+  const index = journal.entries.findIndex((entry) => entry.tag.endsWith("_meal_four_types"));
+  assert.ok(index >= 0);
+  let pool;
+  try {
+    await admin.query(`CREATE DATABASE "${name}"`);
+    const url = new URL(connectionString); url.pathname = `/${name}`;
+    pool = new pg.Pool({ connectionString: url.toString() });
+    await mkdir(join(temporary, "meta"));
+    const preceding = { ...journal, entries: journal.entries.slice(0, index) };
+    await writeFile(join(temporary, "meta/_journal.json"), JSON.stringify(preceding));
+    for (const entry of preceding.entries) await writeFile(join(temporary, `${entry.tag}.sql`), await readFile(`drizzle/${entry.tag}.sql`));
+    await migrate(drizzle(pool), { migrationsFolder: temporary });
+    const { rows: [family] } = await pool.query("INSERT INTO families(name) VALUES('Meal migration sentinel') RETURNING id");
+    const { rows: [member] } = await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Adult','administrator') RETURNING id", [family.id]);
+    const { rows: [slot] } = await pool.query("INSERT INTO meal_slots(family_id,meal_date,meal_type) VALUES($1,'2099-05-12','lunch') RETURNING id", [family.id]);
+    const { rows: [idea] } = await pool.query("INSERT INTO meal_suggestions(slot_id,author_member_id,title) VALUES($1,$2,'Tarta') RETURNING id", [slot.id, member.id]);
+    await pool.query("INSERT INTO meal_selections(slot_id,suggestion_id,confirmed_by_member_id,version) VALUES($1,$2,$3,3)", [slot.id, idea.id, member.id]);
+    await pool.query("INSERT INTO meal_attendance(slot_id,member_id,status,updated_by_member_id) VALUES($1,$2,'present',$2)", [slot.id, member.id]);
+    await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
+    const { rows: [saved] } = await pool.query("SELECT suggestion_id,version FROM meal_selections WHERE slot_id=$1", [slot.id]);
+    assert.deepEqual(saved, { suggestion_id: idea.id, version: 3 });
+    assert.equal((await pool.query("SELECT status FROM meal_attendance WHERE slot_id=$1", [slot.id])).rows[0].status, "present");
+    const types = (await pool.query("SELECT unnest(enum_range(NULL::meal_type))::text AS type")).rows.map((row) => row.type);
+    assert.deepEqual(types, ["breakfast", "lunch", "snack", "dinner"]);
+    await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
+    assert.equal(Number((await pool.query("SELECT count(*) FROM drizzle.__drizzle_migrations")).rows[0].count), journal.entries.length);
+  } finally {
+    if (pool) await pool.end();
+    await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
+    await admin.end();
+    await rm(temporary, { recursive: true, force: true });
   }
 });

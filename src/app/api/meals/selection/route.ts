@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, mealAttendance, mealSelections, mealSuggestions, members } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { canConfirmMeal, getDayInTimeZone, hasUnknownAttendance, isMealType, isUuid, isValidDate } from "@/lib/meals/rules";
+import { hasMealAttendance, canConfirmMeal, getDayInTimeZone, hasUnknownAttendance, isMealType, isUuid, isValidDate } from "@/lib/meals/rules";
 import { bumpMenusRevision, lockFamilyActor, lockMealSlot } from "@/lib/meals/server";
 
 export const runtime = "nodejs";
@@ -58,13 +58,13 @@ export async function PUT(request: Request) {
       : null;
     if (suggestionId && !targetSuggestion) return { kind: "invalid-suggestion" as const };
     if (!suggestionId && !title) return { kind: "invalid-title" as const };
-    const attendance = activeMembers.length
+    const attendance = hasMealAttendance(mealType) && activeMembers.length
       ? await tx.select({ memberId: mealAttendance.memberId, status: mealAttendance.status }).from(mealAttendance)
         .where(and(eq(mealAttendance.slotId, slot.id), inArray(mealAttendance.memberId, activeMembers.map((profile) => profile.id))))
       : [];
     const eligibility = canConfirmMeal(activeMembers.map((profile) => profile.id));
     if (eligibility !== "ok") return { kind: eligibility };
-    const pending = hasUnknownAttendance(activeMembers.map((profile) => profile.id), attendance.flatMap((record) => record.status ? [{ memberId: record.memberId, status: record.status }] : []));
+    const pending = hasMealAttendance(mealType) && hasUnknownAttendance(activeMembers.map((profile) => profile.id), attendance.flatMap((record) => record.status ? [{ memberId: record.memberId, status: record.status }] : []));
 
     let targetSuggestionId = suggestionId;
     let createdSuggestion: typeof mealSuggestions.$inferSelect | null = null;

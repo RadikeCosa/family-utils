@@ -1,4 +1,11 @@
-export type MealType = "lunch" | "dinner";
+export const MEAL_TYPES = ["breakfast", "lunch", "snack", "dinner"] as const;
+export type MealType = typeof MEAL_TYPES[number];
+export const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: "Desayuno", lunch: "Almuerzo", snack: "Merienda", dinner: "Cena",
+};
+export function hasMealAttendance(type: MealType): boolean {
+  return type === "lunch" || type === "dinner";
+}
 export type AttendanceStatus = "present" | "absent" | "unknown";
 export type AttendanceSource = "manual" | "calendar" | "unknown";
 export type FamilyRole = "administrator" | "member";
@@ -87,5 +94,5 @@ export function hasUnknownAttendance(activeMemberIds: readonly string[], attenda
 }
 
 export function isMealType(value: unknown): value is MealType {
-  return value === "lunch" || value === "dinner";
+  return typeof value === "string" && (MEAL_TYPES as readonly string[]).includes(value);
 }

@@ -19,7 +19,7 @@
 .dateNav .todayButton { padding: 0 12px; font-size: 13px; }
 .dateNav button:disabled { opacity: .55; cursor: default; }
 .dateInput input { min-width: 150px; padding: 0 9px; font-size: 13px; }
-.dateLabel { margin: 11px 0 0; color: #536b58; font-size: 15px; font-weight: 600; text-transform: capitalize; }
+.dateLabel { margin: 11px 0 0; color: #536b58; font-size: 15px; font-weight: 600;  }
 .error,.notice { margin: 13px 0 0; padding: 11px 13px; border-radius: 8px; font-size: 14px; }
 .error { background: #fbefec; color: #873c32; }.error button { min-height: 44px; margin-left: 8px; color: inherit; font-weight: 700; }
 .notice { background: #edf5eb; color: #405b46; }
@@ -27,7 +27,7 @@
 .mealCard { min-width: 0; padding: 18px; border: 1px solid #dce3da; border-radius: 12px; background: #fff; box-shadow: 0 3px 10px #374a350d; scroll-margin-block: 20px; }
 .mealCard:focus { outline: 3px solid #5b795f; outline-offset: 3px; }
 .mealHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.mealHeading > div { display: grid; gap: 4px; }
+.mealHeading > div:first-child { display: grid; gap: 4px; }
 .mealHeading h2 { margin: 0; color: #35463a; font: 700 18px Manrope,sans-serif; }
 .mealHeading span { color: #536b58; font-size: 13px; }
 .primaryButton,.secondaryButton,.textDanger { min-height: 44px; padding: 0 14px; border: 1px solid #617b65; border-radius: 8px; font: 700 14px Manrope,sans-serif; cursor: pointer; }
@@ -77,7 +77,7 @@
 .dialog::backdrop { background: #18251bd1; }
 .dialog h2 { margin: 0 38px 0 0; color: #304d37; font: 600 25px/1.2 Georgia,serif; text-wrap: balance; }
 .dialog > p { color: #405b46; font-size: 15px; line-height: 1.5; }
-.dialogDate { margin: 7px 0 18px; color: #536b58 !important; font-size: 13px !important; text-transform: capitalize; }
+.dialogDate { margin: 7px 0 18px; color: #536b58 !important; font-size: 13px !important;  }
 .dialogClose { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border: 1px solid #7f8d82; border-radius: 8px; background: #fff; color: #405b46; font-size: 25px; cursor: pointer; }
 .choiceList { display: grid; gap: 8px; margin: 0 0 12px; padding: 12px; border: 1px solid #dce3da; border-radius: 9px; }
 .choiceList legend { padding: 0 5px; color: #35463a; font-weight: 700; }
@@ -126,4 +126,30 @@
   .dialog h2 { font-size: 23px; }
   .dialogActions > button { flex: 1 1 auto; }
   .footer { flex-direction: column; }
+}
+
+.compactMeal { padding-block: 10px; box-shadow: none; background: #fafcf8; }
+.compactMeal .mealHeading { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; }
+.compactMeal .mealHeading > div:first-child { flex: 1; }
+.compactMeal .mealHeading h2 { font-size: 15px; }
+.compactMeal .mealHeading span { overflow-wrap: anywhere; }
+.expandButton { min-width: 44px; min-height: 44px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: #405b46; font: 700 14px Manrope,sans-serif; cursor: pointer; }
+.expandButton:hover { background: #edf3eb; }
+.ideasSection { margin-top: 12px; }
+.ideasHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ideasHeading h3 { margin: 0; color: #536b58; font: 700 14px Manrope,sans-serif; }
+.summaryRow { border-top: 1px solid #e7ece6; padding-top: 6px; margin-top: 2px; }
+.summaryRow p { font-size: 13px; font-weight: 400; }
+.summaryRow .warning { flex-basis: 100%; }
+.actionsMenu { position: relative; margin-left: auto; }
+.actionsMenu summary { display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid #7f8d82; border-radius: 8px; background: #fff; color: #405b46; font-size: 23px; list-style: none; cursor: pointer; }
+.actionsMenu summary::-webkit-details-marker { display: none; }
+.actionOptions { position: absolute; z-index: 2; right: 0; top: calc(100% + 4px); display: grid; min-width: 180px; padding: 5px; border: 1px solid #7f8d82; border-radius: 8px; background: #fff; box-shadow: 0 6px 20px #20322320; }
+.actionOptions button { min-height: 44px; padding: 0 10px; border: 0; border-radius: 5px; text-align: left; background: #fff; color: #405b46; font: 600 14px Manrope,sans-serif; cursor: pointer; }
+.actionOptions button:hover { background: #edf3eb; }
+@media(max-width:680px) {
+  .mealHeading { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .mealHeading > div:first-child { flex: 1; }
+  .mealHeading .primaryButton { width: auto; }
+  .statusChoices { grid-template-columns: 1fr; }
 }
