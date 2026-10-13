@@ -25,7 +25,7 @@ test("Google sign-in remains usable while the session lookup is stalled", async 
     const google = page.getByRole("button", { name: "Continuar con Google", exact: true });
     await expect(google).toBeEnabled();
     await google.click();
-    await expect(google).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Conectando con Google…", exact: true })).toBeDisabled();
     await expect.poll(() => attempts).toBe(1);
     releaseSignIn();
     await expect(page.getByRole("alert").filter({ hasText: "No se pudo iniciar con Google" })).toBeVisible();
@@ -36,6 +36,49 @@ test("Google sign-in remains usable while the session lookup is stalled", async 
     releaseSession();
     releaseSignIn();
   }
+});
+
+test("Google rate-limit feedback is visible next to the button and uses the retry window", async ({ page }) => {
+  await page.route("**/api/auth/get-session**", (route) => route.fulfill({ json: null }));
+  await page.route("**/api/auth/sign-in/social", (route) => route.fulfill({
+    status: 429,
+    headers: { "X-Retry-After": "125" },
+    json: { message: "Too many requests. Please try again later." },
+  }));
+  await page.goto("/acceso");
+  const google = page.getByRole("button", { name: "Continuar con Google", exact: true });
+  await google.click();
+  const alert = page.getByRole("alert").filter({ hasText: "Se alcanzó el límite de intentos" });
+  await expect(alert).toContainText("Esperá 3 minutos");
+  await expect(alert).toBeInViewport();
+  await expect(google).toBeEnabled();
+});
+
+test("Google network failures show feedback and let the user retry", async ({ page }) => {
+  await page.route("**/api/auth/get-session**", (route) => route.fulfill({ json: null }));
+  await page.route("**/api/auth/sign-in/social", (route) => route.abort("failed"));
+  await page.goto("/acceso");
+  const google = page.getByRole("button", { name: "Continuar con Google", exact: true });
+  await google.click();
+  await expect(page.getByRole("alert").filter({ hasText: "Comprobá la conexión" })).toBeVisible();
+  await expect(google).toBeEnabled();
+});
+
+test("Google sign-in times out instead of leaving the button busy", async ({ page }) => {
+  await page.route("**/api/auth/get-session**", (route) => route.fulfill({ json: null }));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    await gate;
+    await route.fulfill({ status: 503, json: { message: "Unavailable" } });
+  });
+  try {
+    await page.goto("/acceso");
+    await page.getByRole("button", { name: "Continuar con Google", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Conectando con Google…", exact: true })).toBeDisabled();
+    await expect(page.getByRole("alert").filter({ hasText: "Comprobá la conexión" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Continuar con Google", exact: true })).toBeEnabled();
+  } finally { release(); }
 });
 
 test("Google sign-in redirects after a fresh installation with no session", async ({ page }) => {

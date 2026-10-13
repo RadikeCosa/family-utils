@@ -26,6 +26,8 @@ export default function AccessPage() {
   const { data: session, isPending, refetch } = authClient.useSession();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [googleError, setGoogleError] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [membershipSessionId, setMembershipSessionId] = useState<string | null>(null);
@@ -78,17 +80,29 @@ export default function AccessPage() {
   }, [sessionUserId, sessionEmailVerified, sessionIsAnonymous, router]);
 
   async function signIn() {
-    setBusy(true); setError("");
+    setBusy(true); setSigningIn(true); setError(""); setGoogleError("");
+    let retryAfterSeconds = 900;
     try {
-      const result = await authClient.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/acceso` });
-      if (result.error) setError("No se pudo iniciar con Google. Volvé a intentarlo en unos instantes.");
+      const result = await authClient.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/acceso` }, {
+        timeout: 15_000,
+        onResponse: ({ response }) => {
+          const seconds = Number(response.headers.get("X-Retry-After"));
+          if (Number.isFinite(seconds) && seconds > 0) retryAfterSeconds = seconds;
+        },
+      });
+      if (result.error?.status === 429) {
+        const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+        setGoogleError(`Se alcanzó el límite de intentos. Esperá ${minutes} ${minutes === 1 ? "minuto" : "minutos"} antes de volver a intentar.`);
+      } else if (result.error) {
+        setGoogleError("No se pudo iniciar con Google. Comprobá la conexión y volvé a intentarlo.");
+      }
     }
-    catch { setError("No se pudo iniciar con Google. Comprobá la conexión y volvé a intentarlo."); }
-    finally { setBusy(false); }
+    catch { setGoogleError("No se pudo conectar con Google. Comprobá la conexión y volvé a intentarlo."); }
+    finally { setBusy(false); setSigningIn(false); }
   }
 
   async function redeem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(""); setMessage("");
+    event.preventDefault(); setBusy(true); setError(""); setGoogleError(""); setMessage("");
     try {
       if (!session?.user) await postJson("/api/access/prepare");
       await postJson("/api/access/redeem", { code });
@@ -130,7 +144,8 @@ export default function AccessPage() {
             {canBootstrap && <><h2>Primera persona administradora</h2><p>Tu cuenta autorizada puede iniciar la familia y vincular su perfil adulto.</p><button className={styles.primaryButton} onClick={() => void bootstrap()} disabled={busy}>Crear o abrir mi familia</button><div className={styles.separator}><span>o</span></div></>}
             <h2>Adultos</h2>
             <p>Iniciá con la cuenta Google asignada a tu perfil familiar. Si reinstalaste la app, usá la misma cuenta para recuperar tu acceso. Si es tu primer ingreso y la vinculación automática todavía no está habilitada, ingresá la invitación que te compartió un administrador.</p>
-            <button className={styles.googleButton} onClick={() => void signIn()} disabled={busy}>Continuar con Google</button>
+            <button className={styles.googleButton} onClick={() => void signIn()} disabled={busy} aria-busy={signingIn}>{signingIn ? "Conectando con Google…" : "Continuar con Google"}</button>
+            {googleError && <p className={styles.error} role="alert">{googleError}</p>}
             {hasGoogleSession && <p className={styles.intro}>Sesión Google abierta: <strong>{session?.user?.email}</strong></p>}
             <div className={styles.separator}><span>o, si ya tenés un código</span></div>
             <h2>{hasGoogleSession ? "Vincular perfil adulto" : "Integrantes sin correo"}</h2>
