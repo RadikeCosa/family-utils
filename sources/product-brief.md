@@ -113,8 +113,9 @@ actualización.
 
 ## Planificador de menús
 
-La vista principal muestra un día por vez, con desayuno, almuerzo, merienda y
-cena en orden cronológico. Desayuno y merienda son bloques compactos expandibles,
+La vista principal resume una semana, con desayuno, almuerzo, merienda y cena.
+Seleccionar un día abre su detalle en orden cronológico; volver conserva la
+semana consultada. Los enlaces con fecha abren directamente el día. Desayuno y merienda son bloques compactos expandibles,
 sin asistencia. Almuerzo y cena muestran la asistencia resumida con edición en
 un diálogo. Almuerzo y cena separan Casa y las luncheras necesarias; cada grupo
 puede elegir un plato, y una lunchera puede seguir el menú de Casa. Las ideas

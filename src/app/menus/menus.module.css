@@ -164,3 +164,26 @@
 .routineHistory { margin-top: 20px; border-top: 1px solid #dce3da; }
 .routineHistory h3 { font-size: 16px; }
 .routineHistory .expandButton { display: block; text-align: left; }
+.weekPage { max-width: 1140px; }
+.viewSwitcher { display: inline-flex; gap: 4px; margin-top: 16px; padding: 3px; border: 1px solid #7f8d82; border-radius: 9px; background: #fff; }
+.viewSwitcher button { min-width: 78px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #405b46; font: 700 14px Manrope,sans-serif; cursor: pointer; }
+.viewSwitcher button[aria-pressed="true"] { background: #4e6c53; color: #fff; }
+.weekGrid { display: grid; grid-template-columns: minmax(0,1fr); gap: 14px; padding-bottom: 32px; }
+.weekDay { min-width: 0; padding: 14px; border: 1px solid #dce3da; border-radius: 12px; background: #fff; }
+.weekToday { border-color: #617b65; box-shadow: inset 0 3px #617b65; }
+.weekDay h2 { margin: 0 0 7px; }
+.weekDay h2 button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 0 3px; border: 0; border-radius: 6px; background: transparent; color: #35463a; font: 700 17px Manrope,sans-serif; text-align: left; cursor: pointer; }
+.weekDay h2 button:hover { background: #edf3eb; }
+.weekDay h2 button span { padding: 4px 8px; border-radius: 5px; background: #edf3eb; color: #405b46; font-size: 12px; }
+.weekSecondary { margin: 10px 0; color: #59675d; font-size: 13px; overflow-wrap: anywhere; }
+.weekSecondary span { font-weight: 700; }
+.weekMeal { padding: 11px 0; border-top: 1px solid #e7ece6; }
+.weekMeal h3 { margin: 0 0 8px; color: #35463a; font: 700 14px Manrope,sans-serif; }
+.weekDish { display: grid; gap: 3px; margin: 8px 0; overflow-wrap: anywhere; }
+.weekDish span { color: #536b58; font-size: 12px; }
+.weekDish strong { color: #304d37; font-size: 15px; font-weight: 600; }
+.weekDish .pendingText { color: #81552e; font-size: 14px; font-weight: 400; }
+.weekPeople,.weekReadOnly { color: #59675d; font-size: 12px; line-height: 1.5; }
+.weekReadOnly { margin: 0 0 8px; }
+@media(min-width:700px) { .weekGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(min-width:1050px) { .weekGrid { grid-template-columns: repeat(3,minmax(0,1fr)); } }

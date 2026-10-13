@@ -117,3 +117,11 @@ viejas solo en una entrega posterior validada.
 - Rutinas configurables con nombre, siete días y fecha de inicio; copiar
   versiones permite preparar vacaciones y regreso. No hay horarios familiares
   fijos en el código.
+
+- Etapa 2 publicada en PR #24; migración 0013 verificada y rutinas configuradas
+  desde la app. Los ajustes puntuales migrados conservan prioridad; Usar rutina
+  por persona permite retirar un ajuste sin tocar a los demás.
+- Etapa 3: semana como entrada, Día para detalle y enlaces fechados. Un GET por
+  semana; cambiar de vista dentro de la misma no consulta otra vez. Cuadrícula
+  en tablet/escritorio, días apilados en móvil y menús vinculados combinados.
+  Cinco recorridos de interfaz/accesibilidad locales aprobados a 375/820 px.
