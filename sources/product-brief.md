@@ -116,7 +116,9 @@ actualización.
 La vista principal muestra un día por vez, con desayuno, almuerzo, merienda y
 cena en orden cronológico. Desayuno y merienda son bloques compactos expandibles,
 sin asistencia. Almuerzo y cena muestran la asistencia resumida con edición en
-un diálogo. Las ideas aparecen junto al menú, con hasta tres alternativas y
+un diálogo. Almuerzo y cena separan Casa y las luncheras necesarias; cada grupo
+puede elegir un plato, y una lunchera puede seguir el menú de Casa. Las ideas
+aparecen junto al menú, con hasta tres alternativas y
 acceso a todas; cambiar o quitar una elección queda en un menú de acciones.
 Las ideas se asocian a una fecha y comida concretas; no existe un catálogo general. Todos
 los integrantes activos pueden proponer ideas y cualquier integrante activo
@@ -125,7 +127,7 @@ familia en almuerzo y cena. Se muestra quién hizo el último cambio de asistenc
 y cuándo; si hay
 ediciones simultáneas, prevalece la última escritura.
 
-Solo un administrador adulto puede elegir la comida compartida a partir de una
+Solo un administrador adulto puede elegir la comida de cada grupo a partir de una
 idea o escribir una nueva y elegirla en el mismo paso. La asistencia es
 informativa y no bloquea esa elección, incluso si todos figuran ausentes.
 Quitar una elección no retira la idea. La elección se comparte al consultar o
@@ -135,8 +137,12 @@ al elegir.
 Las mutaciones se cierran al comenzar el día siguiente según la zona horaria
 familiar, actualmente `America/Argentina/Buenos_Aires`. Los días anteriores
 son de solo lectura. La vista conserva la revisión propia de menús para no
-refrescar por cambios de tareas. La asistencia se registra manualmente; la
-integración con calendarios queda para una etapa posterior.
+refrescar por cambios de tareas. La participación puede heredar una rutina semanal configurable por persona y
+comida, con vigencia desde una fecha y excepciones puntuales. La primera elección
+guarda la distribución; los ajustes manuales se identifican y Volver a la rutina
+permite recalcular conservando platos. Para vacaciones se programan nuevas
+versiones y se puede copiar una anterior al regresar. La integración con
+calendarios queda para una etapa posterior.
 
 La experiencia offline se limita a consultar datos ya cargados; no escribe ni
 sincroniza cambios. Si el aislamiento por usuario, la limpieza al salir y la

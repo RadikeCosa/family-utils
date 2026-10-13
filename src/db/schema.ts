@@ -17,7 +17,7 @@ import {
   bigint,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { MEAL_TYPES } from "@/lib/meals/rules";
+import { MEAL_TYPES, type Participation, type WeeklyParticipation } from "@/lib/meals/rules";
 import { FAMILY_TIME_ZONE, type CarryPolicy, type FamilyRole, type OccurrenceStatus, type TaskStatus } from "@/lib/tasks/rules";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -428,3 +428,50 @@ export const libraryCompanions = pgTable("library_companions", {
   foreignKey({ columns: [t.contributionId, t.familyId], foreignColumns: [libraryContributions.id, libraryContributions.familyId] }),
   foreignKey({ columns: [t.memberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
 ]);
+
+
+export const mealGroupKindEnum = pgEnum("meal_group_kind", ["home", "packed", "shared"]);
+export const mealParticipationEnum = pgEnum("meal_participation", ["home", "packed", "away", "unknown"]);
+
+export const mealGroups = pgTable("meal_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slotId: uuid("slot_id").notNull().references(() => mealSlots.id, { onDelete: "cascade" }),
+  kind: mealGroupKindEnum("kind").notNull(),
+  name: varchar("name", { length: 80 }).notNull(),
+  isDefault: boolean("is_default").notNull().default(false),
+  followsHome: boolean("follows_home").notNull().default(false),
+  suggestionId: uuid("suggestion_id").references(() => mealSuggestions.id),
+  confirmedByMemberId: uuid("confirmed_by_member_id").references(() => members.id),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  version: integer("version").notNull().default(0),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+}, table => [index("meal_groups_slot_idx").on(table.slotId), uniqueIndex("meal_groups_default_unique").on(table.slotId, table.kind).where(sql`${table.isDefault} = true`)]);
+
+export const mealDistributions = pgTable("meal_distributions", {
+  slotId: uuid("slot_id").primaryKey().references(() => mealSlots.id, { onDelete: "cascade" }),
+  participants: jsonb("participants").$type<Participation[]>().notNull(),
+  adjusted: boolean("adjusted").notNull().default(false),
+  updatedByMemberId: uuid("updated_by_member_id").references(() => members.id),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+});
+
+export const mealExceptions = pgTable("meal_exceptions", {
+  slotId: uuid("slot_id").notNull().references(() => mealSlots.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => members.id),
+  status: mealParticipationEnum("status").notNull(),
+  groupId: uuid("group_id").references(() => mealGroups.id, { onDelete: "set null" }),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  updatedAt: updatedAt(),
+}, table => [uniqueIndex("meal_exceptions_unique").on(table.slotId, table.memberId)]);
+
+export const mealRoutines = pgTable("meal_routines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => members.id),
+  mealType: mealTypeEnum("meal_type").notNull(),
+  startsOn: date("starts_on", { mode: "string" }).notNull(),
+  name: varchar("name", { length: 80 }).notNull().default("Rutina habitual"),
+  weekdays: jsonb("weekdays").$type<WeeklyParticipation>().notNull(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+}, table => [uniqueIndex("meal_routines_version_unique").on(table.memberId, table.mealType, table.startsOn), index("meal_routines_family_idx").on(table.familyId, table.startsOn)]);

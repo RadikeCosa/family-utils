@@ -107,3 +107,13 @@ familiar. Tipos, lint, pruebas existentes adaptadas, reglas nuevas relevantes y
 recorrido móvil/tablet, sin tests de conteo de toques. Fuera: recetas completas,
 ingredientes, compras automáticas, calendarios y notificaciones. Retirar tablas
 viejas solo en una entrega posterior validada.
+
+## Registro de entregas
+
+- Etapa 1 publicada en PR #23; migración 0012 verificada en producción.
+- Etapa 2: migración 0013 ensayada en `menus-etapa-2-ensayo`, conservando
+  íntegramente las tablas anteriores y las elecciones. Desconocidos sin menú
+  no crean excepciones. Respaldo previo: ejecución 38400662969 correcta.
+- Rutinas configurables con nombre, siete días y fecha de inicio; copiar
+  versiones permite preparar vacaciones y regreso. No hay horarios familiares
+  fijos en el código.

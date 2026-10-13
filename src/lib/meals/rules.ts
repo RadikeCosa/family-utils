@@ -96,3 +96,41 @@ export function hasUnknownAttendance(activeMemberIds: readonly string[], attenda
 export function isMealType(value: unknown): value is MealType {
   return typeof value === "string" && (MEAL_TYPES as readonly string[]).includes(value);
 }
+
+export const PARTICIPATION_STATUSES = ["home", "packed", "away", "unknown"] as const;
+export type ParticipationStatus = typeof PARTICIPATION_STATUSES[number];
+export const PARTICIPATION_LABELS: Record<ParticipationStatus, string> = {
+  home: "En casa", packed: "Lleva comida", away: "Come afuera (sin comida de casa)", unknown: "Por definir",
+};
+export function isParticipationStatus(value: unknown): value is ParticipationStatus {
+  return typeof value === "string" && (PARTICIPATION_STATUSES as readonly string[]).includes(value);
+}
+export type Participation = {
+  memberId: string; status: ParticipationStatus; groupId: string | null;
+  updatedByMemberId?: string | null; updatedAt?: string | null;
+};
+export type WeeklyParticipation = [ParticipationStatus, ParticipationStatus, ParticipationStatus, ParticipationStatus, ParticipationStatus, ParticipationStatus, ParticipationStatus];
+export function weekdayIndex(day: string): number {
+  return (new Date(`${day}T12:00:00.000Z`).getUTCDay() + 6) % 7;
+}
+
+export type RoutineRecord = { memberId: string; mealType: MealType; startsOn: string; weekdays: readonly ParticipationStatus[] };
+export function routineFor(routines: readonly RoutineRecord[], memberId: string, type: MealType, day: string): RoutineRecord | undefined {
+  return routines.filter((routine) => routine.memberId === memberId && routine.mealType === type && routine.startsOn <= day)
+    .reduce<RoutineRecord | undefined>((latest, routine) => !latest || routine.startsOn > latest.startsOn ? routine : latest, undefined);
+}
+export function resolveParticipation(input: {
+  memberIds: readonly string[]; date: string; mealType: MealType;
+  homeId: string | null; packedId: string | null;
+  routines: readonly RoutineRecord[]; exceptions: readonly Participation[];
+  snapshot?: readonly Participation[] | null;
+}): Participation[] {
+  const saved = new Map((input.snapshot ?? input.exceptions).map((person) => [person.memberId, person]));
+  return input.memberIds.map((memberId) => {
+    const explicit = saved.get(memberId);
+    if (explicit) return { ...explicit };
+    const routine = input.snapshot ? undefined : routineFor(input.routines, memberId, input.mealType, input.date);
+    const status = routine?.weekdays[weekdayIndex(input.date)] ?? "unknown";
+    return { memberId, status, groupId: status === "home" ? input.homeId : status === "packed" ? input.packedId : null };
+  });
+}

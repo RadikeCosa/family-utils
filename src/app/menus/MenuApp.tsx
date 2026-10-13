@@ -5,24 +5,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "@/lib/family-auth-client";
 import styles from "./menus.module.css";
-import { MEAL_TYPES, MEAL_LABELS, hasMealAttendance, type MealType, addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
+import RoutineEditor from "./RoutineEditor";
+import { PARTICIPATION_STATUSES, PARTICIPATION_LABELS, type ParticipationStatus, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, type MealType, addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
 
 const authClient = createAuthClient();
 type Role = "administrator" | "member";
-type AttendanceStatus = "present" | "absent" | "unknown";
+type AttendanceStatus = ParticipationStatus;
 type Profile = { id: string; name: string; role: Role };
 type Attendance = {
   memberId: string;
   status: AttendanceStatus;
-  source: "manual" | "calendar" | "unknown";
-  version: number;
+  groupId: string | null;
   updatedByMemberId: string | null;
   updatedByName: string | null;
   updatedAt: string | null;
 };
 type Suggestion = { id: string; authorMemberId: string; authorName: string; title: string; note: string | null; version: number; createdAt: string; updatedAt: string };
 type Selection = { suggestionId: string; title: string | null; proposedById: string | null; proposedByName: string | null; confirmedByMemberId: string; confirmedByName: string; confirmedAt: string; version: number };
+type Group = { id: string | null; kind: "home" | "packed" | "shared"; name: string; isDefault: boolean; followsHome: boolean; selection: Selection | null; selectionVersion: number };
 type Meal = {
+  groups: Group[];
+  distributionOrigin: string;
+  distributionSaved: boolean;
+  noRoutineMemberIds: string[];
   date: string;
   mealType: MealType;
   slotId: string | null;
@@ -33,12 +38,14 @@ type Meal = {
 };
 type WeekData = { weekStart: string; weekEnd: string; today: string; timeZone: string; revision: number; currentMemberId: string; currentRole: Role; members: Profile[]; meals: Meal[] };
 type DialogState =
-  | { kind: "choose"; meal: Meal; suggestionId?: string }
+  | { kind: "choose"; meal: Meal; suggestionId?: string; group?: Group }
   | { kind: "attendance"; meal: Meal }
   | { kind: "propose"; meal: Meal }
   | { kind: "edit"; meal: Meal; suggestion: Suggestion }
   | { kind: "withdraw"; meal: Meal; suggestion: Suggestion }
-  | { kind: "clear"; meal: Meal };
+  | { kind: "clear" | "link" | "unlink"; meal: Meal; group: Group }
+  | { kind: "reset"; meal: Meal }
+  | { kind: "group"; meal: Meal; action: "create" | "rename" | "delete"; group?: Group };
 type ApiError = Error & { status?: number; code?: string };
 
 function clientFamilyDay(timeZone = "America/Argentina/Buenos_Aires") { return getDayInTimeZone(new Date(), timeZone); }
@@ -49,10 +56,11 @@ function labelDay(day: string) {
 function labelTime(value: string) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(value));
 }
+function groupKey(group: Group) { return group.isDefault ? group.kind : group.id ?? group.kind; }
 function mealTitle(type: MealType) { return MEAL_LABELS[type]; }
-function statusLabel(status: AttendanceStatus) { return status === "present" ? "En casa" : status === "absent" ? "No estará" : "Sin respuesta"; }
+function statusLabel(status: AttendanceStatus) { return PARTICIPATION_LABELS[status]; }
 function countAttendance(meal: Meal) {
-  const counts = { present: 0, absent: 0, unknown: 0 };
+  const counts = { home: 0, packed: 0, away: 0, unknown: 0 };
   for (const person of meal.attendance) counts[person.status] += 1;
   return counts;
 }
@@ -92,6 +100,7 @@ export default function MenuApp() {
   const [dialogError, setDialogError] = useState("");
   const [dialogBusy, setDialogBusy] = useState(false);
   const [choice, setChoice] = useState("");
+  const [targetGroup, setTargetGroup] = useState("");
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [expandedMeals, setExpandedMeals] = useState<Set<MealType>>(new Set());
@@ -113,6 +122,8 @@ export default function MenuApp() {
     if (weekReady) for (const meal of data?.meals ?? []) if (meal.date === selectedDate) map.set(meal.mealType, meal);
     return map;
   }, [data, selectedDate, weekReady]);
+
+  const dialogGroup = dialog?.meal.groups.find(group => groupKey(group) === targetGroup) ?? (targetGroup ? undefined : dialog?.meal.groups[0]);
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("fecha");
@@ -195,19 +206,20 @@ export default function MenuApp() {
     };
   }, [refresh, data?.today, data?.timeZone]);
 
+  const dialogKind = dialog?.kind;
   useEffect(() => {
     const element = dialogRef.current;
-    if (dialog && element && !element.open) {
-      element.showModal();
-      requestAnimationFrame(() => titleInputRef.current?.focus());
-    } else if (!dialog && element?.open) {
+    if (dialogKind && element) {
+      if (!element.open) element.showModal();
+      requestAnimationFrame(() => (titleInputRef.current ?? element.querySelector<HTMLButtonElement>("button"))?.focus());
+    } else if (!dialogKind && element?.open) {
       element.close();
       requestAnimationFrame(() => {
         if (openerRef.current?.isConnected) openerRef.current.focus();
         else focusedMealRefs.current[dialogMealTypeRef.current]?.focus();
       });
     }
-  }, [dialog]);
+  }, [dialogKind]);
 
   function navigateToDate(day: string, shouldFollowToday = false) {
     const date = isMenuDateInRange(day, today) ? day : today;
@@ -222,12 +234,18 @@ export default function MenuApp() {
     dialogMealTypeRef.current = state.meal.mealType;
     setDialogError("");
     setDialogBusy(false);
+    if (state.kind === "choose" || state.kind === "clear" || state.kind === "link" || state.kind === "unlink") {
+      const group = state.group ?? state.meal.groups[0];
+      setTargetGroup(groupKey(group));
+    }
     if (state.kind === "choose") {
-      const selected = state.meal.selection?.suggestionId;
+      const selected = (state.group ?? state.meal.groups[0]).selection?.suggestionId;
       setChoice(state.suggestionId ?? selected ?? (state.meal.suggestions.length ? "" : "new"));
       setTitle(""); setNote("");
     } else if (state.kind === "propose") {
       setTitle(""); setNote("");
+    } else if (state.kind === "group") {
+      setTitle(state.group?.name ?? "");
     } else if (state.kind === "edit") {
       setTitle(state.suggestion.title); setNote(state.suggestion.note ?? "");
     }
@@ -282,17 +300,17 @@ export default function MenuApp() {
     }
   }
 
-  async function updateAttendance(meal: Meal, memberId: string, status: AttendanceStatus) {
+  async function updateAttendance(meal: Meal, memberId: string, status: AttendanceStatus | "inherit", groupId?: string | null) {
     const key = `attendance-${meal.date}-${meal.mealType}-${memberId}`;
     await perform(key, () => jsonRequest("/api/meals/attendance", {
       method: "PUT",
-      body: JSON.stringify({ date: meal.date, mealType: meal.mealType, memberId, status }),
-    }), "Asistencia actualizada.", true);
+      body: JSON.stringify({ date: meal.date, mealType: meal.mealType, memberId, status, groupId }),
+    }), "Participación actualizada.", true);
   }
 
   async function saveChoice(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!dialog || dialog.kind !== "choose") return;
+    if (!dialog || dialog.kind !== "choose" || !dialogGroup) return;
     const meal = dialog.meal;
     const isNew = choice === "new";
     const key = `selection-${meal.date}-${meal.mealType}`;
@@ -303,7 +321,8 @@ export default function MenuApp() {
         mealType: meal.mealType,
         suggestionId: isNew ? null : choice,
         ...(isNew ? { title: title.trim(), note: note.trim() } : {}),
-        expectedVersion: meal.selectionVersion,
+        expectedVersion: dialogGroup.selectionVersion,
+        groupId: dialogGroup.id, groupKind: dialogGroup.kind,
       }),
     }), "Comida elegida para la familia.", true);
     if (!saved) return;
@@ -339,12 +358,33 @@ export default function MenuApp() {
   }
 
   async function clearSelection() {
-    if (!dialog || dialog.kind !== "clear") return;
+    if (!dialog || dialog.kind !== "clear" || !dialogGroup) return;
     const meal = dialog.meal;
     await perform(`selection-${meal.date}-${meal.mealType}`, () => jsonRequest("/api/meals/selection", {
       method: "PUT",
-      body: JSON.stringify({ date: meal.date, mealType: meal.mealType, suggestionId: null, expectedVersion: meal.selectionVersion }),
+      body: JSON.stringify({ date: meal.date, mealType: meal.mealType, suggestionId: null, expectedVersion: dialogGroup.selectionVersion, groupId: dialogGroup.id, groupKind: dialogGroup.kind }),
     }), "Elección quitada. La idea sigue disponible.");
+  }
+
+  async function saveLink() {
+    if (!dialog || (dialog.kind !== "link" && dialog.kind !== "unlink") || !dialogGroup) return;
+    await perform(`selection-${dialog.meal.date}-${dialog.meal.mealType}`, () => jsonRequest("/api/meals/selection", {
+      method: "PUT", body: JSON.stringify({date:dialog.meal.date,mealType:dialog.meal.mealType,groupId:dialogGroup.id,groupKind:dialogGroup.kind,mode:dialog.kind,expectedVersion:dialogGroup.selectionVersion}),
+    }), dialog.kind === "link" ? "Lunchera vinculada a Casa." : "Lunchera independiente.");
+  }
+  async function saveGroup(event?: React.FormEvent) {
+    event?.preventDefault();
+    if (!dialog || dialog.kind !== "group") return;
+    await perform(`group-${dialog.meal.date}-${dialog.meal.mealType}`, () => jsonRequest("/api/meals/groups", {
+      method: dialog.action === "create" ? "POST" : dialog.action === "rename" ? "PATCH" : "DELETE",
+      body:JSON.stringify({date:dialog.meal.date,mealType:dialog.meal.mealType,groupId:dialog.group?.id,groupKind:dialog.group?.kind,name:title.trim()}),
+    }), dialog.action === "delete" ? "Lunchera eliminada." : "Lunchera guardada.");
+  }
+  async function resetDistribution() {
+    if (!dialog || dialog.kind !== "reset") return;
+    await perform(`distribution-${dialog.meal.date}-${dialog.meal.mealType}`,()=>jsonRequest("/api/meals/distribution",{
+      method:"DELETE",body:JSON.stringify({date:dialog.meal.date,mealType:dialog.meal.mealType}),
+    }),"La distribución vuelve a seguir la rutina. Los platos se conservaron.");
   }
 
   function showCurrentSelection() {
@@ -364,7 +404,7 @@ export default function MenuApp() {
     <section className={styles.intro}>
       <p className={styles.eyebrow}>PLANIFICADOR FAMILIAR</p>
       <div className={styles.titleRow}>
-        <div><h1>¿Qué comemos?</h1><p>Un plan compartido para las comidas de cada día.</p></div>
+        <div><h1>¿Qué comemos?</h1><p>Un plan compartido para las comidas de cada día.</p>{admin && data && <RoutineEditor members={data.members} today={today} onSaved={() => refresh(true)} />}</div>
         <div className={styles.dateNav} aria-label="Navegar por fecha">
           <button aria-label="Día anterior" onClick={() => navigateToDate(addDays(selectedDate, -1))}>←</button>
           <label className={styles.dateInput}><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => navigateToDate(event.target.value)} /></label>
@@ -385,9 +425,10 @@ export default function MenuApp() {
         if (!weekReady || !meal || !data) return <article className={styles.mealCard} key={mealType}><h2>{mealTitle(mealType)}</h2><p className={styles.loading}>{!weekReady || loading ? "Cargando…" : "No se pudo cargar esta comida."}</p></article>;
         const past = selectedDate < today;
         const counts = countAttendance(meal);
-        const allAbsent = meal.attendance.length > 0 && counts.present === 0 && counts.unknown === 0;
+        const allAbsent = meal.attendance.length > 0 && counts.home === 0 && counts.packed === 0 && counts.unknown === 0;
         const key = `${meal.date}-${meal.mealType}`;
-        const alternatives = meal.suggestions.filter((suggestion) => suggestion.id !== meal.selection?.suggestionId);
+        const selectedIds = new Set(meal.groups.flatMap(group => group.selection ? [group.selection.suggestionId] : []));
+        const alternatives = meal.suggestions.filter(suggestion => meal.groups.length > 1 || !selectedIds.has(suggestion.id));
         const visibleIdeas = expandedIdeas.has(key) ? alternatives : alternatives.slice(0, 3);
         return <article className={`${styles.mealCard} ${compact ? styles.compactMeal : ""}`} id={`meal-${mealType}`} tabIndex={-1} ref={(node) => { focusedMealRefs.current[mealType] = node; }} key={mealType}>
           <header className={styles.mealHeading}>
@@ -397,41 +438,49 @@ export default function MenuApp() {
               if (next.has(mealType)) next.delete(mealType); else next.add(mealType);
               return next;
             })}>{expanded ? "Cerrar" : "Ver plan"}<span className={styles.srOnly}> de {mealTitle(mealType).toLowerCase()}</span></button>}
-            {expanded && admin && !past && (meal.selection
-              ? <details className={styles.actionsMenu}>
-                <summary aria-label={`Acciones de ${mealTitle(mealType).toLowerCase()}`}>⋯</summary>
-                <div className={styles.actionOptions}>
-                  <button onClick={(event) => {
-                    const menu = event.currentTarget.closest("details")!;
-                    menu.open = false;
-                    openDialog({ kind: "choose", meal }, menu.querySelector("summary")!);
-                  }}>Cambiar comida</button>
-                  <button onClick={(event) => {
-                    const menu = event.currentTarget.closest("details")!;
-                    menu.open = false;
-                    openDialog({ kind: "clear", meal }, menu.querySelector("summary")!);
-                  }}>Quitar elección</button>
-                </div>
-              </details>
-              : <button className={styles.primaryButton} onClick={(event) => openDialog({ kind: "choose", meal }, event.currentTarget)}>Elegir comida</button>)}
+
           </header>
           <div id={`content-${mealType}`} hidden={!expanded}>
-            {meal.selection ? <div className={styles.selectedMeal}>
-              <span className={styles.selectedEyebrow}>COMIDA ELEGIDA</span>
-              <strong>{meal.selection.title ?? "La idea elegida ya no está disponible"}</strong>
-              <small>{formatMealAttribution(meal.selection.proposedById, meal.selection.proposedByName, meal.selection.confirmedByMemberId, meal.selection.confirmedByName)} · {labelTime(meal.selection.confirmedAt)}</small>
-            </div> : <p className={styles.noSelection}>Todavía no se eligió una comida para este horario.</p>}
+            <div className={styles.groupList}>
+              {meal.groups.map(group => {
+                const people = meal.attendance.filter(person => group.id ? person.groupId === group.id : !person.groupId && person.status === group.kind);
+                return <section className={styles.groupBlock} key={group.id ?? group.kind} aria-label={`${group.name} · ${mealTitle(mealType)}`}>
+                  <header className={styles.groupHeading}>
+                    {!compact && <div><h3>{group.name}</h3><small>{people.length ? people.map(person => data.members.find(member => member.id === person.memberId)?.name).join(" · ") : "Sin personas asignadas"}</small></div>}
+                    {admin && !past && !group.selection && !group.followsHome && <button className={styles.primaryButton} onClick={event => openDialog({kind:"choose",meal,group},event.currentTarget)}>Elegir comida<span className={styles.srOnly}> para {group.name}</span></button>}
+                    {!past && (group.kind === "packed" || admin && !!group.selection) && <details className={styles.actionsMenu}>
+                      <summary aria-label={`Acciones de ${group.name} · ${mealTitle(mealType).toLowerCase()}`}>⋯</summary>
+                      <div className={styles.actionOptions}>
+                        {admin && <>
+                          <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"choose",meal,group},menu.querySelector("summary")!);}}>{group.selection ? "Cambiar comida" : "Elegir comida"}</button>
+                          {(group.selection || group.followsHome) && <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"clear",meal,group},menu.querySelector("summary")!);}}>Quitar elección</button>}
+                          {group.kind === "packed" && <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:group.followsHome?"unlink":"link",meal,group},menu.querySelector("summary")!);}}>{group.followsHome ? "Desvincular de Casa" : "Lo mismo que en casa"}</button>}
+                        </>}
+                        {group.kind === "packed" && <>
+                          <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"group",action:"rename",meal,group},menu.querySelector("summary")!);}}>Renombrar lunchera</button>
+                          <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"group",action:"delete",meal,group},menu.querySelector("summary")!);}}>Eliminar lunchera</button>
+                        </>}
+                      </div>
+                    </details>}
+                  </header>
+                  {group.followsHome && <p className={styles.linkedNote}>Lo mismo que en casa · vinculada</p>}
+                  {group.selection ? <div className={styles.selectedMeal}><span className={styles.selectedEyebrow}>COMIDA ELEGIDA</span><strong>{group.selection.title ?? "La idea ya no está disponible"}</strong><small>{formatMealAttribution(group.selection.proposedById,group.selection.proposedByName,group.selection.confirmedByMemberId,group.selection.confirmedByName)} · {labelTime(group.selection.confirmedAt)}</small></div>
+                    : <p className={styles.noSelection}>{group.followsHome ? "Pendiente: falta elegir la comida de Casa." : "Todavía no se eligió una comida para este horario."}</p>}
+                </section>;
+              })}
+            </div>
 
             <section className={styles.ideasSection} aria-label={`Ideas para ${mealTitle(mealType).toLowerCase()}`}>
-              <div className={styles.ideasHeading}><h3>{meal.selection ? "Otras ideas" : "Ideas"}</h3>
+              <div className={styles.ideasHeading}><h3>{selectedIds.size ? "Otras ideas" : "Ideas"}</h3>
                 {!past && <button className={styles.expandButton} onClick={(event) => openDialog({ kind: "propose", meal }, event.currentTarget)}>Proponer idea</button>}
               </div>
               <div className={styles.suggestions}>
-                {!alternatives.length && <p className={styles.empty}>{meal.selection ? "Podés proponer otra alternativa." : "Todavía no hay ideas. Podés proponer una."}</p>}
+                {!alternatives.length && <p className={styles.empty}>{selectedIds.size ? "Podés proponer otra alternativa." : "Todavía no hay ideas. Podés proponer una."}</p>}
                 {visibleIdeas.map((suggestion) => {
-                  const canManage = !past && (admin || suggestion.authorMemberId === data.currentMemberId);
+                  const selected = selectedIds.has(suggestion.id);
+                  const canManage = !past && !selected && (admin || suggestion.authorMemberId === data.currentMemberId);
                   return <div className={styles.suggestion} key={suggestion.id}>
-                    <div className={styles.suggestionText}><strong>{suggestion.title}</strong>{suggestion.note && <p>{suggestion.note}</p>}<small>Idea de {suggestion.authorName}</small></div>
+                    <div className={styles.suggestionText}><strong>{suggestion.title}</strong>{suggestion.note && <p>{suggestion.note}</p>}<small>Idea de {suggestion.authorName}{selected ? ` · Elegida para ${meal.groups.filter(group=>group.selection?.suggestionId===suggestion.id).map(group=>group.name).join(", ")}` : ""}</small></div>
                     <div className={styles.suggestionActions}>
                       {admin && !past && <button onClick={(event) => openDialog({ kind: "choose", meal, suggestionId: suggestion.id }, event.currentTarget)}>Elegir<span className={styles.srOnly}> {suggestion.title}</span></button>}
                       {canManage && <>
@@ -450,9 +499,10 @@ export default function MenuApp() {
             </section>
 
             {hasMealAttendance(mealType) && <div className={styles.summaryRow}>
-              <p>{counts.present} en casa · {counts.absent} no estarán · {counts.unknown} sin responder</p>
-              {!past && <button className={styles.expandButton} aria-label={`Editar asistencia de ${mealTitle(mealType).toLowerCase()}`} onClick={(event) => openDialog({ kind: "attendance", meal }, event.currentTarget)}>Editar</button>}
-              {allAbsent && <span className={styles.warning}>Nadie figura en casa; podés elegir de todos modos.</span>}
+              <p>{counts.home} en casa · {counts.packed} llevan · {counts.away} afuera · {counts.unknown} por definir</p>
+              {!past && <button className={styles.expandButton} aria-label={`Editar quiénes comen en ${mealTitle(mealType).toLowerCase()}`} onClick={(event) => openDialog({ kind: "attendance", meal }, event.currentTarget)}>Editar</button>}
+              <span className={styles.muted}>{meal.distributionOrigin}</span>
+              {allAbsent && <span className={styles.warning}>Nadie necesita comida de casa; podés elegir de todos modos.</span>}
             </div>}
           </div>
         </article>;
@@ -464,9 +514,10 @@ export default function MenuApp() {
     <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="menu-dialog-title" onCancel={(event) => { event.preventDefault(); closeDialog(); }}>
       {dialog && <>
         <button className={styles.dialogClose} aria-label="Cerrar" onClick={closeDialog}>×</button>
-        <h2 id="menu-dialog-title">{dialog.kind === "choose" ? `${dialog.meal.selection ? "Cambiar" : "Elegir"} comida · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "propose" ? `Proponer idea · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "attendance" ? `Asistencia · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "edit" ? "Editar idea" : dialog.kind === "withdraw" ? "Retirar idea" : "Quitar elección"}</h2>
+        <h2 id="menu-dialog-title">{dialog.kind === "choose" ? `${dialogGroup?.selection ? "Cambiar" : "Elegir"} comida · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "propose" ? `Proponer idea · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "attendance" ? `Quiénes comen · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "edit" ? "Editar idea" : dialog.kind === "withdraw" ? "Retirar idea" : dialog.kind === "group" ? `${dialog.action === "create" ? "Crear" : dialog.action === "rename" ? "Renombrar" : "Eliminar"} lunchera` : dialog.kind === "reset" ? "Volver a la rutina" : dialog.kind === "link" ? "Lo mismo que en casa" : dialog.kind === "unlink" ? "Desvincular lunchera" : "Quitar elección"}</h2>
         <p className={styles.dialogDate}>{labelDay(dialog.meal.date)}</p>
         {dialog.kind === "choose" && <form onSubmit={(event) => void saveChoice(event)}>
+          {dialog.meal.groups.length > 1 && <div className={styles.formFields}><label>Para quién<select aria-label="Para quién" value={targetGroup} onChange={event => setTargetGroup(event.target.value)}>{dialog.meal.groups.map(group=><option key={group.id??group.kind} value={groupKey(group)}>{group.name}</option>)}</select></label></div>}
           {dialog.meal.suggestions.length > 0 && <fieldset className={styles.choiceList}>
             <legend>Elegí una idea</legend>
             {dialog.meal.suggestions.map((suggestion, index) => <label className={styles.choiceOption} key={suggestion.id}>
@@ -479,8 +530,8 @@ export default function MenuApp() {
             <label>Comida<input ref={titleInputRef} name="title" required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" /></label>
             <label>Nota opcional<input name="note" maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} autoComplete="off" /></label>
           </div>}
-          <DialogError message={dialogError} currentSelection={mealsByType.get(dialog.meal.mealType)?.selection ?? null} conflict={dialogError.includes("cambió")} onViewCurrent={showCurrentSelection} />
-          <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.primaryButton} disabled={dialogBusy || selectedDate < today || (choice === "new" ? !title.trim() : !choice)}>{dialogBusy ? "Guardando…" : dialog.meal.selection ? "Guardar cambio" : "Elegir comida"}</button></div>
+          <DialogError message={dialogError} currentSelection={dialogGroup?.selection ?? null} conflict={dialogError.includes("cambió")} onViewCurrent={showCurrentSelection} />
+          <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.primaryButton} disabled={dialogBusy || !dialogGroup || selectedDate < today || (choice === "new" ? !title.trim() : !choice)}>{dialogBusy ? "Guardando…" : dialogGroup?.selection ? "Guardar cambio" : "Elegir comida"}</button></div>
         </form>}
         {dialog.kind === "propose" && <form onSubmit={(event) => void saveProposal(event)}>
           <div className={styles.formFields}><label>Comida<input ref={titleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" /></label><label>Nota opcional<input maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} autoComplete="off" /></label></div>
@@ -500,7 +551,7 @@ export default function MenuApp() {
         {dialog.kind === "clear" && <>
           <p>Se quitará la comida elegida. La idea seguirá disponible para volver a elegirla.</p>
           <DialogError message={dialogError} />
-          <div className={styles.dialogActions}><button className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.textDanger} disabled={dialogBusy || selectedDate < today} onClick={() => void clearSelection()}>{dialogBusy ? "Quitando…" : "Sí, quitar elección"}</button></div>
+          <div className={styles.dialogActions}><button className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.textDanger} disabled={dialogBusy || !dialogGroup || selectedDate < today} onClick={() => void clearSelection()}>{dialogBusy ? "Quitando…" : "Sí, quitar elección"}</button></div>
         </>}
         {dialog.kind === "attendance" && <>
           <div className={styles.attendanceList}>
@@ -510,19 +561,43 @@ export default function MenuApp() {
               return <fieldset className={styles.attendancePerson} key={record.memberId}>
                 <legend>{person.name}</legend>
                 <div className={styles.statusChoices} role="radiogroup" aria-label={`Asistencia de ${person.name}`}>
-                  {(["present", "absent", "unknown"] as const).map((status) => <label className={styles.statusChoice} key={status}>
+                  {PARTICIPATION_STATUSES.map((status) => <label className={styles.statusChoice} key={status}>
                     <input type="radio" name={`attendance-${record.memberId}`} value={status} checked={record.status === status} disabled={dialogBusy || dialog.meal.date < today || busyKey !== ""} onChange={() => void updateAttendance(dialog.meal, record.memberId, status)} />
                     <span>{statusLabel(status)}</span>
                   </label>)}
                 </div>
+                {record.status === "packed" && <div className={styles.formFields}><label>Lunchera de {person.name}<select aria-label={`Lunchera de ${person.name}`} value={record.groupId??""} disabled={dialogBusy} onChange={event=>void updateAttendance(dialog.meal,record.memberId,"packed",event.target.value||null)}>{!dialog.meal.groups.some(group=>group.kind==="packed")&&<option value="">Lunchera</option>}{dialog.meal.groups.filter(group=>group.kind==="packed").map(group=><option key={group.id??group.kind} value={group.id??""}>{group.name}</option>)}</select></label></div>}
+                {!dialog.meal.distributionSaved && <button className={styles.expandButton} disabled={dialogBusy} onClick={()=>void updateAttendance(dialog.meal,record.memberId,"inherit")}>Usar rutina de {person.name}</button>}
                 {record.updatedByName && record.updatedAt && <small className={styles.attribution}>Actualizó {record.updatedByName} · {labelTime(record.updatedAt)}</small>}
               </fieldset>;
             })}
           </div>
           <p className={styles.muted} role="status">{dialogBusy ? "Guardando asistencia…" : "Los cambios se guardan al elegir una opción."}</p>
           <DialogError message={dialogError} />
-          <div className={styles.dialogActions}><button className={styles.primaryButton} disabled={dialogBusy} onClick={closeDialog}>Listo</button></div>
+          <p className={styles.muted}>{dialog.meal.distributionOrigin}</p>
+          <div className={styles.dialogActions}>
+            <button className={styles.secondaryButton} disabled={dialogBusy} onClick={event=>openDialog({kind:"group",action:"create",meal:dialog.meal},event.currentTarget)}>Crear lunchera</button>
+            <button className={styles.secondaryButton} disabled={dialogBusy} onClick={event=>openDialog({kind:"reset",meal:dialog.meal},event.currentTarget)}>Volver a la rutina</button>
+            <button className={styles.primaryButton} disabled={dialogBusy} onClick={closeDialog}>Listo</button>
+          </div>
         </>}
+        {(dialog.kind === "link" || dialog.kind === "unlink") && <>
+          <p>{dialog.kind === "link" ? "Esta lunchera seguirá el menú de Casa, incluidos los cambios posteriores. Reemplazará su elección actual." : "Esta lunchera conservará el plato actual y dejará de seguir los cambios de Casa."}</p>
+          <DialogError message={dialogError} />
+          <div className={styles.dialogActions}><button className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.primaryButton} disabled={dialogBusy || !dialogGroup} onClick={()=>void saveLink()}>{dialogBusy?"Guardando…":"Confirmar"}</button></div>
+        </>}
+        {dialog.kind === "reset" && <>
+          <p>Se descartarán la distribución guardada y los ajustes de esta fecha, incluso los realizados por otra persona. Los platos se conservarán y quienes llevan comida pasarán a Lunchera.</p>
+          {dialog.meal.noRoutineMemberIds.length > 0 && <p className={styles.warning}>Sin rutina cargada: quedarán por definir {dialog.meal.noRoutineMemberIds.map(id=>data?.members.find(member=>member.id===id)?.name).join(", ")}.</p>}
+          <DialogError message={dialogError} />
+          <div className={styles.dialogActions}><button className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.primaryButton} disabled={dialogBusy} onClick={()=>void resetDistribution()}>{dialogBusy?"Guardando…":"Sí, volver a la rutina"}</button></div>
+        </>}
+        {dialog.kind === "group" && <form onSubmit={event=>void saveGroup(event)}>
+          {dialog.action === "delete" ? <p>¿Eliminar “{dialog.group?.name}”? Primero debe quedar sin personas ni elección propia.</p> : <div className={styles.formFields}><label>Nombre de la lunchera<input ref={titleInputRef} required maxLength={80} value={title} onChange={event=>setTitle(event.target.value)} /></label></div>}
+          <DialogError message={dialogError} />
+          <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={dialog.action==="delete"?styles.textDanger:styles.primaryButton} disabled={dialogBusy||dialog.action!=="delete"&&!title.trim()}>{dialogBusy?"Guardando…":dialog.action==="delete"?"Eliminar lunchera":"Guardar lunchera"}</button></div>
+        </form>}
+
       </>}
     </dialog>
   </main>;

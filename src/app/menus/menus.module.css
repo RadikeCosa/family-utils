@@ -97,7 +97,7 @@
 .dialogError p { margin: 0; font-size: 14px; line-height: 1.45; }
 .dialogError button { min-height: 44px; margin-top: 7px; padding: 0 5px; border: 0; background: transparent; color: #71352e; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-:is(a,button,input,summary):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }
+:is(a,button,input,select,summary):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }
 
 @media(max-width:680px) {
   .page { padding: 0 16px; }
@@ -153,3 +153,14 @@
   .mealHeading .primaryButton { width: auto; }
   .statusChoices { grid-template-columns: 1fr; }
 }
+.groupList { display: grid; gap: 16px; margin-top: 12px; }
+.groupBlock + .groupBlock { padding-top: 14px; border-top: 1px solid #dce3da; }
+.groupHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.groupHeading h3 { margin: 0; color: #35463a; font-size: 15px; }
+.groupHeading small { display: block; margin-top: 4px; color: #536b58; font-size: 13px; }
+.linkedNote { margin: 8px 0 0; color: #405b46; font-size: 13px; }
+.formFields select { width: 100%; min-height: 46px; padding: 8px 10px; border: 1px solid #7f8d82; border-radius: 7px; background: #fff; color: #26382b; font: 16px 'DM Sans',sans-serif; }
+.routineFields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.routineHistory { margin-top: 20px; border-top: 1px solid #dce3da; }
+.routineHistory h3 { font-size: 16px; }
+.routineHistory .expandButton { display: block; text-align: left; }
