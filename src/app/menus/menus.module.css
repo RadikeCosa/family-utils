@@ -210,3 +210,5 @@
 .bankTags span { padding: 4px 7px; border-radius: 5px; background: #edf3eb; color: #405b46; font-size: 12px; }
 :is(textarea):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }
 @media(max-width:400px) { .tagChoices { grid-template-columns: 1fr; } }
+
+.weekToday,.dateLabel { scroll-margin-top: 16px; }

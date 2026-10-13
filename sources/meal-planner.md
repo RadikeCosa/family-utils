@@ -133,3 +133,11 @@ viejas solo en una entrega posterior validada.
   anteriores conservados, incluidas distribuciones y rutinas. Se verificó
   lectura por el rol de respaldo. Pruebas locales: 47 de reglas/base de datos,
   47 de rutas y seis recorridos de interfaz/accesibilidad en móvil/tablet.
+
+## Ajuste de navegación a hoy
+
+Entrar con el selector Semana o Día vuelve a la fecha actual según la zona
+familiar. La semana desplaza la vista hasta la tarjeta de hoy; el día muestra
+su fecha al comienzo del contenido. Elegir explícitamente otra fecha o un día
+de la cuadrícula conserva esa elección. Consultas posteriores de actualización
+no desplazan la vista otra vez.

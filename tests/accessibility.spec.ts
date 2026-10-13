@@ -382,7 +382,7 @@ test("menús permite luncheras diferentes y cambiar rutinas sin alterar distribu
   }finally{await removeFixture(fixture);}
 });
 
-test("menús muestra semana con una consulta, combina Casa y lunchera y conserva navegación", async ({browser,baseURL})=>{
+test("menús enfoca hoy al entrar en semana y día, y permite navegar otras fechas", async ({browser,baseURL})=>{
   const fixture=await createFixture(baseURL!,browser);
   try {
     const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Argentina/Buenos_Aires"}).format(new Date());
@@ -403,6 +403,7 @@ test("menús muestra semana con una consulta, combina Casa y lunchera y conserva
     await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
     await expect(page.getByText("Casa (1) + lunchera (1)",{exact:true})).toBeVisible();
     expect(requests).toHaveLength(1);
+    await expect.poll(async()=>{const box=await page.getByRole("button",{name:/^Ver hoy,/}).boundingBox();return box?box.y>=0&&box.y+box.height<=850:false;}).toBeTruthy();
     const axe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
     expect(axe.violations.map(v=>v.id)).toEqual([]);
     await page.screenshot({path:"test-results-a11y/menus-semana-mobile.png",fullPage:true});
@@ -422,6 +423,17 @@ test("menús muestra semana con una consulta, combina Casa y lunchera y conserva
     await expect(page).toHaveURL(/vista=semana/);
     await page.reload();
     await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
+    await page.getByRole("button",{name:"Día",exact:true}).click();
+    await expect(page.getByLabel("Ir a una fecha",{exact:true})).toHaveValue(today);
+    await expect(page).toHaveURL(new RegExp(`fecha=${today}&vista=dia`));
+    await page.getByRole("button",{name:"Día siguiente",exact:true}).click();
+    await expect(page.getByLabel("Ir a una fecha",{exact:true})).not.toHaveValue(today);
+    await page.getByRole("button",{name:"Semana",exact:true}).click();
+    await expect(page.getByLabel("Ir a una fecha",{exact:true})).toHaveValue(today);
+    await expect(page.getByRole("button",{name:/^Ver hoy,/})).toBeInViewport();
+    await page.getByRole("button",{name:"Semana siguiente",exact:true}).click();
+    await page.getByRole("region",{name:"Plan de la semana",exact:true}).getByRole("button",{name:/^Ver /}).first().click();
+    await expect(page.getByLabel("Ir a una fecha",{exact:true})).not.toHaveValue(today);
     await context.close();
   }finally{await removeFixture(fixture);}
 });
