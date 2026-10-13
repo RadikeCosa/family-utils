@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { auditEvents, mealGroups, mealSlots, mealSuggestions } from "@/db/schema";
+import { auditEvents, mealDailyPlans, mealSlots, mealSuggestions } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { getDayInTimeZone, isUuid, mayManageSuggestion, mayEditMeal } from "@/lib/meals/rules";
 import { bumpMenusRevision, lockFamilyActor, lockMealSlot } from "@/lib/meals/server";
@@ -44,9 +44,10 @@ async function mutate(request: Request, context: RouteContext, withdraw: boolean
     if (!current || current.withdrawnAt) return { kind: "missing" as const };
     if (!mayManageSuggestion(currentActor.role, currentActor.memberId, current.authorMemberId)) return { kind: "forbidden" as const };
     if (current.version !== expectedVersion) return { kind: "conflict" as const };
-    const [selected] = await tx.select({ slotId: mealGroups.slotId }).from(mealGroups)
-      .where(and(eq(mealGroups.slotId, slot.id), eq(mealGroups.suggestionId, current.id))).limit(1);
-    if (selected) return { kind: "selected" as const };
+    const [daily] = await tx.select().from(mealDailyPlans).where(eq(mealDailyPlans.slotId, slot.id));
+    const original = daily?.original as { suggestions?: { id: string }[] } | undefined;
+    if (!daily || original?.suggestions?.some(idea => idea.id === current.id)) return { kind: "preserved" as const };
+    if (daily.plan.menus.some(m => m.selection?.suggestionId === current.id)) return { kind: "selected" as const };
     const now = new Date();
     const [updated] = await tx.update(mealSuggestions).set(withdraw
       ? { withdrawnAt: now, version: current.version + 1, updatedAt: now }
@@ -63,6 +64,7 @@ async function mutate(request: Request, context: RouteContext, withdraw: boolean
       before: current,
       after: updated,
     });
+    await tx.update(mealDailyPlans).set({ version: daily.version + 1, updatedAt: now, updatedByMemberId: currentActor.memberId }).where(eq(mealDailyPlans.slotId, slot.id));
     await bumpMenusRevision(tx, actor.familyId);
     return { kind: "ok" as const, suggestion: updated };
   });
@@ -70,6 +72,7 @@ async function mutate(request: Request, context: RouteContext, withdraw: boolean
   if (result.kind === "missing") return NextResponse.json({ error: "No se encontró la sugerencia." }, { status: 404 });
   if (result.kind === "forbidden") return NextResponse.json({ error: "No tenés permiso para modificar esa sugerencia." }, { status: 403 });
   if (result.kind === "past") return NextResponse.json({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }, { status: 403 });
+  if (result.kind === "preserved") return NextResponse.json({ code: "LEGACY_READ_ONLY", error: "Esta idea anterior se conserva en modo de consulta. Proponé una alternativa desde Menús diarios." }, { status: 409 });
   if (result.kind === "selected") return NextResponse.json({ error: "Primero cambiá o quitá el menú confirmado." }, { status: 409 });
   if (result.kind === "conflict") return NextResponse.json({ error: "La sugerencia cambió. Actualizá la semana y volvé a intentar." }, { status: 409 });
   return withdraw ? new Response(null, { status: 204 }) : NextResponse.json(result.suggestion);
