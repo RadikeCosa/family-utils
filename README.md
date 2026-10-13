@@ -58,6 +58,7 @@ gane.
 
 ## Documentación
 
+- [Menús diarios: cotejo, conservación y publicación](sources/menus-diarios-simples.md)
 - [Definición del producto](sources/product-brief.md)
 - [Plan histórico de implementación](sources/next-steps.md)
 - [Compras: contratos, migración y operación](sources/shopping-lists.md)

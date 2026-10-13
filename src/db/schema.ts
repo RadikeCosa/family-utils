@@ -18,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { MEAL_TYPES, type Participation, type WeeklyParticipation } from "@/lib/meals/rules";
+import type { DailyPlan } from "@/lib/meals/daily";
 import { FAMILY_TIME_ZONE, type CarryPolicy, type FamilyRole, type OccurrenceStatus, type TaskStatus } from "@/lib/tasks/rules";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -272,6 +273,16 @@ export const mealSelections = pgTable("meal_selections", {
   version: integer("version").notNull().default(1),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+// Additive storage: legacy groups, routines and distributions remain untouched.
+export const mealDailyPlans = pgTable("meal_daily_plans", {
+  slotId: uuid("slot_id").primaryKey().references(() => mealSlots.id, { onDelete: "cascade" }),
+  plan: jsonb("plan").$type<DailyPlan>().notNull(),
+  original: jsonb("original").notNull(),
+  version: integer("version").notNull().default(1),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  createdAt: createdAt(), updatedAt: updatedAt(),
 });
 
 export const accessCodes = pgTable("access_codes", {

@@ -7,7 +7,7 @@ import styles from "./menus.module.css";
 export type BankState={date:string;mealType:MealType;group?:Group;source?:Suggestion;opener:HTMLElement};
 type Draft=IdeaFields&{id?:string;version?:number};
 const emptyDraft=():Draft=>({title:"",note:null,mealTypes:[],packedSuitable:false});
-export default function IdeaBank({state,onClose,onChanged,onUse,currentMemberId,adult,today}:{state:BankState|null;onClose:()=>void;onChanged:()=>Promise<unknown>;onUse:(id:string,date:string,type:MealType)=>Promise<void>;currentMemberId:string;adult:boolean;today:string}) {
+export default function IdeaBank({state,onClose,onChanged,onUse,currentMemberId,adult,today}:{state:BankState|null;onClose:()=>void;onChanged:()=>Promise<unknown>;onUse:(idea:MealIdea,date:string,type:MealType)=>Promise<void>;currentMemberId:string;adult:boolean;today:string}) {
  const dialog=useRef<HTMLDialogElement>(null),opener=useRef<HTMLElement|null>(null),titleInput=useRef<HTMLInputElement>(null);
  const sequence=useRef(0),working=useRef(false);
  const [ideas,setIdeas]=useState<MealIdea[]>([]),[archived,setArchived]=useState(false),[busy,setBusy]=useState(false);
@@ -61,8 +61,7 @@ export default function IdeaBank({state,onClose,onChanged,onUse,currentMemberId,
  async function proposeIdea(idea:MealIdea) {
   if(!state||working.current)return;working.current=true;setBusy(true);setError("");
   try {
-   const suggestion=await request("/api/meals/suggestions","POST",{date:state.date,mealType:targetType,catalogIdeaId:idea.id});
-   await onUse(suggestion.id,state.date,targetType);
+   await onUse(idea,state.date,targetType);
   }catch(error){setError((error as Error).message);}finally{working.current=false;setBusy(false);}
  }
  function edit(idea?:MealIdea) {
@@ -100,13 +99,13 @@ export default function IdeaBank({state,onClose,onChanged,onUse,currentMemberId,
    {error&&<p className={styles.error} role="alert">{error}<button className={styles.expandButton} disabled={busy} onClick={()=>void load(archived)}>Reintentar</button></p>}
    {notice&&<p className={styles.notice} role="status">{notice}</p>}
    {busy&&<p className={styles.loading} role="status">Actualizando banco…</p>}
-   {!busy&&!visible.length&&<p className={styles.empty}>{ideas.length?"No hay ideas que coincidan con estos filtros.":archived?"No hay ideas archivadas.":"El banco está vacío. Podés crear una idea o guardar una del planificador."}</p>}
+   {!busy&&!visible.length&&<p className={styles.empty}>{ideas.length?"No hay ideas que coincidan con estos filtros.":archived?"No hay ideas archivadas.":"El banco está vacío. Podés crear una idea para reutilizar."}</p>}
    <div className={styles.bankIdeas}>{visible.slice(0,limit).map(idea=><article className={styles.bankIdea} key={idea.id}>
     <h3>{idea.title}</h3>{idea.note&&<p>{idea.note}</p>}
     <div className={styles.bankTags}>{idea.mealTypes.map(type=><span key={type}>{MEAL_LABELS[type]}</span>)}{idea.packedSuitable&&<span>Apta para lunchera</span>}</div>
     <small>Guardada por {idea.authorName}</small>
     <div className={styles.suggestionActions}>
-     {!archived&&<button disabled={busy||!state||state.date<today} onClick={()=>void proposeIdea(idea)}>Proponer<span className={styles.srOnly}> {idea.title}</span></button>}
+     {!archived&&<button disabled={busy||!state||state.date<today} onClick={()=>void proposeIdea(idea)}>{adult?"Elegir":"Proponer"}<span className={styles.srOnly}> {idea.title}</span></button>}
      {(adult||idea.authorMemberId===currentMemberId)&&<>{!archived&&<button disabled={busy} onClick={()=>edit(idea)}>Editar<span className={styles.srOnly}> {idea.title}</span></button>}<button disabled={busy} onClick={()=>void archive(idea)}>{archived?"Restaurar":"Archivar"}<span className={styles.srOnly}> {idea.title}</span></button></>}
     </div>
    </article>)}</div>

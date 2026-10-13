@@ -70,7 +70,10 @@ async function createFixture(baseURL: string, browser: Browser): Promise<Fixture
     } });
     expect(task.ok()).toBeTruthy();
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
-    const meal = await api.post("/api/meals/suggestions", { data: {
+    const planner = await api.get("/api/meals/planner");
+    const initialMeal = (await planner.json()).meals.find((m: {date:string;mealType:string}) => m.date === today && m.mealType === "lunch");
+    const meal = await api.put("/api/meals/planner", { data: {
+      action: "propose", expectedVersion: initialMeal.version,
       date: today,
       mealType: "lunch",
       title: "Tarta de verduras",
@@ -148,7 +151,7 @@ async function inspectControls(page: import("@playwright/test").Page) {
       }
     }
 
-    const bounded = [...document.querySelectorAll<HTMLElement>('input:not([type="checkbox"]),select,textarea,[class*="weekControls"] button,[class*="person"]')].filter(visible);
+    const bounded = [...document.querySelectorAll<HTMLElement>('input:not([type="checkbox"]),select,textarea,[class*="weekControls"] button,[class*="attendancePerson"]')].filter(visible);
     for (const element of bounded) {
       const style = getComputedStyle(element);
       const outside = background(element.parentElement);
@@ -168,329 +171,41 @@ async function inspectControls(page: import("@playwright/test").Page) {
   });
 }
 
-test("menús permite elegir, quitar y volver a proponer con foco y objetivos táctiles accesibles", async ({ browser, baseURL }) => {
+test("menús diario mantiene personas visibles e ideas junto a confirmar a 360 px", async ({ browser, baseURL }) => {
   const fixture = await createFixture(baseURL!, browser);
   try {
-    const context = await browser.newContext({ storageState: fixture.storageState, viewport: { width: 375, height: 850 } });
+    const context = await browser.newContext({ storageState: fixture.storageState, viewport: { width: 360, height: 800 } });
     const page = await context.newPage();
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
-    await page.goto("/menus?fecha=fecha-invalida");
-    await expect(page.getByRole("status").filter({ hasText: "Mostramos hoy" })).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
-
-    const dialogs = page.getByRole("dialog");
-    const choose = page.locator("#meal-lunch").getByRole("button", { name: /Elegir comida/ });
-    await choose.click();
-    await expect(dialogs).toBeVisible();
-    await expect(page.locator("input[name='meal-choice']").first()).toBeFocused();
-    await page.locator("input[name='meal-choice']").first().check();
-    await page.keyboard.press("Shift+Tab");
-    await expect(dialogs.getByRole("button", { name: "Buscar en banco", exact: true })).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
-    await expect(page.getByRole("button", { name: "Cerrar" })).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
-    // Chromium can visit browser chrome before wrapping a native dialog.
-    if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press("Shift+Tab");
-    await expect(dialogs.getByRole("button", { name: "Elegir comida", exact: true })).toBeFocused();
-    const dialogAxe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-    expect(dialogAxe.violations.map((violation) => violation.id)).toEqual([]);
-    const dialogSizes = await dialogs.locator("button, input:not([type='radio']):not([type='checkbox']), [class*='choiceOption'], [class*='newChoice']").evaluateAll((elements) =>
-      elements.filter((element) => (element as HTMLElement).checkVisibility()).map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { label: element.textContent?.trim() ?? element.tagName, width: rect.width, height: rect.height };
-      }));
-    expect(dialogSizes.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
-    await page.keyboard.press("Escape");
-    await expect(dialogs).toBeHidden();
-    await expect(choose).toBeFocused();
-
-    const interactiveSizes = await page.locator("a[href], button, input:not([type='radio']):not([type='checkbox']), [class*='details'] summary, [class*='statusChoice'], [class*='choiceOption'], [class*='newChoice']").evaluateAll((elements) =>
-      elements.filter((element) => (element as HTMLElement).checkVisibility()).map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { label: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? element.tagName, width: rect.width, height: rect.height };
-      }));
-    expect(interactiveSizes.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
-
-    const lunch = page.locator("#meal-lunch");
-    await lunch.getByRole("button", { name: "Editar quiénes comen en almuerzo" }).click();
-    const attendanceTargets = await dialogs.locator("[class*='statusChoice']").evaluateAll((elements) => elements.map((element) => {
-      const rect = element.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
-    }));
-    expect(attendanceTargets.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
-    await dialogs.getByLabel("Come afuera (sin comida de casa)").check();
-    await expect(dialogs.getByRole("button", { name: "Listo" })).toBeEnabled();
-    await dialogs.getByRole("button", { name: "Listo" }).click();
-    await expect(lunch.getByText("Nadie necesita comida de casa; podés elegir de todos modos.")).toBeVisible();
-    await lunch.getByRole("button", { name: /Elegir comida/ }).click();
-    await page.getByLabel("Escribir otra comida").check();
-    await page.getByLabel("Comida", { exact: true }).fill("Guiso de prueba UX");
-    const resumedRequest = page.waitForRequest((request) => request.url().includes("/api/meals?weekStart="));
-    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    await resumedRequest;
-    await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
-    await page.route("**/api/meals/selection", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "MEAL_DAY_CLOSED", error: "Este día ya no se puede editar." }) }));
-    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Este día ya no se puede editar" })).toBeVisible();
-    await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Guiso de prueba UX");
-    await page.unroute("**/api/meals/selection");
-    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
-    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
-
-    await lunch.getByLabel("Acciones de Casa · almuerzo").click();
-    await lunch.getByRole("button", { name: "Quitar elección" }).click();
-    await expect(page.getByRole("button", { name: "Sí, quitar elección" })).toBeVisible();
-    await page.getByRole("button", { name: "Sí, quitar elección" }).click();
-    await expect(lunch.getByText("Todavía no se eligió una comida para este horario.")).toBeVisible();
-    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
-    await lunch.getByRole("button", { name: /Elegir comida/ }).click();
-    await dialogs.locator("label").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
-    await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
-    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
-    await expect(lunch.getByText(/Propuesto y confirmado por Alex/)).toBeVisible();
-    await lunch.getByLabel("Acciones de Casa · almuerzo").click();
-    await lunch.getByRole("button", { name: "Cambiar comida" }).click();
-    await page.getByLabel("Escribir otra comida").check();
-    await page.getByLabel("Comida", { exact: true }).fill("Borrador ante conflicto");
-    let conflictRequests = 0;
-    await page.route("**/api/meals/selection", (route) => {
-      conflictRequests += 1;
-      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ code: "MEAL_SELECTION_CONFLICT", error: "Revisá la elección actual." }) });
-    });
-    await page.getByRole("button", { name: "Guardar cambio" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Alguien cambió esta comida" })).toBeVisible();
-    await expect(page.getByLabel("Comida", { exact: true })).toHaveValue("Borrador ante conflicto");
-    await page.getByRole("button", { name: "Ver la elección actual" }).click();
-    await expect(dialogs).toBeHidden();
-    expect(conflictRequests).toBe(1);
-    await page.unroute("**/api/meals/selection");
-    await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
-
-    await page.setViewportSize({ width: 820, height: 1180 });
-    for (const type of ["breakfast", "snack"]) {
-      const card = page.locator(`#meal-${type}`);
-      await expect(card.getByRole("button", { name: /Elegir comida/ })).toBeHidden();
-      await card.getByRole("button", { name: /Ver plan/ }).click();
-      await expect(card.getByRole("button", { name: /Elegir comida/ })).toBeVisible();
-      await expect(card.getByRole("button", { name: /Editar asistencia/ })).toHaveCount(0);
-      await card.getByRole("button", { name: /Elegir comida/ }).click();
-      await dialogs.getByLabel("Comida", { exact: true }).fill("Yogurt con frutas");
-      await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
-      await expect(card.getByText("Yogurt con frutas", { exact: true })).toBeVisible();
-      await card.getByRole("button", { name: /Cerrar/ }).click();
-      await expect(card.getByText("Yogurt con frutas", { exact: true }).first()).toBeVisible();
-    }
-    await page.screenshot({ path: "test-results-a11y/menus-tablet.png", fullPage: true });
-    await page.setViewportSize({ width: 375, height: 850 });
-    await page.screenshot({ path: "test-results-a11y/menus-mobile.png", fullPage: true });
-
-    const requestUrls: string[] = [];
-    page.on("request", (request) => { if (request.url().includes("/api/meals?weekStart=")) requestUrls.push(request.url()); });
-    const dateInput = page.getByLabel("Ir a una fecha");
-    const nextWithinWeek = new Date(`${today}T12:00:00.000Z`);
-    const deltaToStayInWeek = nextWithinWeek.getUTCDay() === 0 ? -1 : 1;
-    nextWithinWeek.setUTCDate(nextWithinWeek.getUTCDate() + deltaToStayInWeek);
-    const sameWeekDate = nextWithinWeek.toISOString().slice(0, 10);
-    await dateInput.fill(sameWeekDate);
-    await expect(page).toHaveURL(new RegExp(`fecha=${sameWeekDate}`));
-    await page.waitForTimeout(150);
-    expect(requestUrls).toHaveLength(0);
-    const nextWeek = new Date(`${today}T12:00:00.000Z`);
-    nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
-    const nextWeekDate = nextWeek.toISOString().slice(0, 10);
-    await page.route(/\/api\/meals\?weekStart=/, async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await route.continue();
-    });
-    const weekRequest = page.waitForRequest((request) => request.url().includes("/api/meals?weekStart="));
-    await dateInput.fill(nextWeekDate);
-    await weekRequest;
-    await expect(page.getByText("Cargando…").first()).toBeVisible();
-    await context.close();
-  } finally {
-    await removeFixture(fixture);
-  }
-});
-
-test("menús permite luncheras diferentes y cambiar rutinas sin alterar distribuciones guardadas", async ({browser,baseURL}) => {
-  const fixture=await createFixture(baseURL!,browser);
-  try {
-    const pool=new pg.Pool({connectionString:databaseUrl});
-    const kids=(await pool.query("INSERT INTO members(family_id,name,role,access_method) VALUES($1,'Luz','member','code'),($1,'Sol','member','code') RETURNING id,name",[fixture.familyId])).rows;
-    await pool.end();
-    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Argentina/Buenos_Aires"}).format(new Date());
-    for(const kid of kids) {
-      const response=await fixture.api.put("/api/meals/routines",{data:{memberId:kid.id,mealType:"lunch",startsOn:today,name:"Colegio",weekdays:Array(7).fill("packed")}});
-      expect(response.ok()).toBeTruthy();
-    }
-    const context=await browser.newContext({storageState:fixture.storageState,viewport:{width:375,height:850}});
-    const page=await context.newPage();
-    await page.goto(`/menus?fecha=${today}`);
-    const lunch=page.locator("#meal-lunch");
-    const dialog=page.getByRole("dialog").filter({has:page.locator("#menu-dialog-title")});
-    const house=lunch.getByRole("region",{name:"Casa · Almuerzo",exact:true});
-    const packed=lunch.getByRole("region",{name:"Lunchera · Almuerzo",exact:true});
-    await expect(lunch.getByText(/2 llevan/)).toBeVisible();
-    await house.getByRole("button",{name:/Elegir comida/}).click();
-    await dialog.getByLabel("Tarta de verduras",{exact:false}).check();
-    await dialog.getByRole("button",{name:"Elegir comida",exact:true}).click();
-    await expect(house.getByText("Tarta de verduras",{exact:true})).toBeVisible();
-    await packed.getByLabel("Acciones de Lunchera · almuerzo").click();
-    await packed.getByRole("button",{name:"Lo mismo que en casa"}).click();
-    await dialog.getByRole("button",{name:"Confirmar",exact:true}).click();
-    await expect(packed.getByText("Tarta de verduras",{exact:true})).toBeVisible();
-    await lunch.getByRole("button",{name:"Editar quiénes comen en almuerzo"}).click();
-    await dialog.getByRole("button",{name:"Crear lunchera"}).click();
-    await dialog.getByLabel("Nombre de la lunchera").fill("Sin huevo");
-    await dialog.getByRole("button",{name:"Guardar lunchera"}).click();
-    await lunch.getByRole("button",{name:"Editar quiénes comen en almuerzo"}).click();
-    await dialog.getByLabel("Lunchera de Sol").selectOption({label:"Sin huevo"});
-    await expect(dialog.getByRole("button",{name:"Listo"})).toBeEnabled();
-    await dialog.getByRole("button",{name:"Listo"}).click();
-    const other=lunch.getByRole("region",{name:"Sin huevo · Almuerzo",exact:true});
-    await other.getByRole("button",{name:/Elegir comida/}).click();
-    await dialog.getByLabel("Escribir otra comida").check();
-    await dialog.getByLabel("Comida",{exact:true}).fill("Fideos para Sol");
-    await dialog.getByRole("button",{name:"Elegir comida",exact:true}).click();
-    await expect(other.getByText("Fideos para Sol",{exact:true})).toBeVisible();
-    await expect(lunch.getByText("Guardada · ajustada",{exact:true})).toBeVisible();
-    const axe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
-    expect(axe.violations.map(v=>v.id)).toEqual([]);
-    await page.screenshot({path:"test-results-a11y/menus-luncheras-mobile.png",fullPage:true});
-    await page.setViewportSize({width:820,height:1180});
-    await page.screenshot({path:"test-results-a11y/menus-luncheras-tablet.png",fullPage:true});
-    await page.getByRole("button",{name:"Rutinas",exact:true}).click();
-    const routines=page.getByRole("dialog",{name:"Rutinas de comidas",exact:true});
-    await expect(routines.getByRole("button",{name:"Guardar rutina"})).toBeEnabled();
-    await routines.getByLabel("Integrante",{exact:true}).selectOption({label:"Luz"});
-    await routines.getByLabel("Nombre de la rutina").fill("Vacaciones");
-    for(const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"])await routines.getByLabel(day,{exact:true}).selectOption("away");
-    const routineAxe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
-    expect(routineAxe.violations.map(v=>v.id)).toEqual([]);
-    await routines.getByRole("button",{name:"Guardar rutina"}).click();
-    await expect(routines.getByRole("status")).toContainText("Rutina guardada");
-    await routines.getByRole("button",{name:"Cerrar",exact:true}).click();
-    await expect(lunch.getByText(/2 llevan/)).toBeVisible();
-    await lunch.getByRole("button",{name:"Editar quiénes comen en almuerzo"}).click();
-    await dialog.getByRole("button",{name:"Volver a la rutina",exact:true}).click();
-    await expect(dialog.getByText(/Sin rutina cargada: quedarán por definir Alex/)).toBeVisible();
-    await dialog.getByRole("button",{name:"Sí, volver a la rutina"}).click();
-    await expect(lunch.getByText(/1 llevan/)).toBeVisible();
-    await expect(other.getByText("Fideos para Sol",{exact:true})).toBeVisible();
-    await expect(other.getByText("Sin personas asignadas",{exact:true})).toBeVisible();
-    await context.close();
-  }finally{await removeFixture(fixture);}
-});
-
-test("menús enfoca hoy al entrar en semana y día, y permite navegar otras fechas", async ({browser,baseURL})=>{
-  const fixture=await createFixture(baseURL!,browser);
-  try {
-    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Argentina/Buenos_Aires"}).format(new Date());
-    const pool=new pg.Pool({connectionString:databaseUrl});
-    const profiles=(await pool.query("SELECT id FROM members WHERE family_id=$1",[fixture.familyId])).rows;
-    const kid=(await pool.query("INSERT INTO members(family_id,name,role,access_method) VALUES($1,'Sol','member','code') RETURNING id",[fixture.familyId])).rows[0];
-    await pool.end();
-    expect((await fixture.api.put("/api/meals/routines",{data:{memberId:kid.id,mealType:"lunch",startsOn:today,weekdays:Array(7).fill("packed")}})).ok()).toBeTruthy();
-    expect((await fixture.api.put("/api/meals/attendance",{data:{date:today,mealType:"lunch",memberId:profiles[0].id,status:"home"}})).ok()).toBeTruthy();
-    expect((await fixture.api.put("/api/meals/selection",{data:{date:today,mealType:"lunch",title:"Tarta para todos",expectedVersion:0}})).ok()).toBeTruthy();
-    const data=await (await fixture.api.get(`/api/meals?weekStart=${today}`)).json();
-    const packed=data.meals.find((meal:{date:string;mealType:string})=>meal.date===today&&meal.mealType==="lunch").groups.find((group:{kind:string})=>group.kind==="packed");
-    expect((await fixture.api.put("/api/meals/selection",{data:{date:today,mealType:"lunch",groupId:packed.id,mode:"link",expectedVersion:0}})).ok()).toBeTruthy();
-    const context=await browser.newContext({storageState:fixture.storageState,viewport:{width:375,height:850}});
-    const page=await context.newPage();
-    const requests:string[]=[];page.on("request",request=>{if(request.url().includes("/api/meals?weekStart="))requests.push(request.url());});
     await page.goto("/menus");
-    await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
-    await expect(page.getByText("Casa (1) + lunchera (1)",{exact:true})).toBeVisible();
-    expect(requests).toHaveLength(1);
-    await expect.poll(async()=>{const box=await page.getByRole("button",{name:/^Ver hoy,/}).boundingBox();return box?box.y>=0&&box.y+box.height<=850:false;}).toBeTruthy();
-    const axe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
-    expect(axe.violations.map(v=>v.id)).toEqual([]);
-    await page.screenshot({path:"test-results-a11y/menus-semana-mobile.png",fullPage:true});
-    await page.setViewportSize({width:820,height:1180});
-    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
-    await page.screenshot({path:"test-results-a11y/menus-semana-tablet.png",fullPage:true});
-    await page.getByRole("button",{name:/^Ver hoy,/}).click();
-    await expect(page.getByRole("button",{name:"Día",exact:true})).toHaveAttribute("aria-pressed","true");
-    await expect(page.locator("#meal-lunch").getByRole("region",{name:"Lunchera · Almuerzo",exact:true}).getByText("Tarta para todos",{exact:true})).toBeVisible();
-    await page.getByRole("button",{name:"Semana",exact:true}).click();
-    await expect(page.getByText("Casa (1) + lunchera (1)",{exact:true})).toBeVisible();
-    expect(requests).toHaveLength(1);
-    await page.getByRole("button",{name:"Semana siguiente",exact:true}).click();
-    await expect(page.getByRole("button",{name:/^Ver hoy,/})).toHaveCount(0);
-    await expect(page.getByRole("region",{name:"Plan de la semana",exact:true})).toBeVisible();
-    expect(requests).toHaveLength(2);
-    await expect(page).toHaveURL(/vista=semana/);
-    await page.reload();
-    await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
-    await page.getByRole("button",{name:"Día",exact:true}).click();
-    await expect(page.getByLabel("Ir a una fecha",{exact:true})).toHaveValue(today);
-    await expect(page).toHaveURL(new RegExp(`fecha=${today}&vista=dia`));
-    await page.getByRole("button",{name:"Día siguiente",exact:true}).click();
-    await expect(page.getByLabel("Ir a una fecha",{exact:true})).not.toHaveValue(today);
-    await page.getByRole("button",{name:"Semana",exact:true}).click();
-    await expect(page.getByLabel("Ir a una fecha",{exact:true})).toHaveValue(today);
-    await expect(page.getByRole("button",{name:/^Ver hoy,/})).toBeInViewport();
-    await page.getByRole("button",{name:"Semana siguiente",exact:true}).click();
-    await page.getByRole("region",{name:"Plan de la semana",exact:true}).getByRole("button",{name:/^Ver /}).first().click();
-    await expect(page.getByLabel("Ir a una fecha",{exact:true})).not.toHaveValue(today);
+    const lunch = page.getByRole("article", { name: "Almuerzo", exact: true });
+    await expect(lunch.getByRole("group", { name: "Preparación para Alex" })).toBeVisible();
+    await lunch.getByRole("button",{name:"Confirmar",exact:true}).click();
+    await expect(lunch.getByText("MENÚ 1 · Confirmado")).toBeVisible();
+    const details=lunch.locator("details").filter({has:page.locator("summary").filter({hasText:"Otras ideas"})});
+    await expect(details).not.toHaveAttribute("open", "");
+    await lunch.getByRole("button",{name:"Cambiar",exact:true}).click();
+    await lunch.getByRole("button",{name:"Escribir y confirmar otro plato",exact:true}).click();
+    await lunch.getByLabel("Plato",{exact:true}).fill("Pasta");
+    await lunch.getByRole("button",{name:"Confirmar",exact:true}).click();
+    const dialog=page.getByRole("dialog",{name:"Confirmar plato"});
+    await expect(dialog).toBeVisible();
+    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(lunch.getByRole("button",{name:"Confirmar",exact:true})).toBeFocused();
+    await lunch.getByRole("button",{name:"Confirmar",exact:true}).click();
+    await dialog.getByRole("button",{name:"Confirmar reemplazo",exact:true}).click();
+    await expect(dialog).toBeHidden();
+    const group=lunch.getByRole("group",{name:"Preparación para Alex"});
+    await group.getByRole("button",{name:"Está",exact:true}).click();
+    await expect(group.getByRole("button",{name:"Está",exact:true})).toHaveAttribute("aria-pressed","true");
+    await page.keyboard.press("Tab");
+    expect(await inspectControls(page)).toEqual([]);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBe(0);
+    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await page.screenshot({path:"test-results-a11y/menus-diarios-360.png",fullPage:true});
     await context.close();
-  }finally{await removeFixture(fixture);}
-});
-
-test("banco de ideas copia al día y permite editar y archivar sin cambiar el menú",async({browser,baseURL})=>{
-  const fixture=await createFixture(baseURL!,browser);
-  try {
-    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Argentina/Buenos_Aires"}).format(new Date());
-    const context=await browser.newContext({storageState:fixture.storageState,viewport:{width:375,height:850}});
-    const page=await context.newPage();await page.goto(`/menus?fecha=${today}`);
-    await page.getByRole("button",{name:"Banco de ideas",exact:true}).click();
-    const bank=page.getByRole("dialog",{name:"Banco de ideas",exact:true});
-    await expect(bank.getByText(/El banco está vacío/)).toBeVisible();
-    await bank.getByRole("button",{name:"Nueva idea",exact:true}).click();
-    await bank.getByLabel("Nombre de la idea",{exact:true}).fill("Yogurt con frutas");
-    await bank.getByLabel("Nota opcional",{exact:true}).fill("Con banana y avena");
-    await bank.getByLabel("Desayuno",{exact:true}).check();
-    await bank.getByLabel("Merienda",{exact:true}).check();
-    await bank.getByLabel("Apta para lunchera",{exact:true}).check();
-    const formAxe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();expect(formAxe.violations.map(v=>v.id)).toEqual([]);
-    await bank.getByRole("button",{name:"Guardar en banco",exact:true}).click();
-    await expect(bank.getByText(/Idea guardada en el banco/)).toBeVisible();
-    await bank.getByLabel("Buscar ideas",{exact:true}).fill("YOGURT");
-    await bank.getByLabel("Filtrar por comida",{exact:true}).selectOption("breakfast");
-    await bank.getByLabel("Solo aptas para lunchera",{exact:true}).check();
-    await bank.getByLabel("Comida de destino",{exact:true}).selectOption("breakfast");
-    await page.screenshot({path:"test-results-a11y/menus-banco-mobile.png",fullPage:true});
-    await bank.getByRole("button",{name:"Proponer Yogurt con frutas",exact:true}).click();
-    const choose=page.getByRole("dialog",{name:"Elegir comida · Desayuno",exact:true});
-    await expect(choose.getByLabel("Yogurt con frutas",{exact:false})).toBeChecked();
-    await choose.getByRole("button",{name:"Elegir comida",exact:true}).click();
-    const breakfast=page.locator("#meal-breakfast");await expect(breakfast.locator("strong").filter({hasText:/^Yogurt con frutas$/}).first()).toBeVisible();
-    await page.getByRole("button",{name:"Banco de ideas",exact:true}).click();
-    await bank.getByRole("button",{name:"Editar Yogurt con frutas",exact:true}).click();
-    await bank.getByLabel("Nombre de la idea",{exact:true}).fill("Yogurt con banana");
-    await bank.getByRole("button",{name:"Guardar en banco",exact:true}).click();
-    await expect(bank.getByText(/Idea guardada en el banco/)).toBeVisible();
-    await bank.getByRole("button",{name:"Archivar Yogurt con banana",exact:true}).click();
-    await expect(bank.getByText(/Idea archivada/)).toBeVisible();
-    await bank.getByRole("button",{name:"Archivadas",exact:true}).click();
-    await bank.getByRole("button",{name:"Restaurar Yogurt con banana",exact:true}).click();
-    await expect(bank.getByText("Idea restaurada.",{exact:true})).toBeVisible();
-    await bank.getByRole("button",{name:"Activas",exact:true}).click();
-    await expect(bank.getByRole("heading",{name:"Yogurt con banana",exact:true})).toBeVisible();
-    await bank.getByRole("button",{name:"Cerrar banco de ideas",exact:true}).click();
-    await expect(breakfast.locator("strong").filter({hasText:/^Yogurt con frutas$/}).first()).toBeVisible();
-    const lunch=page.locator("#meal-lunch");
-    await lunch.getByLabel("Acciones de idea Tarta de verduras",{exact:true}).click();
-    await lunch.getByRole("button",{name:"Guardar en banco",exact:true}).click();
-    await expect(bank.getByLabel("Nombre de la idea",{exact:true})).toHaveValue("Tarta de verduras");
-    await bank.getByRole("button",{name:"Guardar en banco",exact:true}).click();
-    await expect(bank.getByRole("heading",{name:"Tarta de verduras",exact:true})).toBeVisible();
-    await page.setViewportSize({width:820,height:1180});
-    const listAxe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();expect(listAxe.violations.map(v=>v.id)).toEqual([]);
-    await page.screenshot({path:"test-results-a11y/menus-banco-tablet.png",fullPage:true});
-    await context.close();
-  }finally{await removeFixture(fixture);}
+  } finally { await removeFixture(fixture); }
 });
 
 test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, baseURL }) => {
@@ -507,7 +222,7 @@ test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, ba
         const context = await browser.newContext({ storageState: scenario.storageState, viewport: { width, height: 900 } });
         const page = await context.newPage();
         for (const route of scenario.routes) {
-          const apiPath = ({ "/familia": "/api/family", "/tareas": "/api/tasks", "/menus": "/api/meals", "/compras": "/api/shopping" } as Record<string, string>)[route];
+          const apiPath = ({ "/familia": "/api/family", "/tareas": "/api/tasks", "/menus": "/api/meals/planner", "/compras": "/api/shopping" } as Record<string, string>)[route];
           const dataReady = apiPath ? page.waitForResponse((response) => new URL(response.url()).pathname === apiPath && response.ok()) : null;
           await page.goto(route, { waitUntil: "domcontentloaded" });
           if (dataReady) await dataReady;
@@ -561,7 +276,8 @@ test("navegación diaria accesible en pasado y futuro", async ({ browser, baseUR
           expect(box?.height).toBeGreaterThanOrEqual(44);
           expect(box?.width).toBeGreaterThanOrEqual(44);
         }
-        expect(await inspectControls(page)).toEqual([]);
+        await page.keyboard.press("Tab");
+    expect(await inspectControls(page)).toEqual([]);
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
       }

@@ -212,3 +212,51 @@
 @media(max-width:400px) { .tagChoices { grid-template-columns: 1fr; } }
 
 .weekToday,.dateLabel { scroll-margin-top: 16px; }
+
+/* Daily planner: one compact row of choices per person, visible at 360px. */
+.dailyTitle { margin: 0 0 20px; font: 500 36px/1.1 Georgia,serif; color: #2d3a31; }
+.dailyNavigation { display: flex; gap: 6px; align-items: center; }
+.dailyNavigation button,.dailyNavigation input,.viewButtons button,.personChoices button,.menuActions button,.inlineAction,.weekDayButton { min-height: 44px; border: 1px solid #7f8d82; border-radius: 8px; background: #fff; color: #354d3b; padding: 6px 10px; font: 600 14px Manrope,sans-serif; cursor: pointer; }
+.dailyNavigation button { min-width: 44px; }
+.dailyNavigation label { min-width: 0; }
+.dailyNavigation input { max-width: 100%; min-width: 0; width: 100%; }
+.viewButtons { display: flex; gap: 8px; margin-top: 12px; }
+.viewButtons button[aria-pressed=true],.personChoices button[aria-pressed=true] { background: #e2efdf; border: 2px solid #4e6c53; color: #243f2c; }
+.dailyMealTitle { margin: 0 0 14px; font: 700 20px Manrope,sans-serif; }
+.dailyMenu { display: flex; gap: 10px; justify-content: space-between; border-bottom: 1px solid #e3e9e1; padding: 12px 0; }
+.dailyMenu > div:first-child { min-width: 0; display: grid; gap: 5px; }
+.dailyMenu strong { font: 600 22px/1.25 Georgia,serif; overflow-wrap: anywhere; }
+.dailyMenu small { color: #536b58; font-size: 12px; }
+.dailyMenu p { margin: 0; overflow-wrap: anywhere; }
+.dailyMenu span { font-size: 14px; }
+.menuActions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; max-width: 112px; }
+.menuActions button { font-size: 12px; padding: 5px 8px; }
+.inlineAction { margin-top: 8px; border-color: transparent; text-decoration: underline; }
+.dailyPeople { margin-top: 10px; }
+.dailySummary { margin: 10px 0; font-size: 14px; font-weight: 600; }
+.dailyPerson { padding: 9px 0; display: grid; gap: 6px; border-bottom: 1px solid #e7ece6; }
+.dailyPerson > strong { font-size: 14px; }
+.dailyPerson > small { color: #6a5942; }
+.personChoices { display: grid; grid-template-columns: .85fr 1.3fr 1fr; gap: 6px; }
+.personChoices button { padding: 5px 3px; font-size: 13px; }
+.personMenu { display: grid; gap: 5px; font-size: 13px; }
+.personMenu select { min-height: 44px; width: 100%; min-width: 0; border: 1px solid #7f8d82; border-radius: 8px; padding: 6px; background: #fff; color: #354d3b; font: inherit; }
+.dailyIdeas { display: grid; gap: 8px; padding-bottom: 12px; }
+.dailyWeek { display: grid; gap: 12px; margin-bottom: 24px; }
+.weekDayButton { text-align: left; width: 100%; text-transform: capitalize; }
+.weekMealSummary { display: grid; gap: 5px; margin-top: 14px; font-size: 14px; overflow-wrap: anywhere; }
+.weekMealSummary small { color: #536b58; }
+.compactMeal { border: 1px solid #dce3da; border-radius: 10px; background: #f8faf6; }
+.compactMeal > summary { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-height: 52px; padding: 10px 14px; cursor: pointer; }
+.compactMeal > summary span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #536b58; font-size: 13px; }
+.compactMeal > .mealCard { border: 0; }
+.previousPlan { font-size: 13px; color: #536b58; overflow-wrap: anywhere; }
+.dailyNavigation button:disabled,.personChoices button:disabled,.menuActions button:disabled,.inlineAction:disabled,.viewButtons button:disabled { cursor: default; opacity: .65; }
+.notice button { min-height: 44px; margin-left: 8px; padding: 0 8px; color: #304d37; background: #fff; border: 1px solid #617b65; border-radius: 6px; }
+@media (max-width: 400px) {
+  .dailyNavigation { gap: 4px; }
+  .dailyNavigation label { flex: 1; }
+  .dailyNavigation input { padding-inline: 4px; font-size: 12px; }
+  .dailyNavigation button { padding-inline: 6px; }
+  .dailyMenu strong { font-size: 20px; }
+}

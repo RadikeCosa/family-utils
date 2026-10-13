@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import pg from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+if (process.env.CI && !connectionString) throw new Error("Isolated PostgreSQL required");
+test("daily-menu migration preserves populated legacy tables and is repeatable", { skip: !connectionString && "requires isolated PostgreSQL" }, async () => {
+  const admin = new pg.Pool({ connectionString });
+  const name = `menus_upgrade_${randomUUID().replaceAll("-", "")}`;
+  const folder = await mkdtemp(join(tmpdir(), "menus-upgrade-"));
+  let pool;
+  try {
+    await admin.query(`CREATE DATABASE "${name}"`);
+    const url = new URL(connectionString); url.pathname = `/${name}`;
+    pool = new pg.Pool({ connectionString: url.toString() });
+    const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
+    const index = journal.entries.findIndex(e => e.tag.endsWith("_meal_daily_plans"));
+    assert.ok(index > 0);
+    const previous = { ...journal, entries: journal.entries.slice(0, index) };
+    await mkdir(join(folder, "meta"));
+    await writeFile(join(folder, "meta/_journal.json"), JSON.stringify(previous));
+    for (const entry of previous.entries) await writeFile(join(folder, `${entry.tag}.sql`), await readFile(`drizzle/${entry.tag}.sql`));
+    await migrate(drizzle(pool), { migrationsFolder: folder });
+    const { rows: [family] } = await pool.query("INSERT INTO families(name) VALUES('Migration sentinel') RETURNING id");
+    const { rows: [person] } = await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Adult','administrator') RETURNING id", [family.id]);
+    const { rows: [slot] } = await pool.query("INSERT INTO meal_slots(family_id,meal_date,meal_type) VALUES($1,'2026-10-13','lunch') RETURNING id", [family.id]);
+    const { rows: [idea] } = await pool.query("INSERT INTO meal_suggestions(slot_id,author_member_id,title) VALUES($1,$2,'Existing pasta') RETURNING id", [slot.id, person.id]);
+    const { rows: [group] } = await pool.query("INSERT INTO meal_groups(slot_id,kind,name,suggestion_id) VALUES($1,'home','Casa',$2) RETURNING id", [slot.id, idea.id]);
+    await pool.query("INSERT INTO meal_distributions(slot_id,participants,updated_by_member_id) VALUES($1,$2,$3)", [slot.id, JSON.stringify([{ memberId: person.id, status: "home", groupId: group.id }]), person.id]);
+    await pool.query("INSERT INTO meal_exceptions(slot_id,member_id,status,group_id,updated_by_member_id) VALUES($1,$2,'home',$3,$2)", [slot.id, person.id, group.id]);
+    await pool.query("INSERT INTO meal_routines(family_id,member_id,meal_type,starts_on,weekdays,updated_by_member_id) VALUES($1,$2,'lunch','2026-10-01',$3,$2)", [family.id, person.id, JSON.stringify(Array(7).fill("home"))]);
+    const tables = ["meal_slots", "meal_suggestions", "meal_groups", "meal_distributions", "meal_exceptions", "meal_routines"];
+    const before = {};
+    for (const table of tables) before[table] = (await pool.query(`SELECT to_jsonb(t) AS record FROM ${table} t`)).rows;
+    await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
+    for (const table of tables) assert.deepEqual((await pool.query(`SELECT to_jsonb(t) AS record FROM ${table} t`)).rows, before[table], table);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM meal_daily_plans")).rows[0].n, 0);
+    await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations")).rows[0].n, journal.entries.length);
+  } finally {
+    await pool?.end();
+    await admin.query(`DROP DATABASE IF EXISTS "${name}"`); await admin.end();
+    await rm(folder, { recursive: true, force: true });
+  }
+});

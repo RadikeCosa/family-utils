@@ -106,6 +106,13 @@
       "when": 1791898020593,
       "tag": "0014_meal_idea_bank",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791912356858,
+      "tag": "0015_meal_daily_plans",
+      "breakpoints": true
     }
   ]
 }
