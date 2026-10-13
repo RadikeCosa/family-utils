@@ -6,37 +6,11 @@ import { useRouter } from "next/navigation";
 import { createAuthClient } from "@/lib/family-auth-client";
 import styles from "./menus.module.css";
 import RoutineEditor from "./RoutineEditor";
-import { PARTICIPATION_STATUSES, PARTICIPATION_LABELS, type ParticipationStatus, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, type MealType, addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
+import WeekPlanner from "./WeekPlanner";
+import type { Meal, Group, WeekData, Selection, Suggestion } from "@/lib/meals/types";
+import { PARTICIPATION_STATUSES, PARTICIPATION_LABELS, type ParticipationStatus as AttendanceStatus, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, type MealType, addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
 
 const authClient = createAuthClient();
-type Role = "administrator" | "member";
-type AttendanceStatus = ParticipationStatus;
-type Profile = { id: string; name: string; role: Role };
-type Attendance = {
-  memberId: string;
-  status: AttendanceStatus;
-  groupId: string | null;
-  updatedByMemberId: string | null;
-  updatedByName: string | null;
-  updatedAt: string | null;
-};
-type Suggestion = { id: string; authorMemberId: string; authorName: string; title: string; note: string | null; version: number; createdAt: string; updatedAt: string };
-type Selection = { suggestionId: string; title: string | null; proposedById: string | null; proposedByName: string | null; confirmedByMemberId: string; confirmedByName: string; confirmedAt: string; version: number };
-type Group = { id: string | null; kind: "home" | "packed" | "shared"; name: string; isDefault: boolean; followsHome: boolean; selection: Selection | null; selectionVersion: number };
-type Meal = {
-  groups: Group[];
-  distributionOrigin: string;
-  distributionSaved: boolean;
-  noRoutineMemberIds: string[];
-  date: string;
-  mealType: MealType;
-  slotId: string | null;
-  attendance: Attendance[];
-  suggestions: Suggestion[];
-  selection: Selection | null;
-  selectionVersion: number;
-};
-type WeekData = { weekStart: string; weekEnd: string; today: string; timeZone: string; revision: number; currentMemberId: string; currentRole: Role; members: Profile[]; meals: Meal[] };
 type DialogState =
   | { kind: "choose"; meal: Meal; suggestionId?: string; group?: Group }
   | { kind: "attendance"; meal: Meal }
@@ -65,9 +39,10 @@ function countAttendance(meal: Meal) {
   return counts;
 }
 
-function replaceDateInUrl(day: string) {
+function replaceDateInUrl(day: string, view: "week" | "day") {
   const url = new URL(window.location.href);
   url.searchParams.set("fecha", day);
+  url.searchParams.set("vista", view === "week" ? "semana" : "dia");
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -86,6 +61,7 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
 export default function MenuApp() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(clientFamilyDay);
+  const [view, setView] = useState<"week" | "day">("week");
   const followsTodayRef = useRef(true);
   const [data, setData] = useState<WeekData | null>(null);
   const observedClientDay = useRef(clientFamilyDay());
@@ -126,9 +102,11 @@ export default function MenuApp() {
   const dialogGroup = dialog?.meal.groups.find(group => groupKey(group) === targetGroup) ?? (targetGroup ? undefined : dialog?.meal.groups[0]);
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("fecha");
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("fecha");
     const todayAtMount = clientFamilyDay();
     queueMicrotask(() => {
+      setView(params.get("vista") === "semana" ? "week" : requested || params.get("vista") === "dia" ? "day" : "week");
       if (requested) {
         followsTodayRef.current = false;
         if (isValidDate(requested) && isMenuDateInRange(requested, todayAtMount)) {
@@ -177,11 +155,11 @@ export default function MenuApp() {
 
   useEffect(() => {
     if (!dateInitialized) return;
-    replaceDateInUrl(selectedDate);
+    replaceDateInUrl(selectedDate, view);
     if (data?.weekStart === weekStart) return;
     etag.current = "";
     queueMicrotask(() => void refresh(true));
-  }, [dateInitialized, selectedDate, weekStart, data?.weekStart, refresh]);
+  }, [dateInitialized, selectedDate, view, weekStart, data?.weekStart, refresh]);
 
   useEffect(() => {
     const resume = () => {
@@ -394,7 +372,7 @@ export default function MenuApp() {
     requestAnimationFrame(() => focusedMealRefs.current[meal.mealType]?.focus());
   }
 
-  return <main className={styles.page}>
+  return <main className={`${styles.page} ${view === "week" ? styles.weekPage : ""}`}>
     <header className={styles.header}>
       <Link className={styles.brand} href="/" aria-label="Family Utils, inicio"><span className={styles.mark} aria-hidden="true">f</span>family<span>utils</span></Link>
       <nav className={styles.headerLinks} aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link className={styles.activeLink} href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/familia">Mi familia</Link></nav>
@@ -405,19 +383,24 @@ export default function MenuApp() {
       <p className={styles.eyebrow}>PLANIFICADOR FAMILIAR</p>
       <div className={styles.titleRow}>
         <div><h1>¿Qué comemos?</h1><p>Un plan compartido para las comidas de cada día.</p>{admin && data && <RoutineEditor members={data.members} today={today} onSaved={() => refresh(true)} />}</div>
-        <div className={styles.dateNav} aria-label="Navegar por fecha">
-          <button aria-label="Día anterior" onClick={() => navigateToDate(addDays(selectedDate, -1))}>←</button>
-          <label className={styles.dateInput}><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => navigateToDate(event.target.value)} /></label>
-          <button aria-label="Día siguiente" onClick={() => navigateToDate(addDays(selectedDate, 1))}>→</button>
+        <div className={styles.dateNav} aria-label={view === "week" ? "Navegar por semana" : "Navegar por fecha"}>
+          <button aria-label={view === "week" ? "Semana anterior" : "Día anterior"} onClick={() => navigateToDate(addDays(selectedDate, view === "week" ? -7 : -1))}>←</button>
+          <label className={styles.dateInput}><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => {setView("day");navigateToDate(event.target.value);}} /></label>
+          <button aria-label={view === "week" ? "Semana siguiente" : "Día siguiente"} onClick={() => navigateToDate(addDays(selectedDate, view === "week" ? 7 : 1))}>→</button>
           <button className={styles.todayButton} onClick={() => navigateToDate(today, true)} disabled={selectedDate === today}>Hoy</button>
         </div>
       </div>
-      <p className={styles.dateLabel}>{labelDay(selectedDate)}{selectedDate === today ? " · Hoy" : selectedDate < today ? " · Solo lectura" : ""}</p>
+      <div className={styles.viewSwitcher} aria-label="Vista del planificador">
+        <button aria-pressed={view === "week"} onClick={() => setView("week")}>Semana</button>
+        <button aria-pressed={view === "day"} onClick={() => setView("day")}>Día</button>
+      </div>
+      <p className={styles.dateLabel}>{view === "week" ? `Semana del ${new Intl.DateTimeFormat("es-AR", {timeZone:"UTC",day:"numeric",month:"long",year:"numeric"}).formatRange(new Date(`${weekStart}T12:00:00.000Z`),new Date(`${addDays(weekStart,6)}T12:00:00.000Z`))}` : labelDay(selectedDate)}{view === "day" ? selectedDate === today ? " · Hoy" : selectedDate < today ? " · Solo lectura" : "" : ""}</p>
       {error && <p className={styles.error} role="alert">{error} <button onClick={() => void refresh(true)}>Reintentar</button></p>}
       {notice && <p className={styles.notice} role="status">{notice}</p>}
     </section>
 
-    <section className={styles.mealList} aria-label={`Comidas del ${labelDay(selectedDate)}`}>
+    {view === "week" && <WeekPlanner data={weekReady ? data : null} onSelect={day => {setView("day");navigateToDate(day);}} />}
+    {view === "day" && <section className={styles.mealList} aria-label={`Comidas del ${labelDay(selectedDate)}`}>
       {MEAL_TYPES.map((mealType) => {
         const meal = mealsByType.get(mealType);
         const compact = !hasMealAttendance(mealType);
@@ -507,7 +490,7 @@ export default function MenuApp() {
           </div>
         </article>;
       })}
-    </section>
+    </section>}
 
     <footer className={styles.footer}><Link href="/">Family Utils</Link><span aria-live="polite">{loading ? "Actualizando…" : error ? "No se pudo actualizar" : "Plan compartido"}</span></footer>
 

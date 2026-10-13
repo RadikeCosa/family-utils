@@ -379,6 +379,50 @@ test("menús permite luncheras diferentes y cambiar rutinas sin alterar distribu
   }finally{await removeFixture(fixture);}
 });
 
+test("menús muestra semana con una consulta, combina Casa y lunchera y conserva navegación", async ({browser,baseURL})=>{
+  const fixture=await createFixture(baseURL!,browser);
+  try {
+    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Argentina/Buenos_Aires"}).format(new Date());
+    const pool=new pg.Pool({connectionString:databaseUrl});
+    const profiles=(await pool.query("SELECT id FROM members WHERE family_id=$1",[fixture.familyId])).rows;
+    const kid=(await pool.query("INSERT INTO members(family_id,name,role,access_method) VALUES($1,'Sol','member','code') RETURNING id",[fixture.familyId])).rows[0];
+    await pool.end();
+    expect((await fixture.api.put("/api/meals/routines",{data:{memberId:kid.id,mealType:"lunch",startsOn:today,weekdays:Array(7).fill("packed")}})).ok()).toBeTruthy();
+    expect((await fixture.api.put("/api/meals/attendance",{data:{date:today,mealType:"lunch",memberId:profiles[0].id,status:"home"}})).ok()).toBeTruthy();
+    expect((await fixture.api.put("/api/meals/selection",{data:{date:today,mealType:"lunch",title:"Tarta para todos",expectedVersion:0}})).ok()).toBeTruthy();
+    const data=await (await fixture.api.get(`/api/meals?weekStart=${today}`)).json();
+    const packed=data.meals.find((meal:{date:string;mealType:string})=>meal.date===today&&meal.mealType==="lunch").groups.find((group:{kind:string})=>group.kind==="packed");
+    expect((await fixture.api.put("/api/meals/selection",{data:{date:today,mealType:"lunch",groupId:packed.id,mode:"link",expectedVersion:0}})).ok()).toBeTruthy();
+    const context=await browser.newContext({storageState:fixture.storageState,viewport:{width:375,height:850}});
+    const page=await context.newPage();
+    const requests:string[]=[];page.on("request",request=>{if(request.url().includes("/api/meals?weekStart="))requests.push(request.url());});
+    await page.goto("/menus");
+    await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
+    await expect(page.getByText("Casa (1) + lunchera (1)",{exact:true})).toBeVisible();
+    expect(requests).toHaveLength(1);
+    const axe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
+    expect(axe.violations.map(v=>v.id)).toEqual([]);
+    await page.screenshot({path:"test-results-a11y/menus-semana-mobile.png",fullPage:true});
+    await page.setViewportSize({width:820,height:1180});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+    await page.screenshot({path:"test-results-a11y/menus-semana-tablet.png",fullPage:true});
+    await page.getByRole("button",{name:/^Ver hoy,/}).click();
+    await expect(page.getByRole("button",{name:"Día",exact:true})).toHaveAttribute("aria-pressed","true");
+    await expect(page.locator("#meal-lunch").getByRole("region",{name:"Lunchera · Almuerzo",exact:true}).getByText("Tarta para todos",{exact:true})).toBeVisible();
+    await page.getByRole("button",{name:"Semana",exact:true}).click();
+    await expect(page.getByText("Casa (1) + lunchera (1)",{exact:true})).toBeVisible();
+    expect(requests).toHaveLength(1);
+    await page.getByRole("button",{name:"Semana siguiente",exact:true}).click();
+    await expect(page.getByRole("button",{name:/^Ver hoy,/})).toHaveCount(0);
+    await expect(page.getByRole("region",{name:"Plan de la semana",exact:true})).toBeVisible();
+    expect(requests).toHaveLength(2);
+    await expect(page).toHaveURL(/vista=semana/);
+    await page.reload();
+    await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
+    await context.close();
+  }finally{await removeFixture(fixture);}
+});
+
 test("contraste, foco y desbordamiento en las seis áreas", async ({ browser, baseURL }) => {
   test.setTimeout(Math.max(120_000, widths.length * 30_000));
   const fixture = await createFixture(baseURL!, browser);
