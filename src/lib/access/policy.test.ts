@@ -42,11 +42,16 @@ test("only administrators can invite another profile and recovery applies to cod
   assert.equal(canGenerateMemberCode({ ...childInvite, targetMemberId: "adult-a" }), false);
 });
 
-test("adult Google profiles can only receive a first invitation", () => {
+test("adult Google profiles receive a first Google invitation or an alternative recovery code", () => {
   const adultInvite = { ...childInvite, targetMemberId: "adult-b", targetRole: "administrator" as const, accessMethod: "google" as const, googleEmail: "adult@example.com" };
   assert.equal(canGenerateMemberCode(adultInvite), true);
   assert.equal(canGenerateMemberCode({ ...adultInvite, hasActiveDevice: true }), false);
-  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery" }), false);
+  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery" }), true);
+  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery", hasActiveDevice: true }), true);
+  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery", googleEmail: null }), false);
+  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery", targetRole: "member" }), false);
+  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery", actorRole: "member" }), false);
+  assert.equal(canGenerateMemberCode({ ...adultInvite, purpose: "recovery", targetMemberId: "adult-a" }), false);
 });
 
 test("invitation and recovery lifetime, including the exact expiry boundary", () => {

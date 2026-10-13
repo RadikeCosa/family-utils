@@ -24,11 +24,12 @@ export async function GET(request: Request) {
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
   }
-  const activeLinks = await getDb().select({ memberId: memberDevices.memberId })
+  const activeLinks = await getDb().select({ memberId: memberDevices.memberId, identityKind: memberDevices.identityKind })
     .from(memberDevices)
     .innerJoin(members, eq(memberDevices.memberId, members.id))
     .where(and(isNull(memberDevices.revokedAt), eq(members.familyId, member.familyId)));
   const linkedMemberIds = new Set(activeLinks.map((link) => link.memberId));
+  const googleMemberIds = new Set(activeLinks.filter((link) => link.identityKind === "google").map((link) => link.memberId));
   return NextResponse.json({
     family: {
       id: member.familyId,
@@ -40,6 +41,7 @@ export async function GET(request: Request) {
       ...profile,
       ...(member.role === "administrator" ? { googleEmail } : {}),
       hasAccess: linkedMemberIds.has(profile.id),
+      hasGoogleAccess: googleMemberIds.has(profile.id),
     })),
     currentMemberId: member.memberId,
   }, {

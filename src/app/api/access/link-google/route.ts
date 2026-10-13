@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       }
 
       const [activeIdentity] = await tx.select({ id: memberDevices.id }).from(memberDevices)
-        .where(and(eq(memberDevices.memberId, target.id), isNull(memberDevices.revokedAt)))
+        .where(and(eq(memberDevices.memberId, target.id), eq(memberDevices.identityKind, "google"), isNull(memberDevices.revokedAt)))
         .limit(1);
       if (activeIdentity) return { kind: "unavailable" as const };
 

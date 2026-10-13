@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     if (existingProfile) {
       await tx.execute(sql`SELECT id FROM ${families} WHERE id = ${existingProfile.familyId} FOR UPDATE`);
       const [activeDevice] = await tx.select({ id: memberDevices.id }).from(memberDevices)
-        .where(and(eq(memberDevices.memberId, existingProfile.id), isNull(memberDevices.revokedAt)))
+        .where(and(eq(memberDevices.memberId, existingProfile.id), eq(memberDevices.identityKind, "google"), isNull(memberDevices.revokedAt)))
         .limit(1);
       if (activeDevice) return { kind: "profile-already-linked" as const };
       await tx.insert(memberDevices).values({ memberId: existingProfile.id, authUserId: session.user.id, identityKind: "google", label: "Dispositivo adulto" });

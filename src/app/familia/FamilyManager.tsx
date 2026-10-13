@@ -9,7 +9,7 @@ import styles from "../platform.module.css";
 type Member = {
   id: string; name: string; role: "administrator" | "member";
   accessMethod: "google" | "code"; googleEmail?: string | null;
-  version: number; hasAccess: boolean;
+  version: number; hasAccess: boolean; hasGoogleAccess: boolean;
 };
 type CodeCard = { memberName: string; memberRole: Member["role"]; googleEmail?: string | null; purpose: "invitation" | "recovery"; code: string; expiresAt: string };
 const authClient = createAuthClient();
@@ -75,7 +75,9 @@ export default function FamilyManager({ currentMemberId, currentRole, googleAuto
   }
 
   async function generateCode(member: Member, purpose: CodeCard["purpose"]) {
-    if (purpose === "recovery" && !window.confirm(`Al usar el nuevo código de ${member.name}, sus otros dispositivos perderán el acceso. ¿Querés reemplazarlos?`)) return;
+    if (purpose === "recovery" && !window.confirm(member.accessMethod === "google"
+      ? `El código permite entrar como ${member.name} sin Google y conserva su rol de administrador. Al usarlo se reemplazan sus accesos anteriores por código; su cuenta Google sigue disponible. ¿Querés generarlo?`
+      : `Al usar el nuevo código de ${member.name}, sus otros dispositivos perderán el acceso. ¿Querés reemplazarlos?`)) return;
     setBusy(true); setError(""); setMessage(""); setCodeCard(null); setCopied(false);
     try {
       const result = await request<{ code: string; expiresAt: string; purpose: CodeCard["purpose"] }>(`/api/members/${member.id}/codes`, { method: "POST", body: JSON.stringify({ purpose }) });
@@ -87,7 +89,7 @@ export default function FamilyManager({ currentMemberId, currentRole, googleAuto
 
   const accessUrl = typeof window === "undefined" ? "Family Utils" : `${window.location.origin}/acceso`;
   const sharingText = codeCard
-    ? codeCard.memberRole === "administrator"
+    ? codeCard.memberRole === "administrator" && codeCard.purpose === "invitation"
       ? `Para entrar a Family Utils como ${codeCard.memberName}: instalá la app y abrila desde el icono. En ${accessUrl}, iniciá sesión con Google usando ${codeCard.googleEmail ?? "el correo Google indicado"} y después ingresá esta invitación: ${codeCard.code}. Vence ${expiresLabel(codeCard.expiresAt)}. Compartila solo en privado; puede quedar en el historial del chat y deja de servir después de usarse o vencer.`
       : `Para entrar a Family Utils como ${codeCard.memberName}: instalá la app, abrila desde el icono y entrá en ${accessUrl}. Usá este código: ${codeCard.code}. Vence ${expiresLabel(codeCard.expiresAt)}. Compartilo solo en privado; puede quedar en el historial del chat y deja de servir después de usarse o vencer.`
     : "";
@@ -120,7 +122,7 @@ export default function FamilyManager({ currentMemberId, currentRole, googleAuto
       <section className={styles.familyWrap}>
         <p className={styles.eyebrow}>ADMINISTRACIÓN FAMILIAR</p>
         <h1 className={styles.accessTitle}>{familyName}</h1>
-        <p className={styles.intro}>Cada perfil conserva sus tareas e historial. Los integrantes sin correo entran con un código en su PWA; los adultos usan su cuenta Google.</p>
+        <p className={styles.intro}>Cada perfil conserva sus tareas e historial. Los integrantes sin correo entran con un código; los adultos pueden usar Google o pedir un código alternativo a otro administrador.</p>
         <section className={styles.memberPanel} aria-labelledby="members-title">
           <div className={styles.panelHeading}><div><p className={styles.eyebrow}>PERFILES Y ACCESO</p><h2 id="members-title">Integrantes</h2></div><span className={styles.memberCount}>{members.length}</span></div>
           <div className={styles.profileList}>
@@ -129,7 +131,7 @@ export default function FamilyManager({ currentMemberId, currentRole, googleAuto
               return <article className={styles.profileCard} key={member.id}>
                 <div className={styles.profileTop}><span className={styles.profileAvatar}>{member.name.slice(0,1).toLocaleUpperCase()}</span><div className={styles.profileIdentity}><strong>{member.name}</strong><span>{member.role === "administrator" ? "Administrador" : "Integrante"} · {member.hasAccess ? "Acceso vinculado" : "Sin acceso"}</span></div>
                   {isAdmin && member.id !== currentMemberId && <div className={styles.profileActions}>{isGoogle
-                    ? member.hasAccess ? <span className={styles.statusPill}>Entra con Google</span> : googleAutoLinkEnabled ? <span className={styles.statusPill}>Iniciá con Google para vincular</span> : <button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "invitation")}>Generar invitación</button>
+                    ? <>{member.hasGoogleAccess ? <span className={styles.statusPill}>Entra con Google</span> : googleAutoLinkEnabled ? <span className={styles.statusPill}>Iniciá con Google para vincular</span> : <button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "invitation")}>Generar invitación</button>}<button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "recovery")}>Generar código alternativo</button></>
                     : <><button className={styles.smallButton} disabled={busy} onClick={() => void generateCode(member, "invitation")}>Dar acceso a otro dispositivo</button><button className={styles.smallButtonSecondary} disabled={busy || !member.hasAccess} onClick={() => void generateCode(member, "recovery")}>Reemplazar accesos anteriores</button></>}
                   </div>}
                 </div>
@@ -154,9 +156,9 @@ export default function FamilyManager({ currentMemberId, currentRole, googleAuto
           </details>}
         </section>
         {codeCard && <section className={styles.codePanel} aria-live="polite">
-          <p className={styles.eyebrow}>{codeCard.purpose === "recovery" ? "REEMPLAZO DE ACCESO" : "INVITACIÓN FAMILIAR"}</p>
+          <p className={styles.eyebrow}>{codeCard.purpose === "recovery" ? codeCard.memberRole === "administrator" ? "ACCESO SIN GOOGLE" : "REEMPLAZO DE ACCESO" : "INVITACIÓN FAMILIAR"}</p>
           <h2>Código para {codeCard.memberName}</h2>
-          <p>{codeCard.purpose === "recovery" ? "Al canjearlo se cerrarán sus accesos anteriores." : "Al canjearlo se agrega un dispositivo y se conservan los accesos existentes."}</p>
+          <p>{codeCard.purpose === "recovery" ? codeCard.memberRole === "administrator" ? "Entrá con este código sin iniciar con Google. Conserva el perfil y su rol de administrador. Reemplaza los accesos anteriores por código; la cuenta Google sigue disponible." : "Al canjearlo se cerrarán sus accesos anteriores." : "Al canjearlo se agrega un dispositivo y se conservan los accesos existentes."}</p>
           <strong className={styles.inviteCode}>{codeCard.code}</strong>
           <span className={styles.expiry}>Vence el {expiresLabel(codeCard.expiresAt)}. El código puede quedar guardado en el historial del chat; usalo solo con esta persona.</span>
           <div className={styles.codeActions}><button className={styles.smallButton} onClick={() => void copyCode()}>{copied ? "Copiado" : "Copiar código"}</button><button className={styles.primaryButton} onClick={() => void shareCode()}>Compartir instrucciones</button><button className={styles.textButton} onClick={() => setCodeCard(null)}>Cerrar código</button></div>
