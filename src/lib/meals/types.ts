@@ -27,3 +27,5 @@ export type Meal = {
   selectionVersion: number;
 };
 export type WeekData = { weekStart: string; weekEnd: string; today: string; timeZone: string; revision: number; currentMemberId: string; currentRole: Role; members: Profile[]; meals: Meal[] };
+
+export type MealIdea = {id:string;authorMemberId:string;authorName:string;title:string;note:string|null;mealTypes:MealType[];packedSuitable:boolean;version:number;archivedAt:string|null;createdAt:string;updatedAt:string};

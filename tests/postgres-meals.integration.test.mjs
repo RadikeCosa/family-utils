@@ -119,6 +119,8 @@ test("four-meal migration preserves an existing lunch selection and attendance",
     assert.equal(snapshot[0].status,"home");assert.equal(snapshot[0].groupId,group.id);
     assert.equal(Number((await pool.query("SELECT count(*) FROM meal_exceptions WHERE slot_id=$1",[unconfirmed.id])).rows[0].count),0,"unknown migration must not create an exception");
     assert.equal(Number((await pool.query("SELECT count(*) FROM meal_distributions WHERE slot_id=$1",[unconfirmed.id])).rows[0].count),0,"unconfirmed meals must not freeze unknowns");
+    assert.equal(Number((await pool.query("SELECT count(*) FROM meal_ideas")).rows[0].count),0,"migration must not import historical suggestions into bank");
+    assert.equal((await pool.query("SELECT catalog_idea_id FROM meal_suggestions WHERE id=$1",[idea.id])).rows[0].catalog_idea_id,null);
     const types = (await pool.query("SELECT unnest(enum_range(NULL::meal_type))::text AS type")).rows.map((row) => row.type);
     assert.deepEqual(types, ["breakfast", "lunch", "snack", "dinner"]);
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });

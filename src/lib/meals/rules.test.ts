@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveParticipation, routineFor, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, isMealType, canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
+import { parseIdeaFields, normalizeMealIdea, resolveParticipation, routineFor, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, isMealType, canConfirmMeal, formatMealAttribution, getDayInTimeZone, hasUnknownAttendance, isMenuDateInRange, isUuid, mayEditMeal, mayManageSuggestion, menuDateBounds, startOfWeek } from "./rules.ts";
 
 test("meal attribution uses creator identity and handles repeated or missing names", () => {
   assert.equal(formatMealAttribution("a", "Ana", "b", "Ramiro"), "Propuesto por Ana · Confirmado por Ramiro");
@@ -72,4 +72,13 @@ test("historical routine versions, explicit unknown and snapshots have distinct 
   const snapshot = [{memberId:"child",status:"away" as const,groupId:null}];
   assert.equal(resolveParticipation({...input,date:"2026-12-02",snapshot})[0].status,"away");
   assert.equal(resolveParticipation({...input,routines:[]})[0].status,"unknown");
+});
+
+test("idea bank validates optional labels and searches titles without accents",()=>{
+  assert.deepEqual(parseIdeaFields({title:"  Yogurt  ",mealTypes:["snack","breakfast","snack"],packedSuitable:true}),{title:"Yogurt",note:null,mealTypes:["breakfast","snack"],packedSuitable:true});
+  assert.equal(parseIdeaFields({title:""}),null);
+  assert.equal(parseIdeaFields({title:"x".repeat(161)}),null);
+  assert.equal(parseIdeaFields({title:"Pasta",mealTypes:["brunch"]}),null);
+  assert.equal(parseIdeaFields({title:"Pasta",packedSuitable:"yes"}),null);
+  assert.equal(normalizeMealIdea("  PURÉ  "),"pure");
 });

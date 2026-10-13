@@ -102,6 +102,7 @@ async function removeFixture(fixture: Pick<Fixture, "familyId" | "userId" | "con
       await pool.query("DELETE FROM meal_attendance WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
       await pool.query("DELETE FROM meal_groups WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
       await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id = $1)", [fixture.familyId]);
+      await pool.query("DELETE FROM meal_ideas WHERE family_id = $1", [fixture.familyId]);
       await pool.query("DELETE FROM meal_slots WHERE family_id = $1", [fixture.familyId]);
       await pool.query("DELETE FROM audit_events WHERE family_id = $1", [fixture.familyId]);
       await pool.query("DELETE FROM task_assignees WHERE task_id IN (SELECT id FROM tasks WHERE family_id = $1)", [fixture.familyId]);
@@ -184,6 +185,8 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await expect(page.locator("input[name='meal-choice']").first()).toBeFocused();
     await page.locator("input[name='meal-choice']").first().check();
     await page.keyboard.press("Shift+Tab");
+    await expect(dialogs.getByRole("button", { name: "Buscar en banco", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
     await expect(page.getByRole("button", { name: "Cerrar" })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     // Chromium can visit browser chrome before wrapping a native dialog.
@@ -215,7 +218,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
       return { width: rect.width, height: rect.height };
     }));
     expect(attendanceTargets.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
-    await dialogs.getByLabel("Come afuera (sin comida de casa)").click();
+    await dialogs.getByLabel("Come afuera (sin comida de casa)").check();
     await expect(dialogs.getByRole("button", { name: "Listo" })).toBeEnabled();
     await dialogs.getByRole("button", { name: "Listo" }).click();
     await expect(lunch.getByText("Nadie necesita comida de casa; podés elegir de todos modos.")).toBeVisible();
@@ -419,6 +422,61 @@ test("menús muestra semana con una consulta, combina Casa y lunchera y conserva
     await expect(page).toHaveURL(/vista=semana/);
     await page.reload();
     await expect(page.getByRole("button",{name:"Semana",exact:true})).toHaveAttribute("aria-pressed","true");
+    await context.close();
+  }finally{await removeFixture(fixture);}
+});
+
+test("banco de ideas copia al día y permite editar y archivar sin cambiar el menú",async({browser,baseURL})=>{
+  const fixture=await createFixture(baseURL!,browser);
+  try {
+    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Argentina/Buenos_Aires"}).format(new Date());
+    const context=await browser.newContext({storageState:fixture.storageState,viewport:{width:375,height:850}});
+    const page=await context.newPage();await page.goto(`/menus?fecha=${today}`);
+    await page.getByRole("button",{name:"Banco de ideas",exact:true}).click();
+    const bank=page.getByRole("dialog",{name:"Banco de ideas",exact:true});
+    await expect(bank.getByText(/El banco está vacío/)).toBeVisible();
+    await bank.getByRole("button",{name:"Nueva idea",exact:true}).click();
+    await bank.getByLabel("Nombre de la idea",{exact:true}).fill("Yogurt con frutas");
+    await bank.getByLabel("Nota opcional",{exact:true}).fill("Con banana y avena");
+    await bank.getByLabel("Desayuno",{exact:true}).check();
+    await bank.getByLabel("Merienda",{exact:true}).check();
+    await bank.getByLabel("Apta para lunchera",{exact:true}).check();
+    const formAxe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();expect(formAxe.violations.map(v=>v.id)).toEqual([]);
+    await bank.getByRole("button",{name:"Guardar en banco",exact:true}).click();
+    await expect(bank.getByText(/Idea guardada en el banco/)).toBeVisible();
+    await bank.getByLabel("Buscar ideas",{exact:true}).fill("YOGURT");
+    await bank.getByLabel("Filtrar por comida",{exact:true}).selectOption("breakfast");
+    await bank.getByLabel("Solo aptas para lunchera",{exact:true}).check();
+    await bank.getByLabel("Comida de destino",{exact:true}).selectOption("breakfast");
+    await page.screenshot({path:"test-results-a11y/menus-banco-mobile.png",fullPage:true});
+    await bank.getByRole("button",{name:"Proponer Yogurt con frutas",exact:true}).click();
+    const choose=page.getByRole("dialog",{name:"Elegir comida · Desayuno",exact:true});
+    await expect(choose.getByLabel("Yogurt con frutas",{exact:false})).toBeChecked();
+    await choose.getByRole("button",{name:"Elegir comida",exact:true}).click();
+    const breakfast=page.locator("#meal-breakfast");await expect(breakfast.locator("strong").filter({hasText:/^Yogurt con frutas$/}).first()).toBeVisible();
+    await page.getByRole("button",{name:"Banco de ideas",exact:true}).click();
+    await bank.getByRole("button",{name:"Editar Yogurt con frutas",exact:true}).click();
+    await bank.getByLabel("Nombre de la idea",{exact:true}).fill("Yogurt con banana");
+    await bank.getByRole("button",{name:"Guardar en banco",exact:true}).click();
+    await expect(bank.getByText(/Idea guardada en el banco/)).toBeVisible();
+    await bank.getByRole("button",{name:"Archivar Yogurt con banana",exact:true}).click();
+    await expect(bank.getByText(/Idea archivada/)).toBeVisible();
+    await bank.getByRole("button",{name:"Archivadas",exact:true}).click();
+    await bank.getByRole("button",{name:"Restaurar Yogurt con banana",exact:true}).click();
+    await expect(bank.getByText("Idea restaurada.",{exact:true})).toBeVisible();
+    await bank.getByRole("button",{name:"Activas",exact:true}).click();
+    await expect(bank.getByRole("heading",{name:"Yogurt con banana",exact:true})).toBeVisible();
+    await bank.getByRole("button",{name:"Cerrar banco de ideas",exact:true}).click();
+    await expect(breakfast.locator("strong").filter({hasText:/^Yogurt con frutas$/}).first()).toBeVisible();
+    const lunch=page.locator("#meal-lunch");
+    await lunch.getByLabel("Acciones de idea Tarta de verduras",{exact:true}).click();
+    await lunch.getByRole("button",{name:"Guardar en banco",exact:true}).click();
+    await expect(bank.getByLabel("Nombre de la idea",{exact:true})).toHaveValue("Tarta de verduras");
+    await bank.getByRole("button",{name:"Guardar en banco",exact:true}).click();
+    await expect(bank.getByRole("heading",{name:"Tarta de verduras",exact:true})).toBeVisible();
+    await page.setViewportSize({width:820,height:1180});
+    const listAxe=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();expect(listAxe.violations.map(v=>v.id)).toEqual([]);
+    await page.screenshot({path:"test-results-a11y/menus-banco-tablet.png",fullPage:true});
     await context.close();
   }finally{await removeFixture(fixture);}
 });

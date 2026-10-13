@@ -550,6 +550,51 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       } finally {await pool.query("UPDATE members SET role='administrator' WHERE id=$1",[childId]);}
     });
 
+    await t.test("reusable ideas copy independently, archive safely and enforce family/authorship",async()=>{
+      const send=(path,method,body)=>fetch(`${origin}/api/meals/${path}`,{method,headers:{...headers,Cookie:memberCookie},body:JSON.stringify(body)});
+      const create=await send("ideas","POST",{title:"Puré con papa",note:"Sin sal",mealTypes:["lunch"],packedSuitable:true});
+      assert.equal(create.status,201);
+      const idea=(await create.json()).idea;
+      const proposed=await send("suggestions","POST",{date:"2099-06-06",mealType:"dinner",catalogIdeaId:idea.id});
+      assert.equal(proposed.status,201,"labels guide but do not block another meal type");
+      const copy=await proposed.json();
+      assert.equal(copy.title,"Puré con papa");assert.equal(copy.catalogIdeaId,idea.id);
+      const confirmed=await send("selection","PUT",{date:"2099-06-06",mealType:"dinner",suggestionId:copy.id,expectedVersion:0});
+      assert.equal(confirmed.status,200);
+      const edit=await send(`ideas/${idea.id}`,"PATCH",{title:"Puré con calabaza",note:"Con queso",mealTypes:["dinner"],packedSuitable:false,expectedVersion:1});
+      assert.equal(edit.status,200);
+      const stale=await send(`ideas/${idea.id}`,"PATCH",{title:"No debe reemplazar",expectedVersion:1});assert.equal(stale.status,409);
+      assert.equal((await pool.query("SELECT title,note FROM meal_suggestions WHERE id=$1",[copy.id])).rows[0].title,"Puré con papa");
+      assert.equal((await send(`ideas/${idea.id}`,"PATCH",{action:"archive",expectedVersion:2})).status,200);
+      const active=await fetch(`${origin}/api/meals/ideas`,{headers:{Cookie:memberCookie}}).then(r=>r.json());
+      assert.equal(active.ideas.some(item=>item.id===idea.id),false);
+      const archived=await fetch(`${origin}/api/meals/ideas?archived=1`,{headers:{Cookie:memberCookie}}).then(r=>r.json());
+      assert.equal(archived.ideas.some(item=>item.id===idea.id),true);
+      assert.equal((await send("suggestions","POST",{date:"2099-06-07",mealType:"lunch",catalogIdeaId:idea.id})).status,400);
+      const week=await fetch(`${origin}/api/meals?weekStart=2099-06-01`,{headers:{Cookie:memberCookie}}).then(r=>r.json());
+      assert.equal(week.meals.find(meal=>meal.date==="2099-06-06"&&meal.mealType==="dinner").selection.title,"Puré con papa");
+      assert.equal((await send(`ideas/${idea.id}`,"PATCH",{action:"restore",expectedVersion:3})).status,200);
+      const {rows:[otherIdea]}=await pool.query("INSERT INTO meal_ideas(family_id,author_member_id,title) VALUES($1,$2,'Idea de otro integrante') RETURNING id",[familyId,adminId]);
+      await pool.query("UPDATE members SET role='member' WHERE id=$1",[childId]);
+      try {
+        assert.equal((await send(`ideas/${otherIdea.id}`,"PATCH",{action:"archive",expectedVersion:1})).status,403);
+        assert.equal((await send(`ideas/${idea.id}`,"PATCH",{title:"Mi idea",expectedVersion:4})).status,200);
+      }finally{await pool.query("UPDATE members SET role='administrator' WHERE id=$1",[childId]);}
+      const {rows:[foreign]}=await pool.query("INSERT INTO families(name) VALUES('Foreign idea family') RETURNING id");
+      const {rows:[person]}=await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Other','member') RETURNING id",[foreign.id]);
+      const {rows:[foreignIdea]}=await pool.query("INSERT INTO meal_ideas(family_id,author_member_id,title) VALUES($1,$2,'Private idea') RETURNING id",[foreign.id,person.id]);
+      try {
+        assert.equal((await send(`ideas/${foreignIdea.id}`,"PATCH",{action:"archive",expectedVersion:1})).status,404);
+        assert.equal((await send("suggestions","POST",{date:"2099-06-07",mealType:"lunch",catalogIdeaId:foreignIdea.id})).status,400);
+        const listed=await fetch(`${origin}/api/meals/ideas`,{headers:{Cookie:memberCookie}}).then(r=>r.json());
+        assert.equal(listed.ideas.some(item=>item.id===foreignIdea.id),false);
+      }finally{
+        await pool.query("DELETE FROM meal_ideas WHERE family_id=$1",[foreign.id]);
+        await pool.query("DELETE FROM members WHERE family_id=$1",[foreign.id]);
+        await pool.query("DELETE FROM families WHERE id=$1",[foreign.id]);
+      }
+    });
+
     await t.test("task archive and restore handlers keep overdue work visible without retroactive debt", async () => {
       const { rows: [task] } = await pool.query(
         `INSERT INTO tasks (family_id, title, created_by_member_id, edited_by_member_id)
@@ -604,6 +649,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       await pool.query("DELETE FROM meal_attendance WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
       await pool.query("DELETE FROM meal_groups WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
       await pool.query("DELETE FROM meal_suggestions WHERE slot_id IN (SELECT id FROM meal_slots WHERE family_id=$1)", [familyId]);
+      await pool.query("DELETE FROM meal_ideas WHERE family_id=$1", [familyId]);
       await pool.query("DELETE FROM meal_slots WHERE family_id=$1", [familyId]);
       await pool.query("DELETE FROM meal_routines WHERE family_id=$1", [familyId]);
       await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
