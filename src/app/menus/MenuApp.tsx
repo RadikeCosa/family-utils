@@ -7,6 +7,7 @@ import { createAuthClient } from "@/lib/family-auth-client";
 import styles from "./menus.module.css";
 import RoutineEditor from "./RoutineEditor";
 import WeekPlanner from "./WeekPlanner";
+import IdeaBank, { type BankState } from "./IdeaBank";
 import type { Meal, Group, WeekData, Selection, Suggestion } from "@/lib/meals/types";
 import { PARTICIPATION_STATUSES, PARTICIPATION_LABELS, type ParticipationStatus as AttendanceStatus, MEAL_TYPES, MEAL_LABELS, hasMealAttendance, type MealType, addDays, formatMealAttribution, getDayInTimeZone, isMenuDateInRange, isValidDate, startOfWeek, menuDateBounds } from "@/lib/meals/rules";
 
@@ -73,6 +74,7 @@ export default function MenuApp() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [bank, setBank] = useState<BankState | null>(null);
   const [dialogError, setDialogError] = useState("");
   const [dialogBusy, setDialogBusy] = useState(false);
   const [choice, setChoice] = useState("");
@@ -280,10 +282,20 @@ export default function MenuApp() {
 
   async function updateAttendance(meal: Meal, memberId: string, status: AttendanceStatus | "inherit", groupId?: string | null) {
     const key = `attendance-${meal.date}-${meal.mealType}-${memberId}`;
-    await perform(key, () => jsonRequest("/api/meals/attendance", {
+    if (status !== "inherit") {
+      const destination = status === "home" ? meal.groups.find(group=>group.kind==="home")?.id ?? null
+        : status === "packed" ? groupId ?? meal.groups.find(group=>group.kind==="packed"&&group.isDefault)?.id ?? null : null;
+      setDialog(current=>current?.kind==="attendance"?{...current,meal:{...current.meal,attendance:current.meal.attendance.map(person=>person.memberId===memberId?{...person,status,groupId:destination}:person)}}:current);
+    }
+    const saved = await perform(key, () => jsonRequest("/api/meals/attendance", {
       method: "PUT",
       body: JSON.stringify({ date: meal.date, mealType: meal.mealType, memberId, status, groupId }),
     }), "Participación actualizada.", true);
+    if (!saved) {
+      const latest = await refresh(true);
+      const actual = latest?.meals.find(item=>item.date===meal.date&&item.mealType===meal.mealType) ?? meal;
+      setDialog(current=>current?.kind==="attendance"?{...current,meal:actual}:current);
+    }
   }
 
   async function saveChoice(event: React.FormEvent<HTMLFormElement>) {
@@ -365,6 +377,19 @@ export default function MenuApp() {
     }),"La distribución vuelve a seguir la rutina. Los platos se conservaron.");
   }
 
+  async function proposeBankIdea(id:string,date:string,type:MealType) {
+    const latest=await refresh(true);
+    const meal=latest?.meals.find(item=>item.date===date&&item.mealType===type);
+    setView("day");setExpandedMeals(current=>new Set(current).add(type));
+    setBank(null);
+    if(meal&&admin) {
+      const original=bank?.mealType===type?bank.group:undefined;
+      const group=original?meal.groups.find(item=>groupKey(item)===groupKey(original)):undefined;
+      if(original&&!group){setDialog(null);setNotice("Idea agregada. El grupo cambió; elegí un destino disponible.");return;}
+      openDialog({kind:"choose",meal,suggestionId:id,group},focusedMealRefs.current[type]??openerRef.current!);
+    } else {setDialog(null);setNotice("Idea agregada desde el banco.");}
+  }
+
   function showCurrentSelection() {
     const meal = dialog?.meal;
     closeDialog();
@@ -382,7 +407,7 @@ export default function MenuApp() {
     <section className={styles.intro}>
       <p className={styles.eyebrow}>PLANIFICADOR FAMILIAR</p>
       <div className={styles.titleRow}>
-        <div><h1>¿Qué comemos?</h1><p>Un plan compartido para las comidas de cada día.</p>{admin && data && <RoutineEditor members={data.members} today={today} onSaved={() => refresh(true)} />}</div>
+        <div><h1>¿Qué comemos?</h1><p>Un plan compartido para las comidas de cada día.</p>{data && <div className={styles.plannerTools}>{admin && <RoutineEditor members={data.members} today={today} onSaved={() => refresh(true)} />}<button className={styles.expandButton} onClick={event=>setBank({date:selectedDate,mealType:"lunch",opener:event.currentTarget})}>Banco de ideas</button></div>}</div>
         <div className={styles.dateNav} aria-label={view === "week" ? "Navegar por semana" : "Navegar por fecha"}>
           <button aria-label={view === "week" ? "Semana anterior" : "Día anterior"} onClick={() => navigateToDate(addDays(selectedDate, view === "week" ? -7 : -1))}>←</button>
           <label className={styles.dateInput}><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => {setView("day");navigateToDate(event.target.value);}} /></label>
@@ -391,8 +416,8 @@ export default function MenuApp() {
         </div>
       </div>
       <div className={styles.viewSwitcher} aria-label="Vista del planificador">
-        <button aria-pressed={view === "week"} onClick={() => setView("week")}>Semana</button>
-        <button aria-pressed={view === "day"} onClick={() => setView("day")}>Día</button>
+        <button disabled={!dateInitialized} aria-pressed={view === "week"} onClick={() => setView("week")}>Semana</button>
+        <button disabled={!dateInitialized} aria-pressed={view === "day"} onClick={() => setView("day")}>Día</button>
       </div>
       <p className={styles.dateLabel}>{view === "week" ? `Semana del ${new Intl.DateTimeFormat("es-AR", {timeZone:"UTC",day:"numeric",month:"long",year:"numeric"}).formatRange(new Date(`${weekStart}T12:00:00.000Z`),new Date(`${addDays(weekStart,6)}T12:00:00.000Z`))}` : labelDay(selectedDate)}{view === "day" ? selectedDate === today ? " · Hoy" : selectedDate < today ? " · Solo lectura" : "" : ""}</p>
       {error && <p className={styles.error} role="alert">{error} <button onClick={() => void refresh(true)}>Reintentar</button></p>}
@@ -431,15 +456,16 @@ export default function MenuApp() {
                   <header className={styles.groupHeading}>
                     {!compact && <div><h3>{group.name}</h3><small>{people.length ? people.map(person => data.members.find(member => member.id === person.memberId)?.name).join(" · ") : "Sin personas asignadas"}</small></div>}
                     {admin && !past && !group.selection && !group.followsHome && <button className={styles.primaryButton} onClick={event => openDialog({kind:"choose",meal,group},event.currentTarget)}>Elegir comida<span className={styles.srOnly}> para {group.name}</span></button>}
-                    {!past && (group.kind === "packed" || admin && !!group.selection) && <details className={styles.actionsMenu}>
+                    {(!!group.selection || !past && group.kind === "packed") && <details className={styles.actionsMenu}>
                       <summary aria-label={`Acciones de ${group.name} · ${mealTitle(mealType).toLowerCase()}`}>⋯</summary>
                       <div className={styles.actionOptions}>
-                        {admin && <>
+                        {admin && !past && <>
                           <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"choose",meal,group},menu.querySelector("summary")!);}}>{group.selection ? "Cambiar comida" : "Elegir comida"}</button>
                           {(group.selection || group.followsHome) && <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"clear",meal,group},menu.querySelector("summary")!);}}>Quitar elección</button>}
                           {group.kind === "packed" && <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:group.followsHome?"unlink":"link",meal,group},menu.querySelector("summary")!);}}>{group.followsHome ? "Desvincular de Casa" : "Lo mismo que en casa"}</button>}
                         </>}
-                        {group.kind === "packed" && <>
+                        {group.selection && <button onClick={event=>{const menu=event.currentTarget.closest("details")!;menu.open=false;setBank({date:meal.date,mealType:meal.mealType,source:meal.suggestions.find(idea=>idea.id===group.selection?.suggestionId),opener:menu.querySelector("summary")!});}}>Guardar en banco</button>}
+                        {!past && group.kind === "packed" && <>
                           <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"group",action:"rename",meal,group},menu.querySelector("summary")!);}}>Renombrar lunchera</button>
                           <button onClick={event => {const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"group",action:"delete",meal,group},menu.querySelector("summary")!);}}>Eliminar lunchera</button>
                         </>}
@@ -455,7 +481,7 @@ export default function MenuApp() {
 
             <section className={styles.ideasSection} aria-label={`Ideas para ${mealTitle(mealType).toLowerCase()}`}>
               <div className={styles.ideasHeading}><h3>{selectedIds.size ? "Otras ideas" : "Ideas"}</h3>
-                {!past && <button className={styles.expandButton} onClick={(event) => openDialog({ kind: "propose", meal }, event.currentTarget)}>Proponer idea</button>}
+                {!past && <div className={styles.inlineActions}><button className={styles.expandButton} onClick={(event) => openDialog({ kind: "propose", meal }, event.currentTarget)}>Proponer idea</button><button className={styles.expandButton} onClick={event=>setBank({date:meal.date,mealType:meal.mealType,opener:event.currentTarget})}>Buscar en banco</button></div>}
               </div>
               <div className={styles.suggestions}>
                 {!alternatives.length && <p className={styles.empty}>{selectedIds.size ? "Podés proponer otra alternativa." : "Todavía no hay ideas. Podés proponer una."}</p>}
@@ -466,10 +492,16 @@ export default function MenuApp() {
                     <div className={styles.suggestionText}><strong>{suggestion.title}</strong>{suggestion.note && <p>{suggestion.note}</p>}<small>Idea de {suggestion.authorName}{selected ? ` · Elegida para ${meal.groups.filter(group=>group.selection?.suggestionId===suggestion.id).map(group=>group.name).join(", ")}` : ""}</small></div>
                     <div className={styles.suggestionActions}>
                       {admin && !past && <button onClick={(event) => openDialog({ kind: "choose", meal, suggestionId: suggestion.id }, event.currentTarget)}>Elegir<span className={styles.srOnly}> {suggestion.title}</span></button>}
-                      {canManage && <>
-                        <button onClick={(event) => openDialog({ kind: "edit", meal, suggestion }, event.currentTarget)}>Editar<span className={styles.srOnly}> {suggestion.title}</span></button>
-                        <button onClick={(event) => openDialog({ kind: "withdraw", meal, suggestion }, event.currentTarget)}>Retirar<span className={styles.srOnly}> {suggestion.title}</span></button>
-                      </>}
+                      <details className={styles.actionsMenu}>
+                        <summary aria-label={`Acciones de idea ${suggestion.title}`}>⋯</summary>
+                        <div className={styles.actionOptions}>
+                          <button onClick={event=>{const menu=event.currentTarget.closest("details")!;menu.open=false;setBank({date:meal.date,mealType:meal.mealType,source:suggestion,opener:menu.querySelector("summary")!});}}>Guardar en banco</button>
+                          {canManage && <>
+                            <button onClick={event=>{const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"edit",meal,suggestion},menu.querySelector("summary")!);}}>Editar</button>
+                            <button onClick={event=>{const menu=event.currentTarget.closest("details")!;menu.open=false;openDialog({kind:"withdraw",meal,suggestion},menu.querySelector("summary")!);}}>Retirar</button>
+                          </>}
+                        </div>
+                      </details>
                     </div>
                   </div>;
                 })}
@@ -500,6 +532,7 @@ export default function MenuApp() {
         <h2 id="menu-dialog-title">{dialog.kind === "choose" ? `${dialogGroup?.selection ? "Cambiar" : "Elegir"} comida · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "propose" ? `Proponer idea · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "attendance" ? `Quiénes comen · ${mealTitle(dialog.meal.mealType)}` : dialog.kind === "edit" ? "Editar idea" : dialog.kind === "withdraw" ? "Retirar idea" : dialog.kind === "group" ? `${dialog.action === "create" ? "Crear" : dialog.action === "rename" ? "Renombrar" : "Eliminar"} lunchera` : dialog.kind === "reset" ? "Volver a la rutina" : dialog.kind === "link" ? "Lo mismo que en casa" : dialog.kind === "unlink" ? "Desvincular lunchera" : "Quitar elección"}</h2>
         <p className={styles.dialogDate}>{labelDay(dialog.meal.date)}</p>
         {dialog.kind === "choose" && <form onSubmit={(event) => void saveChoice(event)}>
+          <button type="button" className={styles.expandButton} onClick={event=>setBank({date:dialog.meal.date,mealType:dialog.meal.mealType,group:dialogGroup,opener:event.currentTarget})}>Buscar en banco</button>
           {dialog.meal.groups.length > 1 && <div className={styles.formFields}><label>Para quién<select aria-label="Para quién" value={targetGroup} onChange={event => setTargetGroup(event.target.value)}>{dialog.meal.groups.map(group=><option key={group.id??group.kind} value={groupKey(group)}>{group.name}</option>)}</select></label></div>}
           {dialog.meal.suggestions.length > 0 && <fieldset className={styles.choiceList}>
             <legend>Elegí una idea</legend>
@@ -517,6 +550,7 @@ export default function MenuApp() {
           <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.primaryButton} disabled={dialogBusy || !dialogGroup || selectedDate < today || (choice === "new" ? !title.trim() : !choice)}>{dialogBusy ? "Guardando…" : dialogGroup?.selection ? "Guardar cambio" : "Elegir comida"}</button></div>
         </form>}
         {dialog.kind === "propose" && <form onSubmit={(event) => void saveProposal(event)}>
+          <button type="button" className={styles.expandButton} onClick={event=>setBank({date:dialog.meal.date,mealType:dialog.meal.mealType,opener:event.currentTarget})}>Buscar en banco</button>
           <div className={styles.formFields}><label>Comida<input ref={titleInputRef} required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} autoComplete="off" /></label><label>Nota opcional<input maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} autoComplete="off" /></label></div>
           <DialogError message={dialogError} />
           <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={closeDialog}>Cancelar</button><button className={styles.primaryButton} disabled={dialogBusy || selectedDate < today || !title.trim()}>{dialogBusy ? "Guardando…" : "Agregar idea"}</button></div>
@@ -583,6 +617,7 @@ export default function MenuApp() {
 
       </>}
     </dialog>
+    {data && <IdeaBank state={bank} onClose={()=>setBank(null)} onChanged={()=>refresh(true)} onUse={proposeBankIdea} currentMemberId={data.currentMemberId} adult={admin} today={today} />}
   </main>;
 }
 

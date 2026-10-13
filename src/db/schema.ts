@@ -247,6 +247,7 @@ export const mealSuggestions = pgTable("meal_suggestions", {
   authorMemberId: uuid("author_member_id").notNull().references(() => members.id),
   title: varchar("title", { length: 160 }).notNull(),
   note: varchar("note", { length: 1000 }),
+  catalogIdeaId: uuid("catalog_idea_id").references(() => mealIdeas.id),
   version: integer("version").notNull().default(1),
   withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
   createdAt: createdAt(),
@@ -475,3 +476,17 @@ export const mealRoutines = pgTable("meal_routines", {
   updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, table => [uniqueIndex("meal_routines_version_unique").on(table.memberId, table.mealType, table.startsOn), index("meal_routines_family_idx").on(table.familyId, table.startsOn)]);
+
+
+export const mealIdeas = pgTable("meal_ideas", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  authorMemberId: uuid("author_member_id").notNull().references(() => members.id),
+  title: varchar("title", { length: 160 }).notNull(),
+  note: varchar("note", { length: 1000 }),
+  mealTypes: jsonb("meal_types").$type<(typeof MEAL_TYPES)[number][]>().notNull().default([]),
+  packedSuitable: boolean("packed_suitable").notNull().default(false),
+  version: integer("version").notNull().default(1),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+}, table => [index("meal_ideas_family_idx").on(table.familyId, table.archivedAt)]);

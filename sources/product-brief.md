@@ -121,7 +121,11 @@ un diálogo. Almuerzo y cena separan Casa y las luncheras necesarias; cada grupo
 puede elegir un plato, y una lunchera puede seguir el menú de Casa. Las ideas
 aparecen junto al menú, con hasta tres alternativas y
 acceso a todas; cambiar o quitar una elección queda en un menú de acciones.
-Las ideas se asocian a una fecha y comida concretas; no existe un catálogo general. Todos
+El banco familiar permite guardar ideas con nota y etiquetas orientativas, buscar,
+filtrar, archivar y restaurar. Usar una crea una propuesta independiente para una
+fecha y comida; editar o archivar el original no cambia lo planificado. Guardar
+una propuesta en el banco es explícito; no se importa el historial. Cada integrante
+administra sus ideas y los adultos pueden administrar todas. Todos
 los integrantes activos pueden proponer ideas y cualquier integrante activo
 puede registrar o corregir la asistencia de cualquier persona activa de su
 familia en almuerzo y cena. Se muestra quién hizo el último cambio de asistencia

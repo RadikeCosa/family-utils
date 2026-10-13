@@ -134,3 +134,16 @@ export function resolveParticipation(input: {
     return { memberId, status, groupId: status === "home" ? input.homeId : status === "packed" ? input.packedId : null };
   });
 }
+
+
+export type IdeaFields={title:string;note:string|null;mealTypes:MealType[];packedSuitable:boolean};
+export function parseIdeaFields(body:Record<string,unknown>):IdeaFields|null {
+  const title=typeof body.title==="string"?body.title.trim():"";
+  const note=typeof body.note==="string"?body.note.trim():"";
+  const tags=body.mealTypes??[];
+  if(!title||title.length>160||note.length>1000||!Array.isArray(tags)||tags.length>4||!tags.every(isMealType)||(body.packedSuitable!==undefined&&typeof body.packedSuitable!=="boolean"))return null;
+  return {title,note:note||null,mealTypes:MEAL_TYPES.filter(type=>tags.includes(type)),packedSuitable:body.packedSuitable===true};
+}
+export function normalizeMealIdea(value:string):string {
+  return value.normalize("NFD").replace(/\p{M}/gu,"").toLocaleLowerCase("es-AR").trim();
+}

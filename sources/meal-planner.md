@@ -125,3 +125,11 @@ viejas solo en una entrega posterior validada.
   semana; cambiar de vista dentro de la misma no consulta otra vez. Cuadrícula
   en tablet/escritorio, días apilados en móvil y menús vinculados combinados.
   Cinco recorridos de interfaz/accesibilidad locales aprobados a 375/820 px.
+
+- Etapa 3 publicada en PR #25; vista semanal verificada en producción.
+- Etapa 4: banco con búsqueda y etiquetas orientativas, archivo reversible,
+  permisos propios/adultos y copia independiente hacia propuestas fechadas.
+  Migración 0014 ensayada en `menus-etapa-4-ensayo`: banco vacío y datos
+  anteriores conservados, incluidas distribuciones y rutinas. Se verificó
+  lectura por el rol de respaldo. Pruebas locales: 47 de reglas/base de datos,
+  47 de rutas y seis recorridos de interfaz/accesibilidad en móvil/tablet.

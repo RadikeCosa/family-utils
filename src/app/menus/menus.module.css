@@ -187,3 +187,26 @@
 .weekReadOnly { margin: 0 0 8px; }
 @media(min-width:700px) { .weekGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(min-width:1050px) { .weekGrid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+.plannerTools,.inlineActions,.bankToolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.ideasHeading { flex-wrap: wrap; }
+.bankDialog { width: min(650px,calc(100vw - 28px)); }
+.bankToolbar { justify-content: space-between; }
+.bankToolbar .viewSwitcher { margin-top: 0; }
+.formFields textarea { width: 100%; padding: 10px; border: 1px solid #7f8d82; border-radius: 7px; background: #fff; color: #26382b; font: 16px 'DM Sans',sans-serif; resize: vertical; }
+.tagChoices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 12px 0; padding: 10px; border: 1px solid #7f8d82; border-radius: 8px; }
+.tagChoices legend { padding: 0 5px; font-size: 14px; font-weight: 700; }
+.tagChoices label,.checkLabel { display: flex; align-items: center; gap: 8px; min-height: 44px; color: #405b46; font-size: 14px; cursor: pointer; }
+.tagChoices input,.checkLabel input { flex: 0 0 19px; width: 19px; height: 19px; accent-color: #4e6c53; }
+.bankDestination { margin: 12px 0; padding: 12px; border-radius: 8px; background: #edf3eb; }
+.bankDestination p { margin: 0 0 8px; color: #405b46; font-size: 14px; }
+.bankDestination label { display: grid; gap: 6px; color: #35463a; font-size: 14px; font-weight: 700; }
+.bankDestination select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid #7f8d82; border-radius: 7px; background: #fff; color: #26382b; font-size: 16px; }
+.bankIdeas { display: grid; gap: 12px; margin-top: 14px; }
+.bankIdea { min-width: 0; padding: 13px; border: 1px solid #dce3da; border-radius: 9px; }
+.bankIdea h3 { margin: 0; color: #35463a; font-size: 17px; overflow-wrap: anywhere; }
+.bankIdea p { margin: 8px 0; color: #536b58; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bankIdea small { display: block; margin: 8px 0; color: #59675d; font-size: 12px; }
+.bankTags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.bankTags span { padding: 4px 7px; border-radius: 5px; background: #edf3eb; color: #405b46; font-size: 12px; }
+:is(textarea):focus-visible { outline: 3px solid #5b795f; outline-offset: 2px; }
+@media(max-width:400px) { .tagChoices { grid-template-columns: 1fr; } }
