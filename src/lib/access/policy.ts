@@ -32,7 +32,8 @@ export function canGenerateMemberCode(input: {
 }): boolean {
   if (input.actorRole !== "administrator" || input.actorMemberId === input.targetMemberId) return false;
   if (input.accessMethod === "google") {
-    return input.targetRole === "administrator" && !!input.googleEmail && input.purpose === "invitation" && !input.hasActiveDevice;
+    return input.targetRole === "administrator" && !!input.googleEmail
+      && (input.purpose === "recovery" || !input.hasActiveDevice);
   }
   return input.targetRole === "member" && (input.purpose === "invitation" || input.hasActiveDevice);
 }

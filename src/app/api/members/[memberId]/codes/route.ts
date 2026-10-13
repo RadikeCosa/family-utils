@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ memberId: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
+  if (request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json({ error: "Origen de acceso inválido" }, { status: 403 });
   const actor = await getMemberContext(request.headers);
   if (!actor) return NextResponse.json({ error: "No family access" }, { status: 403 });
   if (actor.role !== "administrator") return NextResponse.json({ error: "Administrator access required" }, { status: 403 });
@@ -40,7 +41,7 @@ export async function POST(request: Request, context: RouteContext) {
       .limit(1);
     if (!target) return { kind: "missing" as const };
 
-    const activeDevices = await tx.select({ id: memberDevices.id }).from(memberDevices)
+    const activeDevices = await tx.select({ id: memberDevices.id, identityKind: memberDevices.identityKind }).from(memberDevices)
       .where(and(eq(memberDevices.memberId, target.id), isNull(memberDevices.revokedAt)));
     if (!canGenerateMemberCode({
       actorRole: actor.role,
@@ -49,7 +50,7 @@ export async function POST(request: Request, context: RouteContext) {
       targetRole: target.role,
       accessMethod: target.accessMethod,
       googleEmail: target.googleEmail,
-      hasActiveDevice: activeDevices.length > 0,
+      hasActiveDevice: target.accessMethod === "google" ? activeDevices.some((device) => device.identityKind === "google") : activeDevices.length > 0,
       purpose,
     }) || (isGoogleAutoLinkEnabled() && target.accessMethod === "google" && purpose === "invitation")) return { kind: "wrong-method" as const };
 

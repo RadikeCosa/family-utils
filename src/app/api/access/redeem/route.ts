@@ -89,7 +89,10 @@ export async function POST(request: Request) {
     }
     if (stored.revokedAt || !isAccessCodeCurrent(stored.expiresAt, now)) return { kind: "invalid" as const };
 
-    if (target.accessMethod === "google") {
+    const isGoogleFallback = target.accessMethod === "google" && stored.purpose === "recovery";
+    if (isGoogleFallback) {
+      if (target.role !== "administrator" || !target.googleEmail || session.user.isAnonymous !== true) return { kind: "invalid" as const };
+    } else if (target.accessMethod === "google") {
       if (stored.purpose !== "invitation" || session.user.isAnonymous || !matchesVerifiedGoogleIdentity({
         actualEmail: session.user.email,
         configuredEmail: target.googleEmail,
@@ -114,9 +117,10 @@ export async function POST(request: Request) {
     if (stored.purpose === "recovery" && priorIdentity) return { kind: "invalid" as const };
 
     if (stored.purpose === "recovery") {
-      if (target.accessMethod !== "code" || session.user.isAnonymous !== true) return { kind: "invalid" as const };
+      if (session.user.isAnonymous !== true) return { kind: "invalid" as const };
       const priorDevices = await tx.select({ authUserId: memberDevices.authUserId }).from(memberDevices)
-        .where(and(eq(memberDevices.memberId, target.id), isNull(memberDevices.revokedAt)));
+        .where(and(eq(memberDevices.memberId, target.id), isNull(memberDevices.revokedAt),
+          isGoogleFallback ? eq(memberDevices.identityKind, "anonymous") : undefined));
       for (const device of priorDevices) {
         await tx.update(memberDevices).set({ revokedAt: now })
           .where(and(eq(memberDevices.authUserId, device.authUserId), isNull(memberDevices.revokedAt)));
@@ -130,8 +134,8 @@ export async function POST(request: Request) {
       await tx.insert(memberDevices).values({
         memberId: target.id,
         authUserId: session.user.id,
-        identityKind: target.accessMethod === "google" ? "google" : "anonymous",
-        label: target.accessMethod === "google" ? "Cuenta Google" : "Dispositivo familiar",
+        identityKind: session.user.isAnonymous ? "anonymous" : "google",
+        label: isGoogleFallback ? "Acceso alternativo con código" : target.accessMethod === "google" ? "Cuenta Google" : "Dispositivo familiar",
       });
     }
     const [consumed] = await tx.update(accessCodes)
@@ -146,7 +150,7 @@ export async function POST(request: Request) {
       entityType: "member",
       entityId: target.id,
       action: `${stored.purpose}_code_redeemed`,
-      after: { deviceAdded: true },
+      after: { deviceAdded: true, googleFallback: isGoogleFallback },
     });
     await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${stored.familyId}`);
     return { kind: "ok" as const, memberId: target.id };

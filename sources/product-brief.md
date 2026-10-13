@@ -73,10 +73,11 @@ No se usa GPS ni se requiere registrar movimientos reales.
 
 ## Acceso y perfiles
 
-- Cada perfil familiar se asocia a una identidad de acceso. Los adultos usan
+- Cada perfil familiar se asocia a sus identidades de acceso. Los adultos usan
   una identidad Google verificada por perfil y pueden abrir sesiones en varios
   dispositivos. Los integrantes jóvenes usan una identidad anónima distinta en
-  cada dispositivo.
+  cada dispositivo. Otro administrador puede generar un código alternativo
+  para que un adulto entre sin Google, manteniendo el mismo perfil y rol.
 - El perfil familiar es independiente de la identidad y de cada dispositivo.
   Recuperar el acceso mantiene tareas, permisos e historial.
 - Invitaciones duran 24 horas y recuperación 30 minutos. Los integrantes
@@ -87,7 +88,11 @@ No se usa GPS ni se requiere registrar movimientos reales.
   guarda HMAC con secreto privado. Tokens largos se almacenan con SHA-256.
 - Los códigos son de un solo uso y el canje se realiza de manera atómica. Para
   un integrante joven, recuperar el acceso revoca sus dispositivos anteriores.
-  Un adulto vuelve a iniciar sesión con la misma cuenta Google.
+  Un adulto puede volver a iniciar sesión con la misma cuenta Google o usar
+  un código alternativo de recuperación, de un solo uso y válido por 30 minutos.
+  Este último reemplaza únicamente sus accesos anteriores por código y conserva
+  su identidad y sesiones Google. Solo otro administrador de la misma familia
+  puede generarlo; no se emiten códigos alternativos para uno mismo.
 - En iPhone, instalar primero la PWA y comenzar OAuth desde el icono asegura
   que la sesión se cree en el mismo contexto en que se usará la aplicación.
 - Las sesiones vencen tras 90 días de inactividad y se renuevan a diario.

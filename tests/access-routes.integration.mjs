@@ -20,6 +20,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
   let server;
   let memberCookie;
   const preparedUserIds = [];
+  let prepareSequence = 0;
   const headers = { Origin: origin, "Content-Type": "application/json", "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}::1` };
 
   async function waitForServer() {
@@ -36,7 +37,9 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
   }
 
   async function prepare() {
-    const response = await fetch(`${origin}/api/access/prepare`, { method: "POST", headers });
+    const response = await fetch(`${origin}/api/access/prepare`, { method: "POST", headers: {
+      ...headers, "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}:${++prepareSequence}::1`,
+    } });
     assert.equal(response.status, 200, await response.text());
     const cookies = response.headers.getSetCookie().map((cookie) => cookie.split(";", 1)[0]);
     assert.ok(cookies.some((cookie) => cookie.startsWith("better-auth.session_token=")), "prepare must issue an anonymous session");
@@ -70,6 +73,7 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
         BETTER_AUTH_URL: origin,
         BETTER_AUTH_SECRET: "ci-only-secret-not-used-outside-ci",
         CODE_PEPPER: secret,
+        GOOGLE_AUTO_LINK_ENABLED: "true",
       },
       stdio: "ignore",
     });
@@ -291,6 +295,96 @@ test("real prepare/redeem handlers invite and recover an anonymous family member
       assert.equal((await patchMember(adminId)).status, 200, "an administrator profile with no linked identity is not treated as recoverable access");
       assert.equal((await pool.query("SELECT archived_at IS NULL AS active FROM members WHERE id=$1", [childId])).rows[0].active, true);
       assert.equal((await pool.query("SELECT archived_at IS NOT NULL AS archived FROM members WHERE id=$1", [adminId])).rows[0].archived, true);
+    });
+
+    await t.test("administrator fallback codes preserve Google and replace only previous code sessions", async () => {
+      const email = `fallback-${randomUUID()}@family-utils.invalid`;
+      const { rows: [adult] } = await pool.query(
+        "INSERT INTO members (family_id, name, role, access_method, google_email) VALUES ($1, 'Alternate adult', 'administrator', 'google', $2) RETURNING id", [familyId, email],
+      );
+      const googleCookie = await prepare();
+      const googleSession = await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: googleCookie } }).then((r) => r.json());
+      await pool.query('UPDATE "user" SET email=$2, is_anonymous=false, email_verified=true WHERE id=$1', [googleSession.user.id, email]);
+      await pool.query("INSERT INTO account (account_id, provider_id, user_id) VALUES ($1, 'google', $2)", [`provider-${randomUUID()}`, googleSession.user.id]);
+      await pool.query("INSERT INTO member_devices (member_id, auth_user_id, identity_kind) VALUES ($1, $2, 'google')", [adult.id, googleSession.user.id]);
+      const generate = (memberId, purpose = "recovery", cookie = memberCookie, requestOrigin = origin) => fetch(`${origin}/api/members/${memberId}/codes`, {
+        method: "POST", headers: { ...headers, Cookie: cookie, Origin: requestOrigin }, body: JSON.stringify({ purpose }),
+      });
+      const redeem = (code, cookie) => fetch(`${origin}/api/access/redeem`, {
+        method: "POST", headers: { ...headers, Cookie: cookie }, body: JSON.stringify({ code }),
+      });
+      assert.equal((await generate(childId)).status, 409, "self-issued administrator codes are refused");
+      assert.equal((await generate(adult.id, "recovery", memberCookie, "https://untrusted.invalid")).status, 403);
+      assert.equal((await generate(adult.id, "invitation")).status, 409, "linked Google adults do not receive another onboarding invitation");
+      const firstResponse = await generate(adult.id);
+      assert.equal(firstResponse.status, 201, await firstResponse.clone().text());
+      const first = await firstResponse.json();
+      assert.equal(first.purpose, "recovery");
+      assert.ok(new Date(first.expiresAt).getTime() - Date.now() <= 30 * 60 * 1000);
+      assert.equal((await redeem(first.code, googleCookie)).status, 400, "fallback requires a separate code session");
+      const firstCookie = await prepare();
+      assert.equal((await redeem(first.code, firstCookie)).status, 200);
+      assert.equal((await redeem(first.code, firstCookie)).status, 200, "same-session retries remain idempotent");
+      const family = await fetch(`${origin}/api/family`, { headers: { Cookie: firstCookie } }).then((r) => r.json());
+      assert.equal(family.currentMemberId, adult.id);
+      const profile = family.members.find((m) => m.id === adult.id);
+      assert.equal(profile.role, "administrator");
+      assert.equal(profile.accessMethod, "google");
+      assert.equal(profile.hasGoogleAccess, true);
+      assert.equal(profile.googleEmail, email);
+      const otherCookie = await prepare();
+      assert.equal((await redeem(first.code, otherCookie)).status, 400, "a used code cannot bind another identity");
+      assert.equal((await generate(adult.id, "recovery", otherCookie)).status, 403, "unlinked users cannot issue administrator codes");
+      const regularCookie = await prepare();
+      const regularSession = await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: regularCookie } }).then((r) => r.json());
+      const regularMember = (await pool.query("INSERT INTO members (family_id, name, role, access_method) VALUES ($1, 'Regular member', 'member', 'code') RETURNING id", [familyId])).rows[0];
+      await pool.query("INSERT INTO member_devices (member_id, auth_user_id) VALUES ($1, $2)", [regularMember.id, regularSession.user.id]);
+      assert.equal((await generate(adult.id, "recovery", regularCookie)).status, 403, "regular members cannot issue administrator codes");
+      const otherFamily = (await pool.query("INSERT INTO families (name) VALUES ('Other fallback family') RETURNING id")).rows[0];
+      try {
+        const otherAdult = (await pool.query("INSERT INTO members (family_id, name, role, access_method, google_email) VALUES ($1, 'Other adult', 'administrator', 'google', $2) RETURNING id", [otherFamily.id, `other-${email}`])).rows[0];
+        assert.equal((await generate(otherAdult.id)).status, 404, "codes cannot cross family boundaries");
+      } finally { await pool.query("DELETE FROM families WHERE id=$1", [otherFamily.id]); }
+      const expiredResponse = await generate(adult.id);
+      const expired = await expiredResponse.json();
+      await pool.query("UPDATE access_codes SET expires_at=now()-interval '1 minute' WHERE member_id=$1 AND consumed_at IS NULL AND revoked_at IS NULL", [adult.id]);
+      assert.equal((await redeem(expired.code, otherCookie)).status, 400);
+      const secondResponse = await generate(adult.id);
+      assert.equal(secondResponse.status, 201);
+      const second = await secondResponse.json();
+      assert.equal((await redeem(second.code, regularCookie)).status, 400, "a code cannot replace a different member's bound identity");
+      const competingCookie = await prepare();
+      const [one, two] = await Promise.all([redeem(second.code, otherCookie), redeem(second.code, competingCookie)]);
+      assert.deepEqual([one.status, two.status].sort(), [200, 400], "concurrent fallback redemption has exactly one winner");
+      const winningCookie = one.status === 200 ? otherCookie : competingCookie;
+      assert.equal((await fetch(`${origin}/api/family`, { headers: { Cookie: firstCookie } })).status, 403, "older fallback sessions are revoked");
+      assert.equal((await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: firstCookie } }).then((r) => r.json())), null, "older fallback session tokens are deleted");
+      assert.equal((await fetch(`${origin}/api/family`, { headers: { Cookie: googleCookie } })).status, 200, "Google identity and sessions are preserved");
+      assert.equal((await fetch(`${origin}/api/family`, { headers: { Cookie: winningCookie } })).status, 200);
+    });
+
+    await t.test("an adult who first enters by fallback can still link Google later", async () => {
+      const email = `first-code-${randomUUID()}@family-utils.invalid`;
+      const adult = (await pool.query("INSERT INTO members (family_id, name, role, access_method, google_email) VALUES ($1, 'Code first adult', 'administrator', 'google', $2) RETURNING id", [familyId, email])).rows[0];
+      const issued = await fetch(`${origin}/api/members/${adult.id}/codes`, {
+        method: "POST", headers: { ...headers, Cookie: memberCookie }, body: JSON.stringify({ purpose: "recovery" }),
+      });
+      assert.equal(issued.status, 201);
+      const { code } = await issued.json();
+      const fallbackCookie = await prepare();
+      const redeemed = await fetch(`${origin}/api/access/redeem`, { method: "POST", headers: { ...headers, Cookie: fallbackCookie }, body: JSON.stringify({ code }) });
+      assert.equal(redeemed.status, 200);
+      const googleCookie = await prepare();
+      const session = await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: googleCookie } }).then((r) => r.json());
+      await pool.query('UPDATE "user" SET email=$2, is_anonymous=false, email_verified=true WHERE id=$1', [session.user.id, email]);
+      await pool.query("INSERT INTO account (account_id, provider_id, user_id) VALUES ($1, 'google', $2)", [`provider-${randomUUID()}`, session.user.id]);
+      const linked = await fetch(`${origin}/api/access/link-google`, { method: "POST", headers: { ...headers, Cookie: googleCookie } });
+      assert.equal(linked.status, 200);
+      assert.equal((await linked.json()).linked, true);
+      for (const cookie of [fallbackCookie, googleCookie]) {
+        const family = await fetch(`${origin}/api/family`, { headers: { Cookie: cookie } }).then((r) => r.json());
+        assert.equal(family.currentMemberId, adult.id);
+      }
     });
 
     await t.test("task archive and restore handlers keep overdue work visible without retroactive debt", async () => {

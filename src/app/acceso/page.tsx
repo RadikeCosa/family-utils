@@ -148,8 +148,8 @@ export default function AccessPage() {
             {googleError && <p className={styles.error} role="alert">{googleError}</p>}
             {hasGoogleSession && <p className={styles.intro}>Sesión Google abierta: <strong>{session?.user?.email}</strong></p>}
             <div className={styles.separator}><span>o, si ya tenés un código</span></div>
-            <h2>{hasGoogleSession ? "Vincular perfil adulto" : "Integrantes sin correo"}</h2>
-            <p>{hasGoogleSession ? "Con tu sesión Google abierta, ingresá la invitación destinada a tu perfil adulto." : "Instalá la app, abrila desde el icono y escribí el código que te compartieron."}</p>
+            <h2>{hasGoogleSession ? "Vincular perfil adulto" : "Entrar con un código"}</h2>
+            <p>{hasGoogleSession ? "Para una invitación de Google, ingresá el código destinado a tu perfil adulto. Si recibiste un código alternativo para entrar sin Google, cerrá esta sesión primero." : "Ingresá el código que te compartió un administrador. También sirve para adultos que necesitan entrar sin Google."}</p>
             <form className={styles.accessForm} onSubmit={redeem}>
               <label htmlFor="access-code">Código de invitación o recuperación</label>
               <input id="access-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="XXXXX-XXXXX" autoComplete="one-time-code" maxLength={12} required />
