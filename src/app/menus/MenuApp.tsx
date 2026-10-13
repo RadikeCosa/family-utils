@@ -85,6 +85,7 @@ export default function MenuApp() {
   const [expandedIdeas, setExpandedIdeas] = useState<Set<string>>(new Set());
   const etag = useRef("");
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const dateLabelRef = useRef<HTMLParagraphElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const dialogMealTypeRef = useRef<MealType>("lunch");
@@ -185,6 +186,10 @@ export default function MenuApp() {
       document.removeEventListener("visibilitychange", resume);
     };
   }, [refresh, data?.today, data?.timeZone]);
+
+  useEffect(() => {
+    if (dateInitialized && view === "day") dateLabelRef.current?.scrollIntoView({ block: "start" });
+  }, [dateInitialized, view, selectedDate]);
 
   const dialogKind = dialog?.kind;
   useEffect(() => {
@@ -416,10 +421,10 @@ export default function MenuApp() {
         </div>
       </div>
       <div className={styles.viewSwitcher} aria-label="Vista del planificador">
-        <button disabled={!dateInitialized} aria-pressed={view === "week"} onClick={() => setView("week")}>Semana</button>
-        <button disabled={!dateInitialized} aria-pressed={view === "day"} onClick={() => setView("day")}>Día</button>
+        <button disabled={!dateInitialized} aria-pressed={view === "week"} onClick={() => {setView("week");navigateToDate(today, true);}}>Semana</button>
+        <button disabled={!dateInitialized} aria-pressed={view === "day"} onClick={() => {setView("day");navigateToDate(today, true);}}>Día</button>
       </div>
-      <p className={styles.dateLabel}>{view === "week" ? `Semana del ${new Intl.DateTimeFormat("es-AR", {timeZone:"UTC",day:"numeric",month:"long",year:"numeric"}).formatRange(new Date(`${weekStart}T12:00:00.000Z`),new Date(`${addDays(weekStart,6)}T12:00:00.000Z`))}` : labelDay(selectedDate)}{view === "day" ? selectedDate === today ? " · Hoy" : selectedDate < today ? " · Solo lectura" : "" : ""}</p>
+      <p ref={dateLabelRef} className={styles.dateLabel}>{view === "week" ? `Semana del ${new Intl.DateTimeFormat("es-AR", {timeZone:"UTC",day:"numeric",month:"long",year:"numeric"}).formatRange(new Date(`${weekStart}T12:00:00.000Z`),new Date(`${addDays(weekStart,6)}T12:00:00.000Z`))}` : labelDay(selectedDate)}{view === "day" ? selectedDate === today ? " · Hoy" : selectedDate < today ? " · Solo lectura" : "" : ""}</p>
       {error && <p className={styles.error} role="alert">{error} <button onClick={() => void refresh(true)}>Reintentar</button></p>}
       {notice && <p className={styles.notice} role="status">{notice}</p>}
     </section>

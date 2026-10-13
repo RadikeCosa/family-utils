@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef } from "react";
 import { addDays, isMenuDateInRange, type MealType } from "@/lib/meals/rules";
 import type { Meal, WeekData, Group } from "@/lib/meals/types";
 import styles from "./menus.module.css";
@@ -21,6 +22,11 @@ function MainMeal({meal,label}:{meal:Meal;label:string}) {
  </section>;
 }
 export default function WeekPlanner({data,onSelect}:{data:WeekData|null;onSelect:(day:string)=>void}) {
+ const todayCard=useRef<HTMLElement>(null);
+ const weekStart=data?.weekStart,todayDate=data?.today;
+ useEffect(()=>{
+  todayCard.current?.scrollIntoView({block:"start",inline:"nearest"});
+ },[weekStart,todayDate]);
  if(!data)return <p className={styles.loading}>Cargando la semana…</p>;
  return <section className={styles.weekGrid} aria-label="Plan de la semana">
   {Array.from({length:7},(_,index)=>addDays(data.weekStart,index)).map(date=>{
@@ -30,7 +36,7 @@ export default function WeekPlanner({data,onSelect}:{data:WeekData|null;onSelect
    const full=new Intl.DateTimeFormat("es-AR",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date(`${date}T12:00:00.000Z`));
    const today=date===data.today;
    const lunch=meal("lunch"),dinner=meal("dinner");
-   return <article className={`${styles.weekDay} ${today?styles.weekToday:""}`} key={date}>
+   return <article className={`${styles.weekDay} ${today?styles.weekToday:""}`} key={date} ref={today?todayCard:undefined}>
     <h2><button aria-label={`Ver ${today?"hoy, ":""}${full}`} aria-current={today?"date":undefined} disabled={!isMenuDateInRange(date,data.today)} onClick={()=>onSelect(date)}>{short.charAt(0).toUpperCase()+short.slice(1)}{today&&<span>Hoy</span>}</button></h2>
     {date<data.today&&<p className={styles.weekReadOnly}>Solo lectura</p>}
     <p className={styles.weekSecondary}><span>Desayuno</span> {meal("breakfast")?.selection?.title??"Sin plan"}</p>
