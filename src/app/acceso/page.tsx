@@ -79,7 +79,10 @@ export default function AccessPage() {
 
   async function signIn() {
     setBusy(true); setError("");
-    try { await authClient.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/acceso` }); }
+    try {
+      const result = await authClient.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/acceso` });
+      if (result.error) setError("No se pudo iniciar con Google. Volvé a intentarlo en unos instantes.");
+    }
     catch { setError("No se pudo iniciar con Google. Comprobá la conexión y volvé a intentarlo."); }
     finally { setBusy(false); }
   }
@@ -126,8 +129,8 @@ export default function AccessPage() {
           </> : <>
             {canBootstrap && <><h2>Primera persona administradora</h2><p>Tu cuenta autorizada puede iniciar la familia y vincular su perfil adulto.</p><button className={styles.primaryButton} onClick={() => void bootstrap()} disabled={busy}>Crear o abrir mi familia</button><div className={styles.separator}><span>o</span></div></>}
             <h2>Adultos</h2>
-            <p>Iniciá con la cuenta Google asignada a tu perfil familiar. Si la vinculación automática todavía no está habilitada, ingresá la invitación que te compartió un administrador.</p>
-            <button className={styles.googleButton} onClick={() => void signIn()} disabled={busy || isPending}>Continuar con Google</button>
+            <p>Iniciá con la cuenta Google asignada a tu perfil familiar. Si reinstalaste la app, usá la misma cuenta para recuperar tu acceso. Si es tu primer ingreso y la vinculación automática todavía no está habilitada, ingresá la invitación que te compartió un administrador.</p>
+            <button className={styles.googleButton} onClick={() => void signIn()} disabled={busy}>Continuar con Google</button>
             {hasGoogleSession && <p className={styles.intro}>Sesión Google abierta: <strong>{session?.user?.email}</strong></p>}
             <div className={styles.separator}><span>o, si ya tenés un código</span></div>
             <h2>{hasGoogleSession ? "Vincular perfil adulto" : "Integrantes sin correo"}</h2>
