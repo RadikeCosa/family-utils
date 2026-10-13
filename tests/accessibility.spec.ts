@@ -176,7 +176,7 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await expect(page).toHaveURL(new RegExp(`fecha=${today}`));
 
     const dialogs = page.getByRole("dialog");
-    const choose = page.getByRole("button", { name: "Elegir comida" }).first();
+    const choose = page.locator("#meal-lunch").getByRole("button", { name: "Elegir comida", exact: true });
     await choose.click();
     await expect(dialogs).toBeVisible();
     await expect(page.locator("input[name='meal-choice']").first()).toBeFocused();
@@ -207,13 +207,15 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     expect(interactiveSizes.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
 
     const lunch = page.locator("#meal-lunch");
-    await lunch.getByText("Asistencia", { exact: false }).click();
-    const attendanceTargets = await lunch.locator("[class*='statusChoice']").evaluateAll((elements) => elements.map((element) => {
+    await lunch.getByRole("button", { name: "Editar asistencia de almuerzo" }).click();
+    const attendanceTargets = await dialogs.locator("[class*='statusChoice']").evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       return { width: rect.width, height: rect.height };
     }));
     expect(attendanceTargets.filter((item) => item.width < 44 || item.height < 44)).toEqual([]);
-    await lunch.getByLabel("No estará").click();
+    await dialogs.getByLabel("No estará").click();
+    await expect(dialogs.getByRole("button", { name: "Listo" })).toBeEnabled();
+    await dialogs.getByRole("button", { name: "Listo" }).click();
     await expect(lunch.getByText("Nadie figura en casa; podés elegir de todos modos.")).toBeVisible();
     await lunch.getByRole("button", { name: "Elegir comida" }).click();
     await page.getByLabel("Escribir otra comida").check();
@@ -230,18 +232,18 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
 
+    await lunch.getByLabel("Acciones de almuerzo").click();
     await lunch.getByRole("button", { name: "Quitar elección" }).click();
-    await page.getByRole("button", { name: "Quitar elección" }).last().click();
     await expect(page.getByRole("button", { name: "Sí, quitar elección" })).toBeVisible();
     await page.getByRole("button", { name: "Sí, quitar elección" }).click();
     await expect(lunch.getByText("Todavía no se eligió una comida para este horario.")).toBeVisible();
-    await lunch.locator("details").nth(1).locator("summary").click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await lunch.getByRole("button", { name: "Elegir comida" }).click();
     await dialogs.locator("label").filter({ hasText: "Guiso de prueba UX" }).locator("input").check();
     await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
     await expect(lunch.getByText(/Propuesto y confirmado por Alex/)).toBeVisible();
+    await lunch.getByLabel("Acciones de almuerzo").click();
     await lunch.getByRole("button", { name: "Cambiar comida" }).click();
     await page.getByLabel("Escribir otra comida").check();
     await page.getByLabel("Comida", { exact: true }).fill("Borrador ante conflicto");
@@ -258,6 +260,24 @@ test("menús permite elegir, quitar y volver a proponer con foco y objetivos tá
     expect(conflictRequests).toBe(1);
     await page.unroute("**/api/meals/selection");
     await expect(lunch.getByText("Guiso de prueba UX", { exact: true }).first()).toBeVisible();
+
+    await page.setViewportSize({ width: 820, height: 1180 });
+    for (const type of ["breakfast", "snack"]) {
+      const card = page.locator(`#meal-${type}`);
+      await expect(card.getByRole("button", { name: "Elegir comida" })).toBeHidden();
+      await card.getByRole("button", { name: /Ver plan/ }).click();
+      await expect(card.getByRole("button", { name: "Elegir comida" })).toBeVisible();
+      await expect(card.getByRole("button", { name: /Editar asistencia/ })).toHaveCount(0);
+      await card.getByRole("button", { name: "Elegir comida" }).click();
+      await dialogs.getByLabel("Comida", { exact: true }).fill("Yogurt con frutas");
+      await dialogs.getByRole("button", { name: "Elegir comida", exact: true }).click();
+      await expect(card.getByText("Yogurt con frutas", { exact: true })).toBeVisible();
+      await card.getByRole("button", { name: /Cerrar/ }).click();
+      await expect(card.getByText("Yogurt con frutas", { exact: true }).first()).toBeVisible();
+    }
+    await page.screenshot({ path: "test-results-a11y/menus-tablet.png", fullPage: true });
+    await page.setViewportSize({ width: 375, height: 850 });
+    await page.screenshot({ path: "test-results-a11y/menus-mobile.png", fullPage: true });
 
     const requestUrls: string[] = [];
     page.on("request", (request) => { if (request.url().includes("/api/meals?weekStart=")) requestUrls.push(request.url()); });

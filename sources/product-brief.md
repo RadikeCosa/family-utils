@@ -111,13 +111,18 @@ reciente, y se pausa tras dos minutos de inactividad. Volver a la app, recuperar
 conexión o pedir actualización inicia una consulta. Se muestra la última
 actualización.
 
-## Planificador de menús (primera versión)
+## Planificador de menús
 
-La vista principal muestra un día por vez, con almuerzo y cena. Las ideas se
-asocian a una fecha y comida concretas; no existe un catálogo general. Todos
+La vista principal muestra un día por vez, con desayuno, almuerzo, merienda y
+cena en orden cronológico. Desayuno y merienda son bloques compactos expandibles,
+sin asistencia. Almuerzo y cena muestran la asistencia resumida con edición en
+un diálogo. Las ideas aparecen junto al menú, con hasta tres alternativas y
+acceso a todas; cambiar o quitar una elección queda en un menú de acciones.
+Las ideas se asocian a una fecha y comida concretas; no existe un catálogo general. Todos
 los integrantes activos pueden proponer ideas y cualquier integrante activo
 puede registrar o corregir la asistencia de cualquier persona activa de su
-familia. Se muestra quién hizo el último cambio de asistencia y cuándo; si hay
+familia en almuerzo y cena. Se muestra quién hizo el último cambio de asistencia
+y cuándo; si hay
 ediciones simultáneas, prevalece la última escritura.
 
 Solo un administrador adulto puede elegir la comida compartida a partir de una

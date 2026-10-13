@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { families, mealAttendance, mealSelections, mealSlots, mealSuggestions, members } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { addDays, getDayInTimeZone, isValidDate, startOfWeek } from "@/lib/meals/rules";
+import { MEAL_TYPES, hasMealAttendance, addDays, getDayInTimeZone, isValidDate, startOfWeek } from "@/lib/meals/rules";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const [familyState] = await db.select({ menusRevision: families.menusRevision })
     .from(families).where(eq(families.id, actor.familyId)).limit(1);
   const revision = familyState?.menusRevision ?? 0;
-  const etag = `"menus-${actor.familyId}-r${revision}"`;
+  const etag = `"menus-v2-${actor.familyId}-${weekStart}-r${revision}-${getDayInTimeZone(new Date(), actor.familyTimeZone)}"`;
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
   }
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
   const selectionBySlot = new Map(selections.map((selection) => [selection.slotId, selection]));
   const suggestionById = new Map(suggestions.map((suggestion) => [suggestion.id, suggestion]));
   const slotByKey = new Map(slots.map((slot) => [`${slot.mealDate}:${slot.mealType}`, slot]));
-  const meals = Array.from({ length: 7 }, (_, offset) => addDays(weekStart, offset)).flatMap((day) => (["lunch", "dinner"] as const).map((mealType) => {
+  const meals = Array.from({ length: 7 }, (_, offset) => addDays(weekStart, offset)).flatMap((day) => MEAL_TYPES.map((mealType) => {
     const slot = slotByKey.get(`${day}:${mealType}`);
     const slotAttendance = slot ? attendanceBySlot.get(slot.id) ?? [] : [];
     const attendanceByMember = new Map(slotAttendance.map((record) => [record.memberId, record]));
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
       date: day,
       mealType,
       slotId: slot?.id ?? null,
-      attendance: activeMembers.map((profile) => {
+      attendance: (hasMealAttendance(mealType) ? activeMembers : []).map((profile) => {
         const record = attendanceByMember.get(profile.id);
         return {
           memberId: profile.id,
