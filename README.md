@@ -1,19 +1,25 @@
 # Family Utils
 
 Plataforma privada de aplicaciones útiles para una familia. Incluye **Tareas y
-rutinas**, **Planificador de menús** y **Listas de compras**. El producto está
+rutinas**, **Planificador de menús**, **Listas de compras**, **Biblioteca familiar**
+y **Conversor de cocina**. El producto está
 pensado como una PWA para Android y iPhone.
 
 ## Estado
 
 La plataforma incluye una portada, acceso con Google o código, administración
 familiar, tareas y rutinas, propuestas y confirmación de las cuatro comidas diarias, y
-listas de compras con editores por perfil y sugerencias familiares. Las tres
-utilidades están disponibles en
+listas de compras con editores por perfil y sugerencias familiares. Las utilidades
+publicadas están disponibles en
 [family-utils-umber.vercel.app](https://family-utils-umber.vercel.app).
 Compras se abre desde la portada o en `/compras` y requiere acceso a una
 familia. La base de datos requiere aplicar las migraciones antes de desplegar
 cambios que alteren su esquema.
+
+Conversor de cocina está implementado en `/cocina` con acceso sin sesión desde
+la portada pública. Convierte medidas, ingredientes y temperaturas sin guardar
+consultas ni requerir migraciones. Biblioteca familiar conserva su activación
+mediante `LIBRARY_ENABLED`.
 
 El [estado operativo y orden del repositorio](sources/shopping-lists.md#estado-operativo-y-orden-del-repositorio--2026-10-12)
 registra la verificación del 12/10/2026, los retiros pendientes y la medición
@@ -58,6 +64,7 @@ gane.
 
 ## Documentación
 
+- [Conversor de cocina: datos, precisión y verificación](sources/kitchen-converter.md)
 - [Menús diarios: cotejo, conservación y publicación](sources/menus-diarios-simples.md)
 - [Definición del producto](sources/product-brief.md)
 - [Plan histórico de implementación](sources/next-steps.md)

@@ -172,6 +172,15 @@ privada se conserva fuera de Git y tiene una copia protegida adicional.
 Recordatorios, registro público de familias, escritura offline y aplicaciones
 adicionales quedan para después del uso familiar del primer módulo.
 
+## Conversor de cocina
+
+Utilidad pública de consulta rápida en `/cocina`, visible desde la portada sin
+iniciar sesión. Convierte peso, volumen y temperatura; al cruzar peso y volumen
+requiere un ingrediente del catálogo documentado. Usa densidades en g/ml y
+permite elegir taza de 250 ml, 240 ml o estadounidense de 236,588 ml. No guarda
+datos ni requiere servicios externos para calcular. Las reglas de entrada,
+precisión, accesibilidad y fuentes están en [Conversor de cocina](kitchen-converter.md).
+
 ## Listas de compras
 
 La tercera utilidad, ya publicada, está disponible desde la portada y en
