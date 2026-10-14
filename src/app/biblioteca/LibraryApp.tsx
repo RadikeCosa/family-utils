@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { KIND_LABELS, PERSONAL_STATUSES, STATUS_LABELS, WORK_KINDS, type PersonalStatus, type WorkKind } from "@/lib/library/types";
 import { useLibrary } from "./useLibrary";
 import WorkForm from "./WorkForm";
-import Contributions from "./Contributions";
+import Contributions, { NewContribution } from "./Contributions";
 import PersonalForm from "./PersonalForm";
 import WorkIcon from "./WorkIcon";
 import ChoiceChips, { type ChoiceOption } from "./ChoiceChips";
@@ -110,9 +110,10 @@ export default function LibraryApp({ workId, initialFilters = { q: "", kind: "",
       {work.archivedAt && <p className={styles.notice}>Este contenido está archivado. Podés restaurarlo o retirar tus aportes.</p>}
       {editing && <WorkDialog busy={busy} shouldRestoreFocus={shouldRestoreDialogFocus} onRequestClose={() => { setEditing(false); library.clearDuplicates(); }}><WorkForm key={`${data.familyId}:${data.currentMemberId}:${work.id}`} scope={`${data.familyId}:${data.currentMemberId}:${work.id}:edit-work`} work={work} busy={busy} duplicates={library.duplicates} issue={library.operationIssue} onIdentityChange={library.clearDuplicates} onCancel={() => { setEditing(false); library.clearDuplicates(); }} onSave={async (input) => { if (!await library.mutate(`/${work.id}`, "PATCH", { ...input, action: "edit" })) return false; skipDialogFocusReturn.current = true; focusAfterEdit.current = true; setEditing(false); return true; }} /></WorkDialog>}
       <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.referenceUrl && <p><a className={styles.reference} href={work.referenceUrl} target="_blank" rel="noopener noreferrer">Abrir enlace de referencia ↗</a></p>}</section>
-      <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
       <section className={styles.card}><h2>Las miradas de la familia</h2>{work.personal.length ? <ul>{work.personal.map((entry) => <li key={entry.memberId}><strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>: {entry.status ? STATUS_LABELS[entry.status] : "Sin estado"} · {entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</li>)}</ul> : <p>Todavía no hay estados ni valoraciones.</p>}</section>
       {"contributions" in data && <Contributions data={data} busy={busy} loading={loading} save={library.mutate} more={library.more} />}
+      <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
+      {"contributions" in data && <NewContribution data={data} busy={busy} save={library.mutate} />}
     </>}
   </main>;
 }
