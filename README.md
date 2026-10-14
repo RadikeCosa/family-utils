@@ -64,6 +64,7 @@ gane.
 
 ## Documentación
 
+- [Rediseño de Biblioteca familiar y validación](sources/family-library-redesign.md)
 - [Conversor de cocina: datos, precisión y verificación](sources/kitchen-converter.md)
 - [Menús diarios: cotejo, conservación y publicación](sources/menus-diarios-simples.md)
 - [Definición del producto](sources/product-brief.md)

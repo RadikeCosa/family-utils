@@ -9,6 +9,7 @@ export function useLibrary(workId: string | undefined, filters: string) {
   const [data, setData] = useState<LibraryData | null>(null);
   const [error, setError] = useState("");
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; archivedAt: string | null }[]>([]);
+  const [operationIssue, setOperationIssue] = useState<{ code: string; status: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
@@ -33,6 +34,10 @@ export function useLibrary(workId: string | undefined, filters: string) {
       if (response.status === 304) return;
       const body = await response.json();
       if (!response.ok) {
+        if (body.code === "NOT_FOUND" && workId) {
+          setOperationIssue({ code: "NOT_FOUND", status: 404 });
+          throw new Error("Este contenido ya no está disponible. Conservamos tu borrador.");
+        }
         if (response.status === 403) { clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); }
         throw new Error(body.error || "No se pudo cargar la biblioteca.");
       }
@@ -48,10 +53,10 @@ export function useLibrary(workId: string | undefined, filters: string) {
         if ("contributions" in incoming && "contributions" in current.current) incoming.contributions = [...new Map([...current.current.contributions, ...incoming.contributions].map((value) => [value.id, value])).values()];
         incoming.revision = current.current.revision;
       } else { etag.current = response.headers.get("etag") ?? ""; setHasChanges(false); }
-      current.current = incoming; setData(incoming); setError("");
+      current.current = incoming; setData(incoming); setError(""); setOperationIssue(null);
     } catch (cause) { if (!controller.signal.aborted && serial === generation.current) setError(cause instanceof Error ? cause.message : "No se pudo conectar."); }
     finally { if (serial === generation.current) setLoading(false); if (pending.current === controller) pending.current = null; }
-  }, [endpoint, filters, router]);
+  }, [endpoint, filters, router, workId]);
   useEffect(() => {
     current.current = null; etag.current = "";
     const start = setTimeout(() => void read(), 0);
@@ -67,20 +72,24 @@ export function useLibrary(workId: string | undefined, filters: string) {
   const writing = useRef(false);
   async function mutate(path: string, method: string, body: unknown): Promise<{ id: string } | null> {
     if (writing.current) return null;
+    let handledInline = false;
     writing.current = true;
-    setBusy(true); setError(""); setDuplicates([]);
+    setBusy(true); setError(""); setDuplicates([]); setOperationIssue(null);
     try {
       const response = await fetch(`/api/library${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json();
       if (!response.ok) {
+        setOperationIssue({ code: result.code ?? "UNKNOWN", status: response.status });
+        handledInline = ["DUPLICATE", "CONFLICT", "ARCHIVED", "NOT_FOUND"].includes(result.code);
         if (result.code === "DUPLICATE") setDuplicates(result.duplicates);
-        else if (response.status === 409) await read();
+        else if (response.status === 409 || result.code === "ARCHIVED" || result.code === "NOT_FOUND") await read();
         if (response.status === 403) void read("probe");
         throw new Error(result.error || "No se pudo guardar.");
       }
+      setOperationIssue(null);
       await read(); return result;
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo guardar. Conservamos tu borrador."); return null; }
+    } catch (cause) { if (!handledInline) setError(cause instanceof Error ? cause.message : "No se pudo guardar. Conservamos tu borrador."); return null; }
     finally { writing.current = false; setBusy(false); }
   }
-  return { data, error, setError, duplicates, clearDuplicates: () => setDuplicates([]), busy, loading, hasChanges, refresh: () => read(), more: () => read("more"), mutate };
+  return { data, error, setError, duplicates, operationIssue, clearDuplicates: () => setDuplicates([]), busy, loading, hasChanges, refresh: () => read(), more: () => read("more"), mutate };
 }

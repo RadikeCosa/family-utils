@@ -14,6 +14,7 @@ export default defineConfig({
   projects: [
     { name: "iPhone viewport", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
     { name: "Android viewport", use: { ...devices["Pixel 7"], defaultBrowserType: "chromium" } },
+    { name: "WebKit iPhone viewport", testMatch: /library\.spec\.ts/, use: { ...devices["iPhone 13"], defaultBrowserType: "webkit" } },
   ],
   webServer: {
     command: "npm run start -- -p 3318",

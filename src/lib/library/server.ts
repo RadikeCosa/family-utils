@@ -65,7 +65,7 @@ export async function readLibrary(request: Request, workId?: string) {
     }
     if (workId) {
       const { rows } = await tx.query<WorkRow>(`SELECT w.*, ${activityColumn} FROM library_works w WHERE w.id=$1 AND w.family_id=$2`, [workId, actor.familyId]);
-      if (!rows.length) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      if (!rows.length) fail(404, "NOT_FOUND", "No encontramos este contenido.");
       const [work] = await mapWorks(tx, rows);
       const values: unknown[] = [workId, actor.familyId];
       let after = "";
@@ -118,7 +118,7 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
     if (command === "contribute") {
       const work = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR SHARE", [workId, actor.familyId])).rows[0];
-      if (!work) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      if (!work) fail(404, "NOT_FOUND", "No encontramos este contenido.");
       await activeActor(tx, actor);
       const previous = contributionId ? (await tx.query("SELECT * FROM library_contributions WHERE id=$1 AND work_id=$2 AND family_id=$3 AND retired_at IS NULL FOR UPDATE", [contributionId, workId, actor.familyId])).rows[0] : null;
       if (contributionId && !previous) fail(404, "NOT_FOUND", "No encontramos ese aporte.");
@@ -129,7 +129,7 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
         await record(tx, actor, "library_contribution", contributionId!, "retired", { workId });
         await tx.query("COMMIT"); return NextResponse.json({ id: contributionId });
       }
-      if (work.archived_at) fail(403, "ARCHIVED", "Restaurá la ficha antes de publicar o editar aportes.");
+      if (work.archived_at) fail(403, "ARCHIVED", "Restaurá este contenido antes de publicar o editar aportes.");
       if (previous && body.action !== "edit") fail(400, "INVALID", "Acción inválida.");
       const input = contributionInput(body);
       if (!input) fail(400, "INVALID", "Revisá el texto, la fecha y la compañía.");
@@ -149,9 +149,9 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
     }
     if (command === "personal") {
       const work = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR SHARE", [workId, actor.familyId])).rows[0];
-      if (!work) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      if (!work) fail(404, "NOT_FOUND", "No encontramos este contenido.");
       await activeActor(tx, actor);
-      if (work.archived_at) fail(403, "ARCHIVED", "Restaurá la ficha antes de cambiar tu estado o valoración.");
+      if (work.archived_at) fail(403, "ARCHIVED", "Restaurá este contenido antes de cambiar tu estado o valoración.");
       const input = personalInput(body);
       if (!input) fail(400, "INVALID", "Revisá el estado y las estrellas.");
       const previous = (await tx.query("SELECT version FROM library_personal WHERE work_id=$1 AND member_id=$2 FOR UPDATE", [workId, actor.memberId])).rows[0];
@@ -167,7 +167,7 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
     let current: WorkRow | undefined;
     if (command !== "create") {
       current = (await tx.query<WorkRow>("SELECT * FROM library_works WHERE id=$1 AND family_id=$2 FOR UPDATE", [workId, actor.familyId])).rows[0];
-      if (!current) fail(404, "NOT_FOUND", "No encontramos esa obra.");
+      if (!current) fail(404, "NOT_FOUND", "No encontramos este contenido.");
       await activeActor(tx, actor);
       if (current.version !== body.expectedVersion) fail(409, "CONFLICT", "Hubo otro cambio. Actualizá y revisá los datos antes de reintentar.");
       if (body.action === "archive" || body.action === "restore") {
@@ -179,14 +179,14 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
         await tx.query("COMMIT"); return NextResponse.json({ id: workId });
       }
       if (body.action !== "edit") fail(400, "INVALID", "Acción inválida.");
-      if (current.archived_at) fail(403, "ARCHIVED", "Restaurá la ficha antes de editarla.");
+      if (current.archived_at) fail(403, "ARCHIVED", "Restaurá este contenido antes de editarlo.");
     }
     const input = workInput(body);
     if (!input) fail(400, "INVALID", "Revisá título, tipo y datos opcionales.");
     const changedIdentity = !current || current.title !== input.title || current.kind !== input.kind;
     if (changedIdentity && body.confirmDuplicate !== true) {
       const { rows: duplicates } = await tx.query('SELECT id,title,archived_at AS "archivedAt" FROM library_works WHERE family_id=$1 AND kind=$2 AND titulo_normalizado=$3 AND ($4::uuid IS NULL OR id<>$4) ORDER BY created_at DESC,id DESC LIMIT 20', [actor.familyId, input.kind, normalizeLibraryText(input.title), current?.id ?? null]);
-      if (duplicates.length) throw new LibraryError(409, "DUPLICATE", "Encontramos obras parecidas. Abrí una ficha o confirmá que es otra obra.", { duplicates });
+      if (duplicates.length) throw new LibraryError(409, "DUPLICATE", "Ya hay contenidos parecidos. Revisá las coincidencias o confirmá que es otro contenido.", { duplicates });
     }
     const values = [input.title, normalizeLibraryText(input.title), input.kind, input.creator, normalizeLibraryText(input.creator ?? ""), input.year, input.referenceUrl, actor.memberId];
     let id: string;
