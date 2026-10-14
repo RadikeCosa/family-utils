@@ -42,9 +42,14 @@ function ContributionCard({ entry, data, busy, save }: { entry: Contribution; da
   </li>;
 }
 export default function Contributions({ data, busy, loading, save, more }: { data: LibraryDetail; busy: boolean; loading: boolean; save: Save; more: () => Promise<void> }) {
-  const [generation, setGeneration] = useState(0);
-  return <section><h2>Aportes y recuerdos</h2>{!data.work.archivedAt && <div className={styles.card}><ContributionForm key={`${data.familyId}:${data.currentMemberId}:${data.work.id}:new:${generation}`} data={data} busy={busy} save={save} close={() => setGeneration(generation + 1)} /></div>}
+  return <section><h2>Aportes y recuerdos</h2>
     {data.contributions.length ? <ul className={styles.contributions}>{data.contributions.map((entry) => <ContributionCard key={entry.id} entry={entry} data={data} busy={busy} save={save} />)}</ul> : <p>Todavía no hay aportes. Cada mirada tiene su lugar.</p>}
     {data.nextCursor && <button disabled={loading} onClick={() => void more()}>{loading ? "Cargando…" : "Cargar más aportes"}</button>}
   </section>;
+}
+
+export function NewContribution({ data, busy, save }: { data: LibraryDetail; busy: boolean; save: Save }) {
+  const [generation, setGeneration] = useState(0);
+  if (data.work.archivedAt) return null;
+  return <section className={styles.card}><ContributionForm key={`${data.familyId}:${data.currentMemberId}:${data.work.id}:new:${generation}`} data={data} busy={busy} save={save} close={() => setGeneration((current) => current + 1)} /></section>;
 }
