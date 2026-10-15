@@ -1,10 +1,10 @@
-import { and, eq, gte, isNull, lt, or, asc } from "drizzle-orm";
+import { and, eq, gte, isNull, or, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getDb, getPool } from "@/db";
-import { members, sportsComments, sportsEvents, sportsFights } from "@/db/schema";
+import { members, sportsComments, sportsEvents, sportsFights, sportsFormations, sportsWeeks } from "@/db/schema";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
-import { sportsEnabled, sportsNowDay, sportsTodayInterval, footballEventInput, ufcCardInput, commentInput, isSportsContext, isSportsDate, SPORTS_UUID, isRiverMatch } from "./rules";
+import { sportsEnabled, sportsNowDay, sportsWeek, selectRiverEvent, selectUfcEvent, formationInput, footballEventInput, ufcCardInput, commentInput, isSportsContext, isSportsDate, SPORTS_UUID, isRiverMatch } from "./rules";
 
 class SportsError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -54,26 +54,28 @@ export async function readSportsPage(request: Request) {
 }
 
 export async function loadSportsData(actor: MemberContext) {
-    const day = sportsNowDay();
-    const interval = sportsTodayInterval(day);
-    const db = getDb();
-    const football = await db.select().from(sportsEvents).where(and(
-      eq(sportsEvents.familyId, actor.familyId),
-      eq(sportsEvents.kind, "football_match"),
-      or(eq(sportsEvents.eventDate, day), and(gte(sportsEvents.startsAt, interval.startsAt), lt(sportsEvents.startsAt, interval.endsAt))),
-    )).orderBy(asc(sportsEvents.startsAt), asc(sportsEvents.title));
-    const [card] = await db.select().from(sportsEvents).where(and(eq(sportsEvents.familyId, actor.familyId), eq(sportsEvents.kind, "ufc_card"), eq(sportsEvents.isCurrent, true))).limit(1);
-    const fights = card ? await db.select().from(sportsFights).where(and(eq(sportsFights.familyId, actor.familyId), eq(sportsFights.eventId, card.id))).orderBy(asc(sportsFights.boutOrder)) : [];
-    const familyMembers = await db.select({ id:members.id, name:members.name }).from(members).where(and(eq(members.familyId,actor.familyId),isNull(members.archivedAt))).orderBy(asc(members.createdAt));
-    const riverIds = football.filter((event) => isRiverMatch(event.firstParticipant, event.secondParticipant)).map((event) => event.id);
-    const priorRiverThreads = riverIds.length ? await db.select({ eventId: sportsComments.contextEventId, contextDate: sportsComments.contextDate })
-      .from(sportsComments).where(and(eq(sportsComments.familyId, actor.familyId), eq(sportsComments.contextKind, "river_match"), isNull(sportsComments.retiredAt), or(...riverIds.map((id) => eq(sportsComments.contextEventId, id))))) : [];
-    const riverThreadDates = Object.fromEntries(riverIds.map((id) => {
-      const dates = [...new Set(priorRiverThreads.filter((entry) => entry.eventId === id).map((entry) => entry.contextDate!).filter(Boolean))].sort();
-      return [id, dates[0] ?? football.find((event) => event.id === id)!.eventDate];
-    }));
-    const priorDates = Object.fromEntries(riverIds.map((id) => [id, [...new Set(priorRiverThreads.filter((entry) => entry.eventId === id && entry.contextDate !== riverThreadDates[id]).map((entry) => entry.contextDate!).filter(Boolean))].sort().reverse()]));
-    return { familyId: actor.familyId, currentMemberId: actor.memberId, role: actor.role, day, football, card: card ?? null, fights, members:familyMembers, riverThreadDates, priorRiverThreadDates: priorDates };
+  const now = new Date();
+  const day = sportsNowDay(now);
+  const week = sportsWeek(now);
+  const db = getDb();
+  const [events, familyMembers, weeks] = await Promise.all([
+    db.select().from(sportsEvents).where(and(eq(sportsEvents.familyId, actor.familyId), eq(sportsEvents.hidden, false), or(isNull(sportsEvents.eventDate), gte(sportsEvents.eventDate, week.start)))),
+    db.select({ id: members.id, name: members.name }).from(members).where(and(eq(members.familyId, actor.familyId), isNull(members.archivedAt))).orderBy(asc(members.createdAt)),
+    db.select().from(sportsWeeks).where(and(eq(sportsWeeks.familyId, actor.familyId), eq(sportsWeeks.weekStart, week.start))),
+  ]);
+  const river = selectRiverEvent(events.filter(event => event.kind === "football_match"), now);
+  const noUfcEvent = weeks[0]?.noUfcEvent ?? false;
+  const card = noUfcEvent ? null : selectUfcEvent(events.filter(event => event.kind === "ufc_card"), now);
+  const [fights, formations] = await Promise.all([
+    card ? db.select().from(sportsFights).where(and(eq(sportsFights.familyId, actor.familyId), eq(sportsFights.eventId, card.id))).orderBy(asc(sportsFights.boutOrder)) : [],
+    river ? db.select({ id: sportsFormations.id, memberId: sportsFormations.memberId, eventId: sportsFormations.eventId, body: sportsFormations.body, updatedAt: sportsFormations.updatedAt }).from(sportsFormations).where(and(eq(sportsFormations.familyId, actor.familyId), eq(sportsFormations.eventId, river.id))).orderBy(asc(sportsFormations.updatedAt)) : [],
+  ]);
+  return { familyId: actor.familyId, currentMemberId: actor.memberId, role: actor.role, day, week, noUfcEvent, football: river ? [river] : [], card, fights, formations, members: familyMembers, riverThreadDates: {}, priorRiverThreadDates: {} };
+}
+
+async function clearNoUfcEvent(tx: PoolClient, actor: MemberContext, eventDate: string) {
+  const week = sportsWeek(new Date(`${eventDate}T12:00:00Z`));
+  await tx.query("UPDATE sports_weeks SET no_ufc_event=false,updated_by_member_id=$1,updated_at=now() WHERE family_id=$2 AND week_start=$3", [actor.memberId, actor.familyId, week.start]);
 }
 
 export async function createSportsEvent(request: Request) {
@@ -87,19 +89,16 @@ export async function createSportsEvent(request: Request) {
     const member = await activeActor(tx, actor); requireAdmin(member);
     if (body.kind === "football_match") {
       const input = footballEventInput(body);
-      if (!input) fail(400, "INVALID", "Completá equipos, competencia y una fecha válida. La hora y el canal son opcionales.");
+      if (!input) fail(400, "INVALID", "Completá los equipos y el torneo. La fecha, hora y cancha pueden quedar a confirmar.");
       const { rows: [event] } = await tx.query("INSERT INTO sports_events(family_id,kind,title,competition,first_participant,second_participant,event_date,starts_at,channel,status,result,manually_edited,created_by_member_id,updated_by_member_id) VALUES($1,'football_match',$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$11) RETURNING id", [actor.familyId,input.title,input.competition,input.firstParticipant,input.secondParticipant,input.eventDate,input.startsAt,input.channel,input.status,input.result,actor.memberId]);
+      await tx.query("UPDATE sports_events SET venue=$1 WHERE id=$2 AND family_id=$3", [input.venue, event.id, actor.familyId]);
       await record(tx,actor,"sports_event",event.id,"created",input);
       await tx.query("COMMIT"); return NextResponse.json({ id: event.id }, { status: 201 });
     }
     if (body.kind === "ufc_card") {
       const input = ufcCardInput(body);
       if (!input) fail(400, "INVALID", "Completá el evento y al menos una pelea; elegí exactamente una estelar.");
-      const { rows: [previous] } = await tx.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='ufc_card' AND is_current=true FOR UPDATE", [actor.familyId]);
-      if (previous) {
-        await tx.query("UPDATE sports_events SET is_current=false,card_status='finalized',updated_by_member_id=$1,updated_at=now() WHERE id=$2", [actor.memberId,previous.id]);
-        await record(tx,actor,"sports_event",previous.id,"finalized",{ reason:"new_card_published" });
-      }
+      await clearNoUfcEvent(tx, actor, input.eventDate);
       const { rows: [event] } = await tx.query("INSERT INTO sports_events(family_id,kind,title,event_date,preliminary_starts_at,main_card_starts_at,card_status,is_current,manually_edited,prediction_close_mode,created_by_member_id,updated_by_member_id) VALUES($1,'ufc_card',$2,$3,$4,$5,'upcoming',true,true,NULL,$6,$6) RETURNING id", [actor.familyId,input.title,input.eventDate,input.preliminaryStartsAt,input.mainCardStartsAt,actor.memberId]);
       for (const fight of input.fights) await tx.query("INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event) VALUES($1,$2,$3,$4,$5,$6,$7)", [actor.familyId,event.id,fight.boutOrder,fight.firstFighter,fight.secondFighter,fight.boutBlock,fight.isMainEvent]);
       await record(tx,actor,"sports_event",event.id,"created",{ ...input, fights: input.fights });
@@ -122,15 +121,23 @@ export async function updateSportsEvent(request: Request, eventId: string) {
     const member = await activeActor(tx,actor); requireAdmin(member);
     const { rows: [current] } = await tx.query("SELECT * FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE", [eventId,actor.familyId]);
     if (!current) fail(404,"NOT_FOUND","No encontramos este evento.");
+    if (body.action === "hide") {
+      await tx.query("UPDATE sports_events SET hidden=true,manually_edited=true,updated_by_member_id=$1,updated_at=now() WHERE id=$2 AND family_id=$3", [actor.memberId,eventId,actor.familyId]);
+      await record(tx,actor,"sports_event",eventId,"hidden",{});
+      await tx.query("COMMIT");
+      return NextResponse.json({ id: eventId, hidden: true });
+    }
     if (current.kind === "football_match") {
       const input = footballEventInput(body);
-      if (!input) fail(400,"INVALID","Completá equipos, competencia y una fecha válida.");
+      if (!input) fail(400,"INVALID","Completá los equipos y el torneo; revisá la fecha y el horario si los ingresaste.");
       await tx.query("UPDATE sports_events SET title=$1,competition=$2,first_participant=$3,second_participant=$4,event_date=$5,starts_at=$6,channel=$7,status=$8,result=$9,manually_edited=true,updated_by_member_id=$10,updated_at=now() WHERE id=$11 AND family_id=$12", [input.title,input.competition,input.firstParticipant,input.secondParticipant,input.eventDate,input.startsAt,input.channel,input.status,input.result,actor.memberId,eventId,actor.familyId]);
+      await tx.query("UPDATE sports_events SET venue=$1 WHERE id=$2 AND family_id=$3", [input.venue,eventId,actor.familyId]);
       await record(tx,actor,"sports_event",eventId,"edited",input);
     } else {
-      if (!current.is_current) fail(409,"FINALIZED","La cartelera ya finalizó; publicá otra para reemplazarla.");
+
       const input = ufcCardInput(body);
       if (!input) fail(400,"INVALID","Completá el evento y al menos una pelea; elegí exactamente una estelar.");
+      await clearNoUfcEvent(tx, actor, input.eventDate);
       await tx.query("UPDATE sports_events SET title=$1,event_date=$2,preliminary_starts_at=$3,main_card_starts_at=$4,manually_edited=true,updated_by_member_id=$5,updated_at=now() WHERE id=$6 AND family_id=$7", [input.title,input.eventDate,input.preliminaryStartsAt,input.mainCardStartsAt,actor.memberId,eventId,actor.familyId]);
       await tx.query("DELETE FROM sports_fights WHERE event_id=$1 AND family_id=$2", [eventId,actor.familyId]);
       for (const fight of input.fights) await tx.query("INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event) VALUES($1,$2,$3,$4,$5,$6,$7)", [actor.familyId,eventId,fight.boutOrder,fight.firstFighter,fight.secondFighter,fight.boutBlock,fight.isMainEvent]);
@@ -149,10 +156,10 @@ export async function readSportsComments(request: Request) {
     const contextKind = url.searchParams.get("contextKind");
     const contextDate = url.searchParams.get("contextDate");
     const eventId = url.searchParams.get("eventId");
-    if (!isSportsContext(contextKind) || (contextKind === "football_day" && !isSportsDate(contextDate)) || (contextKind === "river_match" && (!isSportsDate(contextDate) || !eventId || !SPORTS_UUID.test(eventId))) || (contextKind === "ufc_card" && (!eventId || !SPORTS_UUID.test(eventId)))) fail(400,"INVALID","Conversación inválida.");
+    if (!isSportsContext(contextKind) || (contextKind === "football_day" && !isSportsDate(contextDate)) || (contextKind === "river_match" && ((contextDate !== null && !isSportsDate(contextDate)) || !eventId || !SPORTS_UUID.test(eventId))) || (contextKind === "ufc_card" && (!eventId || !SPORTS_UUID.test(eventId)))) fail(400,"INVALID","Conversación inválida.");
     const base = [eq(sportsComments.familyId,actor.familyId),eq(sportsComments.contextKind,contextKind),isNull(sportsComments.retiredAt)];
     if (contextDate) base.push(eq(sportsComments.contextDate,contextDate));
-    else base.push(isNull(sportsComments.contextDate));
+    else if (contextKind !== "river_match") base.push(isNull(sportsComments.contextDate));
     if (eventId) base.push(eq(sportsComments.contextEventId,eventId));
     else base.push(isNull(sportsComments.contextEventId));
     const comments = await getDb().select({ id:sportsComments.id,authorMemberId:sportsComments.authorMemberId,body:sportsComments.body,version:sportsComments.version,createdAt:sportsComments.createdAt,updatedAt:sportsComments.updatedAt }).from(sportsComments).where(and(...base)).orderBy(asc(sportsComments.createdAt));
@@ -174,20 +181,17 @@ export async function mutateSportsComment(request: Request, commentId?: string) 
     if (!commentId) {
       const text = commentInput(body.body);
       const contextKind = body.contextKind;
-      const contextDate = typeof body.contextDate === "string" ? body.contextDate : null;
+      let contextDate = typeof body.contextDate === "string" ? body.contextDate : null;
       const contextEventId = typeof body.contextEventId === "string" ? body.contextEventId : null;
       if (!text || !isSportsContext(typeof contextKind === "string" ? contextKind : null)) fail(400,"INVALID","Escribí un comentario de hasta 2.000 caracteres.");
       if (contextKind === "football_day" && (!isSportsDate(contextDate) || contextEventId !== null)) fail(400,"INVALID","Conversación inválida.");
-      if (contextKind === "river_match" && (!isSportsDate(contextDate) || !contextEventId || !SPORTS_UUID.test(contextEventId))) fail(400,"INVALID","Conversación inválida.");
+      if (contextKind === "river_match" && ((contextDate !== null && !isSportsDate(contextDate)) || !contextEventId || !SPORTS_UUID.test(contextEventId))) fail(400,"INVALID","Conversación inválida.");
       if (contextKind === "ufc_card" && (contextDate !== null || !contextEventId || !SPORTS_UUID.test(contextEventId))) fail(400,"INVALID","Conversación inválida.");
       if (contextKind !== "football_day") {
         const { rows:[event] } = await tx.query("SELECT id,first_participant,second_participant FROM sports_events WHERE id=$1 AND family_id=$2 AND kind=$3" , [contextEventId,actor.familyId,contextKind === "ufc_card" ? "ufc_card" : "football_match"]);
         if (!event) fail(404,"NOT_FOUND","No encontramos este evento.");
         if (contextKind === "river_match" && !isRiverMatch(event.first_participant,event.second_participant)) fail(400,"INVALID","La conversación por partido es solo para River.");
-        if (contextKind === "ufc_card") {
-          const { rows:[card] } = await tx.query("SELECT id FROM sports_events WHERE id=$1 AND family_id=$2 AND is_current=true AND card_status='upcoming'",[contextEventId,actor.familyId]);
-          if (!card) fail(404,"NOT_FOUND","No encontramos esta cartelera vigente.");
-        }
+        if (contextKind === "river_match" && !contextDate) contextDate = sportsNowDay();
       }
       const { rows:[comment] } = await tx.query("INSERT INTO sports_comments(family_id,author_member_id,context_kind,context_event_id,context_date,body) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,version", [actor.familyId,actor.memberId,contextKind,contextEventId,contextDate,text]);
       await record(tx,actor,"sports_comment",comment.id,"created",{ contextKind,contextEventId,contextDate });
@@ -210,6 +214,51 @@ export async function mutateSportsComment(request: Request, commentId?: string) 
     await tx.query("UPDATE sports_comments SET body=$1,version=version+1,updated_at=now() WHERE id=$2 AND family_id=$3",[text,commentId,actor.familyId]);
     await record(tx,actor,"sports_comment",commentId,"edited",{ contextKind:previous.context_kind });
     await tx.query("COMMIT"); return NextResponse.json({ id:commentId,version:previous.version+1 });
+  } catch (error) { if (tx) await tx.query("ROLLBACK"); return errorResponse(error); }
+  finally { tx?.release(); }
+}
+
+
+export async function saveSportsFormation(request: Request, eventId: string) {
+  if (!sportsEnabled()) return sportsUnavailable();
+  let tx: PoolClient | undefined;
+  try {
+    checkOrigin(request);
+    const actor = await requireActor(request.headers);
+    if (!SPORTS_UUID.test(eventId)) fail(400,"INVALID","Identificador inválido.");
+    const body = request.method === "DELETE" ? null : formationInput((await parseBody(request)).body);
+    if (request.method !== "DELETE" && !body) fail(400,"INVALID","Escribí una formación de hasta 500 caracteres.");
+    tx = await getPool().connect(); await tx.query("BEGIN");
+    await activeActor(tx, actor);
+    const { rows: [event] } = await tx.query("SELECT first_participant,second_participant FROM sports_events WHERE family_id=$1 AND id=$2 AND kind='football_match' FOR UPDATE", [actor.familyId,eventId]);
+    if (!event || !isRiverMatch(event.first_participant,event.second_participant)) fail(404,"NOT_FOUND","No encontramos este partido de River.");
+    if (request.method === "DELETE") {
+      await tx.query("DELETE FROM sports_formations WHERE family_id=$1 AND event_id=$2 AND member_id=$3", [actor.familyId,eventId,actor.memberId]);
+    } else {
+      await tx.query("INSERT INTO sports_formations(family_id,event_id,member_id,body) VALUES($1,$2,$3,$4) ON CONFLICT(family_id,event_id,member_id) DO UPDATE SET body=excluded.body,updated_at=now()", [actor.familyId,eventId,actor.memberId,body]);
+    }
+    await record(tx,actor,"sports_formation",eventId,request.method === "DELETE" ? "deleted" : "saved",{});
+    await tx.query("COMMIT");
+    return NextResponse.json({ saved: request.method !== "DELETE" });
+  } catch (error) { if (tx) await tx.query("ROLLBACK"); return errorResponse(error); }
+  finally { tx?.release(); }
+}
+
+export async function setSportsWeek(request: Request) {
+  if (!sportsEnabled()) return sportsUnavailable();
+  let tx: PoolClient | undefined;
+  try {
+    checkOrigin(request);
+    const actor = await requireActor(request.headers);
+    const body = await parseBody(request);
+    if (typeof body.noUfcEvent !== "boolean") fail(400,"INVALID","Elegí si hay evento esta semana.");
+    tx = await getPool().connect(); await tx.query("BEGIN");
+    requireAdmin(await activeActor(tx, actor));
+    const week = sportsWeek();
+    await tx.query("INSERT INTO sports_weeks(family_id,week_start,no_ufc_event,updated_by_member_id) VALUES($1,$2,$3,$4) ON CONFLICT(family_id,week_start) DO UPDATE SET no_ufc_event=excluded.no_ufc_event,updated_by_member_id=excluded.updated_by_member_id,updated_at=now()", [actor.familyId,week.start,body.noUfcEvent,actor.memberId]);
+    await record(tx,actor,"sports_week",actor.familyId,"edited",{ weekStart: week.start, noUfcEvent: body.noUfcEvent });
+    await tx.query("COMMIT");
+    return NextResponse.json({ weekStart: week.start, noUfcEvent: body.noUfcEvent });
   } catch (error) { if (tx) await tx.query("ROLLBACK"); return errorResponse(error); }
   finally { tx?.release(); }
 }

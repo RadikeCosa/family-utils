@@ -48,7 +48,8 @@ export function formatSportsTime(value: string | Date | null) {
   return new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: SPORTS_TIME_ZONE }).format(new Date(value));
 }
 
-export function formatSportsDate(value: string | Date) {
+export function formatSportsDate(value: string | Date | null) {
+  if (!value) return "A confirmar";
   const date = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : new Date(value);
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeZone: SPORTS_TIME_ZONE }).format(date);
 }
@@ -64,7 +65,8 @@ export type FootballEventInput = {
   competition: string;
   firstParticipant: string;
   secondParticipant: string;
-  eventDate: string;
+  eventDate: string | null;
+  venue: string | null;
   startsAt: Date | null;
   channel: string | null;
   status: typeof FOOTBALL_STATUSES[number];
@@ -76,17 +78,19 @@ export function footballEventInput(body: Record<string, unknown>): FootballEvent
   const competition = typeof body.competition === "string" ? body.competition.trim() : "";
   const firstParticipant = typeof body.firstParticipant === "string" ? body.firstParticipant.trim() : "";
   const secondParticipant = typeof body.secondParticipant === "string" ? body.secondParticipant.trim() : "";
-  const eventDate = body.eventDate;
+  const eventDate = body.eventDate === "" || body.eventDate == null ? null : body.eventDate;
   const rawTime = body.startTime == null || body.startTime === "" ? null : body.startTime;
   const channel = typeof body.channel === "string" ? body.channel.trim() || null : body.channel == null ? null : undefined;
   const result = typeof body.result === "string" ? body.result.trim() || null : body.result == null ? null : undefined;
+  const venue = typeof body.venue === "string" ? body.venue.trim() || null : body.venue == null ? null : undefined;
   const status = body.status ?? "scheduled";
   const startsAt = typeof eventDate === "string" && (rawTime === null || isSportsTime(rawTime)) ? sportsLocalDateTime(eventDate, rawTime) : null;
   if (!title || Array.from(title).length > 160 || !competition || Array.from(competition).length > 120 || !firstParticipant || !secondParticipant || Array.from(firstParticipant).length > 120 || Array.from(secondParticipant).length > 120) return null;
-  if (!isSportsDate(eventDate) || (rawTime !== null && !isSportsTime(rawTime)) || (rawTime !== null && !startsAt)) return null;
+  if ((eventDate !== null && !isSportsDate(eventDate)) || (rawTime !== null && !isSportsTime(rawTime)) || (rawTime !== null && !startsAt)) return null;
+  if (venue === undefined || (venue && Array.from(venue).length > 200)) return null;
   if (channel === undefined || (channel && Array.from(channel).length > 160) || result === undefined || (result && Array.from(result).length > 160)) return null;
   if (!(FOOTBALL_STATUSES as readonly unknown[]).includes(status)) return null;
-  return { title, competition, firstParticipant, secondParticipant, eventDate, startsAt, channel, status: status as FootballEventInput["status"], result };
+  return { title, competition, firstParticipant, secondParticipant, eventDate, venue, startsAt, channel, status: status as FootballEventInput["status"], result };
 }
 
 export type FightInput = { boutOrder: number; firstFighter: string; secondFighter: string; boutBlock: typeof FIGHT_BLOCKS[number]; isMainEvent: boolean };
@@ -100,8 +104,12 @@ export function ufcCardInput(body: Record<string, unknown>): UfcCardInput | null
   const fights = body.fights;
   if (!title || Array.from(title).length > 160 || !isSportsDate(eventDate)) return null;
   if ((preliminaryTime !== null && !isSportsTime(preliminaryTime)) || (mainCardTime !== null && !isSportsTime(mainCardTime))) return null;
-  const preliminaryStartsAt = sportsLocalDateTime(eventDate, preliminaryTime as string | null);
-  const mainCardStartsAt = sportsLocalDateTime(eventDate, mainCardTime as string | null);
+  // The official date is independent of each block's Argentine calendar date.
+  const preliminaryDate = body.preliminaryDate ?? eventDate;
+  const mainCardDate = body.mainCardDate ?? eventDate;
+  if ((preliminaryTime && !isSportsDate(preliminaryDate)) || (mainCardTime && !isSportsDate(mainCardDate))) return null;
+  const preliminaryStartsAt = preliminaryTime ? sportsLocalDateTime(preliminaryDate as string, preliminaryTime as string) : null;
+  const mainCardStartsAt = mainCardTime ? sportsLocalDateTime(mainCardDate as string, mainCardTime as string) : null;
   if ((preliminaryTime && !preliminaryStartsAt) || (mainCardTime && !mainCardStartsAt)) return null;
   if (!Array.isArray(fights) || fights.length < 1 || fights.length > 40) return null;
   const mapped: FightInput[] = [];
@@ -122,4 +130,46 @@ export function ufcCardInput(body: Record<string, unknown>): UfcCardInput | null
 
 export function isSportsContext(value: string | null): value is "football_day" | "river_match" | "ufc_card" {
   return value === "football_day" || value === "river_match" || value === "ufc_card";
+}
+
+
+export function formationInput(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const body = value.trim();
+  return Array.from(body).length > 0 && Array.from(body).length <= 500 ? body : null;
+}
+
+export function sportsWeek(now = new Date()) {
+  const day = sportsNowDay(now);
+  const date = new Date(`${day}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  const start = date.toISOString().slice(0, 10);
+  date.setUTCDate(date.getUTCDate() + 6);
+  return { start, end: date.toISOString().slice(0, 10) };
+}
+
+type SelectableEvent = {
+  id: string; eventDate: string | null; startsAt: string | Date | null;
+  status: string; hidden: boolean; firstParticipant?: string | null;
+  secondParticipant?: string | null; mainCardStartsAt?: string | Date | null;
+};
+function eventOrder(a: SelectableEvent, b: SelectableEvent) {
+  const date = (a.eventDate ?? "9999-12-31").localeCompare(b.eventDate ?? "9999-12-31");
+  const time = (value: SelectableEvent) => value.startsAt ?? value.mainCardStartsAt;
+  const instant = (value: SelectableEvent) => time(value) ? new Date(time(value)!).getTime() : Infinity;
+  return date || (instant(a) - instant(b) || 0) || a.id.localeCompare(b.id);
+}
+export function selectRiverEvent<T extends SelectableEvent>(events: T[], now = new Date()): T | null {
+  const today = sportsNowDay(now);
+  return events.filter(event => !event.hidden && event.status !== "cancelled" &&
+    isRiverMatch(event.firstParticipant, event.secondParticipant) &&
+    (event.eventDate ? event.eventDate >= today : event.status !== "completed"))
+    .sort(eventOrder)[0] ?? null;
+}
+export function selectUfcEvent<T extends SelectableEvent>(events: T[], now = new Date()): T | null {
+  const today = sportsNowDay(now);
+  const week = sportsWeek(now);
+  const eligible = events.filter(event => !event.hidden && event.status !== "cancelled" &&
+    event.eventDate && event.eventDate >= week.start && event.eventDate <= week.end).sort(eventOrder);
+  return eligible.find(event => event.eventDate! >= today) ?? eligible.at(-1) ?? null;
 }
