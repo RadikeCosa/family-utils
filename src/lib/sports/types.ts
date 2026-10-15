@@ -6,7 +6,9 @@ export type SportsEvent = {
   competition: string | null;
   firstParticipant: string | null;
   secondParticipant: string | null;
-  eventDate: string;
+  eventDate: string | null;
+  venue: string | null;
+  hidden: boolean;
   startsAt: string | Date | null;
   channel: string | null;
   status: string;
@@ -24,5 +26,6 @@ export type SportsEvent = {
   updatedAt: string | Date;
 };
 export type SportsFight = { id: string; familyId: string; eventId: string; boutOrder: number; firstFighter: string; secondFighter: string; boutBlock: string; isMainEvent: boolean; result: string | null };
-export type SportsPageData = { familyId: string; currentMemberId: string; role: "administrator" | "member"; day: string; football: SportsEvent[]; card: SportsEvent | null; fights: SportsFight[]; members: { id:string; name:string }[]; riverThreadDates: Record<string, string>; priorRiverThreadDates: Record<string, string[]> };
+export type SportsFormation = { id: string; memberId: string; eventId: string; body: string; updatedAt: string | Date };
+export type SportsPageData = { familyId: string; currentMemberId: string; role: "administrator" | "member"; day: string; week: { start: string; end: string }; noUfcEvent: boolean; formations: SportsFormation[]; football: SportsEvent[]; card: SportsEvent | null; fights: SportsFight[]; members: { id:string; name:string }[]; riverThreadDates: Record<string, string>; priorRiverThreadDates: Record<string, string[]> };
 export type SportsComment = { id:string; authorMemberId:string; body:string; version:number; createdAt:string | Date; updatedAt:string | Date };

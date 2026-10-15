@@ -46,7 +46,8 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
   }
   async function request(person, path, method = "GET", body) {
     const response = await fetch(`${origin}${path}`, { method, headers: { Cookie: person?.cookie ?? "", Origin: origin, ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: response.status, body: response.status === 204 ? null : await response.json() };
+    const text = await response.text();
+    return { status: response.status, body: text ? JSON.parse(text) : null };
   }
   async function ok(person, path, method = "GET", body) {
     const value = await request(person, path, method, body); assert.ok([200, 201].includes(value.status), JSON.stringify(value)); return value.body;
@@ -77,10 +78,71 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&contextDate=${contextDate}&eventId=${match.id}`)).comments.length, 0);
       assert.equal((await request(outsider, "/api/sports/comments", "POST", { contextKind: "river_match", contextDate, contextEventId: match.id, body: "acceso cruzado" })).status, 404);
     });
+    await t.test("formations replace only the caller's entry; dates and hiding preserve family data", async () => {
+      const path = `/api/sports/events/${match.id}/formation`;
+      assert.equal((await request(null, path, "PUT", { body: "4-3-3" })).status, 403);
+      await ok(owner, path, "PUT", { body: "4-3-3: primer once" });
+      await ok(owner, path, "PUT", { body: "4-4-2: mi nuevo once" });
+      await ok(peer, path, "PUT", { body: "3-5-2: otro once", memberId: owner.id });
+      const formations = (await ok(owner, "/api/sports")).formations;
+      assert.equal(formations.length, 2);
+      assert.equal(formations.find(item => item.memberId === owner.id).body, "4-4-2: mi nuevo once");
+      assert.equal((await request(owner, path, "PUT", { body: "a".repeat(501) })).status, 400);
+      assert.equal((await request(outsider, path, "PUT", { body: "once ajeno" })).status, 404);
+      assert.equal((await request(outsider, path, "DELETE")).status, 404);
+      await ok(peer, path, "DELETE");
+      assert.equal((await ok(owner, "/api/sports")).formations.length, 1);
+      await ok(owner, "/api/sports/comments", "POST", { contextKind: "river_match", contextEventId: match.id, body: "Conservar al reprogramar" });
+      await ok(admin, `/api/sports/events/${match.id}`, "PATCH", { title: "River Plate vs Boca", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca", eventDate: null, status: "postponed", venue: "Monumental" });
+      const page = await ok(owner, "/api/sports");
+      assert.equal(page.football[0].id, match.id);
+      assert.equal(page.football[0].eventDate, null);
+      assert.equal(page.football[0].venue, "Monumental");
+      assert.equal(page.formations.length, 1);
+      assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&eventId=${match.id}`)).comments.length, 1);
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => error.code === "23503");
+      await assert.rejects(pool.query("INSERT INTO sports_formations(family_id,event_id,member_id,body) VALUES($1,$2,$3,'duplicate')", [familyId,match.id,owner.id]), error => error.code === "23505");
+      assert.equal((await request(peer, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" })).status, 403);
+      await ok(admin, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" });
+      assert.equal((await ok(owner, "/api/sports")).football.length, 0);
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_formations WHERE event_id=$1", [match.id])).rows[0].count, 1);
+      assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&eventId=${match.id}`)).comments.length, 1);
+      assert.equal((await request(admin, `/api/sports/events/${match.id}`, "DELETE")).status, 405);
+    });
+
+    await t.test("weekly UFC marker is manual, private, and cleared by card creation", async () => {
+      assert.equal((await request(peer, "/api/sports/week", "PUT", { noUfcEvent: true })).status, 403);
+      await ok(admin, "/api/sports/week", "PUT", { noUfcEvent: true });
+      assert.equal((await ok(owner, "/api/sports")).noUfcEvent, true);
+      assert.equal((await ok(outsider, "/api/sports")).noUfcEvent, false);
+      const data = { kind: "ufc_card", title: "UFC semanal", eventDate: contextDate, preliminaryDate: contextDate, preliminaryTime: "20:00", mainCardDate: contextDate, mainCardTime: "23:00", fights: [{ firstFighter: "Uno", secondFighter: "Dos", boutBlock: "main", isMainEvent: true }] };
+      const card = await ok(admin, "/api/sports", "POST", data);
+      let page = await ok(owner, "/api/sports");
+      assert.equal(page.noUfcEvent, false);
+      assert.equal(page.card.id, card.id);
+      assert.equal(page.fights.length, 1);
+      await ok(owner, "/api/sports/comments", "POST", { contextKind: "ufc_card", contextEventId: card.id, body: "La estelar" });
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => error.code === "23503");
+      // Multiple cards coexist; creating a future card does not remove this week's card/comments.
+      const future = new Date(`${contextDate}T12:00:00Z`); future.setUTCDate(future.getUTCDate() + 14);
+      await ok(admin, "/api/sports", "POST", { ...data, eventDate: future.toISOString().slice(0,10), title: "Otra semana" });
+      page = await ok(owner, "/api/sports");
+      assert.equal(page.card.id, card.id);
+      await ok(owner, "/api/sports/comments", "POST", { contextKind: "ufc_card", contextEventId: card.id, body: "Sigue la conversación" });
+      await ok(admin, "/api/sports/week", "PUT", { noUfcEvent: true });
+      assert.equal((await ok(owner, "/api/sports")).card, null);
+      await ok(admin, "/api/sports/week", "PUT", { noUfcEvent: false });
+      assert.equal((await ok(owner, "/api/sports")).card.id, card.id);
+      assert.equal((await ok(owner, `/api/sports/comments?contextKind=ufc_card&eventId=${card.id}`)).comments.length, 2);
+    });
+
   } finally {
     server.kill();
     if (families.length) {
-      await pool.query("DELETE FROM audit_events WHERE family_id=ANY($1::uuid[]) AND entity_type IN ('sports_event','sports_comment')", [families]);
+      await pool.query("DELETE FROM audit_events WHERE family_id=ANY($1::uuid[]) AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week')", [families]);
+      for (const table of ["sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) {
+        await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
+      }
       await pool.query("DELETE FROM families WHERE id=ANY($1::uuid[])", [families]);
     }
     if (users.length) await pool.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [users]);

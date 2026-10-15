@@ -120,6 +120,13 @@
       "when": 1792028315630,
       "tag": "0016_sports_v1a",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792033863957,
+      "tag": "0017_sports_river_weekly",
+      "breakpoints": true
     }
   ]
 }
