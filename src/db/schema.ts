@@ -387,7 +387,7 @@ export const sportsFights = pgTable("sports_fights", {
   boutOrder: integer("bout_order").notNull(),
   firstFighter: varchar("first_fighter", { length: 120 }).notNull(),
   secondFighter: varchar("second_fighter", { length: 120 }).notNull(),
-  boutBlock: varchar("bout_block", { length: 16 }).notNull(),
+  boutBlock: varchar("bout_block", { length: 32 }).notNull(),
   isMainEvent: boolean("is_main_event").notNull().default(false),
   result: varchar("result", { length: 16 }),
   externalReference: varchar("external_reference", { length: 200 }),
