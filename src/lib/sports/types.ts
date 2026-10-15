@@ -1,0 +1,28 @@
+export type SportsEvent = {
+  id: string;
+  familyId: string;
+  kind: "football_match" | "ufc_card";
+  title: string;
+  competition: string | null;
+  firstParticipant: string | null;
+  secondParticipant: string | null;
+  eventDate: string;
+  startsAt: string | Date | null;
+  channel: string | null;
+  status: string;
+  result: string | null;
+  preliminaryStartsAt: string | Date | null;
+  mainCardStartsAt: string | Date | null;
+  cardStatus: string | null;
+  isCurrent: boolean;
+  manuallyEdited: boolean;
+  externalReference: string | null;
+  predictionCloseMode: string | null;
+  createdByMemberId: string;
+  updatedByMemberId: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+export type SportsFight = { id: string; familyId: string; eventId: string; boutOrder: number; firstFighter: string; secondFighter: string; boutBlock: string; isMainEvent: boolean; result: string | null };
+export type SportsPageData = { familyId: string; currentMemberId: string; role: "administrator" | "member"; day: string; football: SportsEvent[]; card: SportsEvent | null; fights: SportsFight[]; members: { id:string; name:string }[]; riverThreadDates: Record<string, string>; priorRiverThreadDates: Record<string, string[]> };
+export type SportsComment = { id:string; authorMemberId:string; body:string; version:number; createdAt:string | Date; updatedAt:string | Date };

@@ -15,12 +15,13 @@ export default defineConfig({
     { name: "iPhone viewport", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
     { name: "Android viewport", use: { ...devices["Pixel 7"], defaultBrowserType: "chromium" } },
     { name: "WebKit iPhone viewport", testMatch: /library\.spec\.ts/, use: { ...devices["iPhone 13"], defaultBrowserType: "webkit" } },
+    { name: "Desktop Chromium", testMatch: /sports\.spec\.ts/, use: { viewport: { width: 1365, height: 900 }, defaultBrowserType: "chromium" } },
   ],
   webServer: {
     command: "npm run start -- -p 3318",
     url: baseURL,
     reuseExistingServer: false,
     timeout: 45_000,
-    env: { BETTER_AUTH_URL: baseURL, LIBRARY_ENABLED: "true" },
+    env: { BETTER_AUTH_URL: baseURL, LIBRARY_ENABLED: "true", SPORTS_ENABLED: "true" },
   },
 });

@@ -93,6 +93,7 @@ export const assignmentModeEnum = pgEnum("assignment_mode", ["shared", "individu
 export const accessMethodEnum = pgEnum("access_method", ["google", "code"]);
 export const mealTypeEnum = pgEnum("meal_type", MEAL_TYPES);
 export const mealAttendanceStatusEnum = pgEnum("meal_attendance_status", ["present", "absent"]);
+export const sportsEventKindEnum = pgEnum("sports_event_kind", ["football_match", "ufc_card"]);
 
 export const families = pgTable("families", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -274,6 +275,85 @@ export const mealSelections = pgTable("meal_selections", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+export const sportsEvents = pgTable("sports_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  kind: sportsEventKindEnum("kind").notNull(),
+  title: varchar("title", { length: 160 }).notNull(),
+  competition: varchar("competition", { length: 120 }),
+  firstParticipant: varchar("first_participant", { length: 120 }),
+  secondParticipant: varchar("second_participant", { length: 120 }),
+  eventDate: date("event_date", { mode: "string" }).notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  channel: varchar("channel", { length: 160 }),
+  status: varchar("status", { length: 20 }).notNull().default("scheduled"),
+  result: varchar("result", { length: 160 }),
+  preliminaryStartsAt: timestamp("preliminary_starts_at", { withTimezone: true }),
+  mainCardStartsAt: timestamp("main_card_starts_at", { withTimezone: true }),
+  cardStatus: varchar("card_status", { length: 20 }),
+  isCurrent: boolean("is_current").notNull().default(false),
+  manuallyEdited: boolean("manually_edited").notNull().default(true),
+  externalReference: varchar("external_reference", { length: 200 }),
+  predictionCloseMode: varchar("prediction_close_mode", { length: 12 }),
+  createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  index("sports_events_family_date_idx").on(table.familyId, table.kind, table.eventDate),
+  uniqueIndex("sports_events_one_current_ufc_card_idx").on(table.familyId).where(sql`${table.kind} = 'ufc_card' AND ${table.isCurrent} = true`),
+  check("sports_events_status", sql`${table.status} IN ('scheduled', 'postponed', 'completed', 'cancelled')`),
+  check("sports_events_card_status", sql`${table.cardStatus} IS NULL OR ${table.cardStatus} IN ('upcoming', 'finalized')`),
+  check("sports_events_prediction_close_mode", sql`${table.predictionCloseMode} IS NULL OR ${table.predictionCloseMode} IN ('event', 'block', 'fight')`),
+  check("sports_events_kind_shape", sql`
+    (${table.kind} = 'football_match' AND ${table.competition} IS NOT NULL AND ${table.firstParticipant} IS NOT NULL AND ${table.secondParticipant} IS NOT NULL AND ${table.isCurrent} = false AND ${table.cardStatus} IS NULL)
+    OR (${table.kind} = 'ufc_card' AND ${table.competition} IS NULL AND ${table.firstParticipant} IS NULL AND ${table.secondParticipant} IS NULL)`),
+]);
+
+export const sportsFights = pgTable("sports_fights", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").notNull().references(() => sportsEvents.id, { onDelete: "cascade" }),
+  boutOrder: integer("bout_order").notNull(),
+  firstFighter: varchar("first_fighter", { length: 120 }).notNull(),
+  secondFighter: varchar("second_fighter", { length: 120 }).notNull(),
+  boutBlock: varchar("bout_block", { length: 16 }).notNull(),
+  isMainEvent: boolean("is_main_event").notNull().default(false),
+  result: varchar("result", { length: 16 }),
+  externalReference: varchar("external_reference", { length: 200 }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  index("sports_fights_family_event_order_idx").on(table.familyId, table.eventId, table.boutOrder),
+  uniqueIndex("sports_fights_one_main_event_idx").on(table.eventId).where(sql`${table.isMainEvent} = true`),
+  check("sports_fights_bout_order", sql`${table.boutOrder} > 0`),
+  check("sports_fights_bout_block", sql`${table.boutBlock} IN ('preliminaries', 'main')`),
+  check("sports_fights_result", sql`${table.result} IS NULL OR ${table.result} IN ('first', 'second', 'draw', 'no_contest', 'cancelled')`),
+]);
+
+export const sportsComments = pgTable("sports_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  authorMemberId: uuid("author_member_id").notNull().references(() => members.id),
+  contextKind: varchar("context_kind", { length: 20 }).notNull(),
+  contextEventId: uuid("context_event_id").references(() => sportsEvents.id, { onDelete: "cascade" }),
+  contextDate: date("context_date", { mode: "string" }),
+  body: varchar("body", { length: 2000 }).notNull(),
+  version: integer("version").notNull().default(1),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  retiredByMemberId: uuid("retired_by_member_id").references(() => members.id),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  index("sports_comments_family_context_created_idx").on(table.familyId, table.contextKind, table.contextDate, table.contextEventId, table.createdAt),
+  check("sports_comments_context_shape", sql`
+    (${table.contextKind} = 'football_day' AND ${table.contextEventId} IS NULL AND ${table.contextDate} IS NOT NULL)
+    OR (${table.contextKind} = 'river_match' AND ${table.contextEventId} IS NOT NULL AND ${table.contextDate} IS NOT NULL)
+    OR (${table.contextKind} = 'ufc_card' AND ${table.contextEventId} IS NOT NULL AND ${table.contextDate} IS NULL)`),
+  check("sports_comments_body_length", sql`char_length(btrim(${table.body})) BETWEEN 1 AND 2000`),
+  check("sports_comments_version", sql`${table.version} > 0`),
+]);
 
 // Additive storage: legacy groups, routines and distributions remain untouched.
 export const mealDailyPlans = pgTable("meal_daily_plans", {

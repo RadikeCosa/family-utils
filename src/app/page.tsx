@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { libraryEnabled } from "@/lib/library/config";
+import { sportsEnabled } from "@/lib/sports/config";
 export const dynamic = "force-dynamic";
 import styles from "./platform.module.css";
 
@@ -41,6 +42,12 @@ export default function Home() {
             <span className={styles.cardTitle}>Biblioteca familiar</span>
             <span className={styles.cardCopy}>Guarden obras, miradas y recuerdos compartidos.</span>
             <span className={styles.cardArrow}>Explorar <span aria-hidden="true">→</span></span>
+          </Link>}
+          {sportsEnabled() && <Link className={styles.appCard} href="/deportes" aria-label="Abrir Deportes">
+            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">⚽</span>
+            <span className={styles.cardTitle}>Deportes</span>
+            <span className={styles.cardCopy}>Agenda y conversaciones para compartir en familia.</span>
+            <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
           </Link>}
           <Link className={styles.appCard} href="/cocina" aria-label="Abrir Conversor de cocina">
             <span className={`${styles.appIcon} ${styles.peach}`} aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 3h14v18H5zM8 7h8M8 11h2m4 0h2m-8 4h2m4 0h2m-8 3h2m4 0h2" /></svg></span>
