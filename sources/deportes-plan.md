@@ -36,4 +36,4 @@ Solo se incorpora una categoría que apruebe el paso 0. Sin cron: los datos auto
 
 - Argentina usa `America/Argentina/Buenos_Aires`, UTC−3, sin horario de verano. Los instantes se guardan en UTC y se presentan con esa zona IANA; una hora ausente se muestra «A confirmar».
 - Supuesto del usuario para futuro UFC: al publicar una cartelera siguiente, la anterior pasa a finalizada y conserva peleas, resultados y, en v1c, pronósticos. No hay pantalla de historial en v1. El supuesto es reversible sin borrar esos datos.
-- Fuera de v1: historial navegable UFC, bloque separado de preliminares tempranas, eventos sin fecha en agenda, amistosos como caso especial, continuidad de hilos de River entre fechas distintas y navegación a conversaciones anteriores.
+- Fuera de v1: pantalla de historial UFC, bloque separado de preliminares tempranas, eventos sin fecha en agenda y amistosos como caso especial. Si River se posterga, el hilo conserva la fecha original y la ficha reprogramada enlaza a esa conversación.
