@@ -7,7 +7,7 @@ export type CuratedSource = {
   [key: string]: unknown;
 };
 export type CuratedFootballEvent = { kind: "football_match"; sourceProvider: "espn"; externalReference: string; source: CuratedSource; payload: FootballEventInput };
-export type CuratedUfcEvent = { kind: "ufc_card"; sourceProvider: "ufc_official"; externalReference: string; source: CuratedSource; payload: UfcCardInput };
+export type CuratedUfcEvent = { kind: "ufc_card"; sourceProvider: "ufc_official"; externalReference: string; source: CuratedSource; payload: UfcCardInput; location: Record<string, string | null> };
 export type CuratedEvent = CuratedFootballEvent | CuratedUfcEvent;
 export type SportsCuratedBundle = {
   schemaVersion: 1;
@@ -91,8 +91,16 @@ export function parseSportsCuratedBundle(value: unknown, now = new Date()): { ok
         if (pairs.has(key)) return invalid();
         pairs.add(key);
       }
+      const location: Record<string, string | null> = {};
+      for (const field of ["venue", "city", "country", "eventType"]) {
+        if (!Object.hasOwn(raw, field)) continue;
+        const value = raw[field];
+        if (value !== null && (typeof value !== "string" || !value.trim() || value.length > (field === "venue" ? 200 : 160))) return invalid();
+        if (field === "eventType" && value !== null && !["numerado", "fight_night", "otro"].includes(String(value))) return invalid();
+        location[field] = typeof value === "string" ? value.trim() : null;
+      }
       ufcCount++;
-      events.push({ kind: "ufc_card", sourceProvider: "ufc_official", externalReference, source: raw.source as CuratedSource, payload });
+      events.push({ kind: "ufc_card", sourceProvider: "ufc_official", externalReference, source: raw.source as CuratedSource, payload, location });
     }
   }
   if (riverCount === 0 || ufcCount === 0) return invalid();

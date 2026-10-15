@@ -1,3 +1,4 @@
+import { sportsFeatures } from "./config";
 import { and, eq, gte, isNull, or, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
@@ -49,28 +50,168 @@ export async function readSportsPage(request: Request) {
   if (!sportsEnabled()) return sportsUnavailable();
   try {
     const actor = await requireActor(request.headers);
-    return NextResponse.json(await loadSportsData(actor), { headers: { "Cache-Control": "no-store", Vary: "Cookie" } });
+    return NextResponse.json(await loadSportsData(actor, new URL(request.url).searchParams.get("event")), { headers: { "Cache-Control": "no-store", Vary: "Cookie" } });
   } catch (error) { return errorResponse(error); }
 }
 
-export async function loadSportsData(actor: MemberContext) {
+export async function loadSportsData(
+  actor: MemberContext,
+  selectedId: string | null = null,
+) {
+  const features = sportsFeatures();
   const now = new Date();
   const day = sportsNowDay(now);
   const week = sportsWeek(now);
   const db = getDb();
   const [events, familyMembers, weeks] = await Promise.all([
-    db.select().from(sportsEvents).where(and(eq(sportsEvents.familyId, actor.familyId), eq(sportsEvents.hidden, false), isNull(sportsEvents.sourceAbsentAt), or(isNull(sportsEvents.eventDate), gte(sportsEvents.eventDate, week.start)))),
-    db.select({ id: members.id, name: members.name }).from(members).where(and(eq(members.familyId, actor.familyId), isNull(members.archivedAt))).orderBy(asc(members.createdAt)),
-    db.select().from(sportsWeeks).where(and(eq(sportsWeeks.familyId, actor.familyId), eq(sportsWeeks.weekStart, week.start))),
+    db
+      .select()
+      .from(sportsEvents)
+      .where(
+        and(
+          eq(sportsEvents.familyId, actor.familyId),
+          eq(sportsEvents.hidden, false),
+          ...(features.agenda ? [] : [isNull(sportsEvents.sourceAbsentAt)]),
+          ...(features.agenda
+            ? []
+            : [
+                or(
+                  isNull(sportsEvents.eventDate),
+                  gte(sportsEvents.eventDate, week.start),
+                ),
+              ]),
+        ),
+      ),
+    db
+      .select({ id: members.id, name: members.name })
+      .from(members)
+      .where(
+        and(eq(members.familyId, actor.familyId), isNull(members.archivedAt)),
+      )
+      .orderBy(asc(members.createdAt)),
+    db
+      .select()
+      .from(sportsWeeks)
+      .where(
+        and(
+          eq(sportsWeeks.familyId, actor.familyId),
+          eq(sportsWeeks.weekStart, week.start),
+        ),
+      ),
   ]);
-  const river = selectRiverEvent(events.filter(event => event.kind === "football_match"), now);
   const noUfcEvent = weeks[0]?.noUfcEvent ?? false;
-  const card = noUfcEvent ? null : selectUfcEvent(events.filter(event => event.kind === "ufc_card"), now);
+  const ordered = [...events].sort(
+    (a, b) =>
+      (a.eventDate ?? "9999").localeCompare(b.eventDate ?? "9999") ||
+      a.id.localeCompare(b.id),
+  );
+  const availableCards = ordered.filter(
+    (event) =>
+      event.kind === "ufc_card" &&
+      !(
+        noUfcEvent &&
+        event.eventDate! >= week.start &&
+        event.eventDate! <= week.end
+      ),
+  );
+  const availableRiver = ordered.filter(
+    (event) =>
+      event.kind === "football_match" &&
+      isRiverMatch(event.firstParticipant, event.secondParticipant),
+  );
+  const upcoming = (event: (typeof events)[number]) =>
+    !event.sourceAbsentAt &&
+    event.status !== "completed" &&
+    event.status !== "cancelled" &&
+    (!event.eventDate || event.eventDate >= day);
+  const selected = features.agenda
+    ? [...availableRiver, ...availableCards].find(
+        (event) => event.id === selectedId,
+      )
+    : null;
+  const river =
+    selected?.kind === "football_match"
+      ? selected
+      : features.agenda
+        ? (availableRiver.find(upcoming) ?? availableRiver.at(-1) ?? null)
+        : selectRiverEvent(
+            events.filter((event) => event.kind === "football_match"),
+            now,
+          );
+  const card =
+    selected?.kind === "ufc_card"
+      ? selected
+      : features.agenda
+        ? (availableCards.find(upcoming) ?? availableCards.at(-1) ?? null)
+        : noUfcEvent
+          ? null
+          : selectUfcEvent(
+              events.filter((event) => event.kind === "ufc_card"),
+              now,
+            );
   const [fights, formations] = await Promise.all([
-    card ? db.select().from(sportsFights).where(and(eq(sportsFights.familyId, actor.familyId), eq(sportsFights.eventId, card.id))).orderBy(asc(sportsFights.boutOrder)) : [],
-    river ? db.select({ id: sportsFormations.id, memberId: sportsFormations.memberId, eventId: sportsFormations.eventId, body: sportsFormations.body, updatedAt: sportsFormations.updatedAt }).from(sportsFormations).where(and(eq(sportsFormations.familyId, actor.familyId), eq(sportsFormations.eventId, river.id))).orderBy(asc(sportsFormations.updatedAt)) : [],
+    card
+      ? db
+          .select({
+            id: sportsFights.id,
+            familyId: sportsFights.familyId,
+            eventId: sportsFights.eventId,
+            boutOrder: sportsFights.boutOrder,
+            firstFighter: sportsFights.firstFighter,
+            secondFighter: sportsFights.secondFighter,
+            boutBlock: sportsFights.boutBlock,
+            isMainEvent: sportsFights.isMainEvent,
+            result: sportsFights.result,
+            externalReference: sportsFights.externalReference,
+          })
+          .from(sportsFights)
+          .where(
+            and(
+              eq(sportsFights.familyId, actor.familyId),
+              eq(sportsFights.eventId, card.id),
+              isNull(sportsFights.removedAt),
+            ),
+          )
+          .orderBy(asc(sportsFights.boutOrder))
+      : [],
+    river
+      ? db
+          .select({
+            id: sportsFormations.id,
+            memberId: sportsFormations.memberId,
+            eventId: sportsFormations.eventId,
+            body: sportsFormations.body,
+            updatedAt: sportsFormations.updatedAt,
+          })
+          .from(sportsFormations)
+          .where(
+            and(
+              eq(sportsFormations.familyId, actor.familyId),
+              eq(sportsFormations.eventId, river.id),
+            ),
+          )
+          .orderBy(asc(sportsFormations.updatedAt))
+      : [],
   ]);
-  return { familyId: actor.familyId, currentMemberId: actor.memberId, role: actor.role, day, week, noUfcEvent, football: river ? [river] : [], card, fights, formations, members: familyMembers, riverThreadDates: {}, priorRiverThreadDates: {} };
+  return {
+    familyId: actor.familyId,
+    currentMemberId: actor.memberId,
+    role: actor.role,
+    day,
+    week,
+    noUfcEvent,
+    football: river ? [river] : [],
+    card,
+    fights,
+    formations,
+    members: familyMembers,
+    riverThreadDates: {},
+    priorRiverThreadDates: {},
+    features,
+    ...(features.agenda
+      ? { agenda: events, selectedEventId: selected?.id ?? null }
+      : {}),
+  };
 }
 
 async function clearNoUfcEvent(tx: PoolClient, actor: MemberContext, eventDate: string) {
@@ -138,6 +279,39 @@ export async function updateSportsEvent(request: Request, eventId: string) {
       await tx.query("COMMIT");
       return NextResponse.json({ id: eventId, hidden: true });
     }
+    const protectedTables = (
+      await tx.query(
+        "SELECT to_regclass('public.sports_predictions') IS NOT NULL AS ufc,to_regclass('public.sports_football_results') IS NOT NULL AS football",
+      )
+    ).rows[0];
+    const hasUfcData =
+      current.kind === "ufc_card" &&
+      protectedTables.ufc &&
+      (
+        await tx.query(
+          "SELECT 1 WHERE EXISTS(SELECT 1 FROM sports_predictions WHERE event_id=$1 AND family_id=$2) OR EXISTS(SELECT 1 FROM sports_fight_results WHERE event_id=$1 AND family_id=$2) OR EXISTS(SELECT 1 FROM sports_block_closures WHERE event_id=$1 AND family_id=$2)",
+          [eventId, actor.familyId],
+        )
+      ).rowCount! > 0;
+    const hasFootballData =
+      current.kind === "football_match" &&
+      protectedTables.football &&
+      (
+        await tx.query(
+          "SELECT 1 FROM sports_football_results WHERE event_id=$1 AND family_id=$2",
+          [eventId, actor.familyId],
+        )
+      ).rowCount! > 0;
+    if (
+      (sportsFeatures().ufc && current.kind === "ufc_card") ||
+      hasUfcData ||
+      hasFootballData
+    )
+      fail(
+        409,
+        "CONFLICT",
+        "Actualizá este evento mediante el importador curado; sus resultados y cierres están protegidos.",
+      );
     if (current.kind === "football_match") {
       const input = footballEventInput(body);
       if (!input) fail(400,"INVALID","Completá los equipos y el torneo; revisá la fecha y el horario si los ingresaste.");

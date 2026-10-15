@@ -304,6 +304,9 @@ export const sportsEvents = pgTable("sports_events", {
   automaticFights: jsonb("automatic_fights").$type<Array<Record<string, unknown>>>(),
   manualFights: boolean("manual_fights").notNull().default(false),
   sourceAbsentAt: timestamp("source_absent_at", { withTimezone: true }),
+  city: varchar("city", { length: 160 }),
+  country: varchar("country", { length: 160 }),
+  eventType: varchar("event_type", { length: 16 }).$type<"numerado" | "fight_night" | "otro">(),
   predictionCloseMode: varchar("prediction_close_mode", { length: 12 }),
   createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
   updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
@@ -312,6 +315,7 @@ export const sportsEvents = pgTable("sports_events", {
 }, (table) => [
   index("sports_events_family_date_idx").on(table.familyId, table.kind, table.eventDate),
   uniqueIndex("sports_events_source_reference_unique_idx").on(table.familyId, table.kind, table.sourceProvider, table.externalReference).where(sql`${table.externalReference} IS NOT NULL AND ${table.sourceProvider} IS NOT NULL`),
+  check("sports_events_event_type", sql`${table.eventType} IS NULL OR (${table.kind} = 'ufc_card' AND ${table.eventType} IN ('numerado','fight_night','otro'))`),
   check("sports_events_ufc_date", sql`${table.kind} <> 'ufc_card' OR ${table.eventDate} IS NOT NULL`),
   check("sports_events_status", sql`${table.status} IN ('scheduled', 'postponed', 'completed', 'cancelled')`),
   check("sports_events_card_status", sql`${table.cardStatus} IS NULL OR ${table.cardStatus} IN ('upcoming', 'finalized')`),
@@ -381,6 +385,10 @@ export const sportsSyncItemState = pgTable("sports_sync_item_state", {
 ]);
 
 export const sportsFights = pgTable("sports_fights", {
+  predictionClosedAt: timestamp("prediction_closed_at", {withTimezone:true}),
+  firstFighterId: uuid("first_fighter_id").notNull().defaultRandom(),
+  secondFighterId: uuid("second_fighter_id").notNull().defaultRandom(),
+  removedAt: timestamp("removed_at", { withTimezone:true }),
   id: uuid("id").primaryKey().defaultRandom(),
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   eventId: uuid("event_id").notNull().references(() => sportsEvents.id, { onDelete: "restrict" }),
@@ -650,3 +658,41 @@ export const mealIdeas = pgTable("meal_ideas", {
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, table => [index("meal_ideas_family_idx").on(table.familyId, table.archivedAt)]);
+
+export const sportsFootballResults = pgTable("sports_football_results", {
+  eventId: uuid("event_id").primaryKey().references(() => sportsEvents.id, { onDelete: "restrict" }),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  homeGoals: integer("home_goals").notNull(),
+  awayGoals: integer("away_goals").notNull(),
+  source: varchar("source", { length: 1000 }).notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  updatedAt: updatedAt(),
+}, table => [check("sports_football_results_score", sql`${table.homeGoals} >= 0 AND ${table.awayGoals} >= 0`)]);
+
+export const sportsBlockClosures = pgTable("sports_block_closures", {
+  eventId: uuid("event_id").notNull().references(() => sportsEvents.id, {onDelete:"restrict"}),
+  familyId: uuid("family_id").notNull().references(() => families.id, {onDelete:"cascade"}),
+  block: varchar("block", {length:32}).notNull(),
+  closedAt: timestamp("closed_at", {withTimezone:true}).notNull(),
+}, table => [uniqueIndex("sports_block_closures_unique").on(table.eventId,table.block),check("sports_block_closures_block",sql`${table.block} IN ('main','preliminaries','early_preliminaries')`)]);
+export const sportsPredictions = pgTable("sports_predictions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, {onDelete:"cascade"}),
+  eventId: uuid("event_id").notNull().references(() => sportsEvents.id, {onDelete:"restrict"}),
+  fightId: uuid("fight_id").notNull().references(() => sportsFights.id, {onDelete:"restrict"}),
+  memberId: uuid("member_id").notNull().references(() => members.id, {onDelete:"restrict"}),
+  winnerId: uuid("winner_id").notNull(),
+  updatedAt: updatedAt(),
+}, table => [uniqueIndex("sports_predictions_member_fight_unique").on(table.familyId,table.memberId,table.fightId)]);
+export const sportsFightResults = pgTable("sports_fight_results", {
+  fightId: uuid("fight_id").primaryKey().references(() => sportsFights.id, {onDelete:"restrict"}),
+  familyId: uuid("family_id").notNull().references(() => families.id, {onDelete:"cascade"}),
+  eventId: uuid("event_id").notNull().references(() => sportsEvents.id, {onDelete:"restrict"}),
+  outcome: varchar("outcome", {length:16}).notNull().$type<"winner"|"draw"|"no_contest"|"cancelled">(),
+  winnerId: uuid("winner_id"),
+  source: varchar("source", {length:1000}).notNull(),
+  checkedAt: timestamp("checked_at", {withTimezone:true}).notNull(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
+  updatedAt: updatedAt(),
+}, table => [check("sports_fight_results_outcome",sql`(${table.outcome} = 'winner' AND ${table.winnerId} IS NOT NULL) OR (${table.outcome} IN ('draw','no_contest','cancelled') AND ${table.winnerId} IS NULL)`)]);

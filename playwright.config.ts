@@ -8,6 +8,7 @@ if (process.env.CI && !process.env.FAMILY_UTILS_TEST_DATABASE_URL) {
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: /sports-next\.spec\.ts/,
   workers: 1,
   reporter: "list",
   use: { baseURL, trace: "retain-on-failure" },

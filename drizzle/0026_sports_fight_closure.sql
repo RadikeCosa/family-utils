@@ -1,0 +1,1 @@
+ALTER TABLE "sports_fights" ADD COLUMN "prediction_closed_at" timestamp with time zone;

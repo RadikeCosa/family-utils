@@ -104,3 +104,11 @@ aislamiento familiar e importación contra una base PostgreSQL aislada. `npm run
 test:e2e` cubre la vista, la carga/confirmación y la conservación de identidad,
 comentarios, formaciones y eventos ocultos. No apuntar pruebas ni limpieza a la
 base productiva.
+
+## Evolución preparada detrás de banderas
+
+La agenda navegable, el diseño deportivo, los pronósticos UFC y los resultados
+curados están implementados detrás de tres banderas de servidor apagadas por
+defecto. El contrato, las dependencias, la integridad y el procedimiento de
+verificación están en [Entregas A, B y C](deportes-entregas.md). La descripción
+anterior corresponde al flujo que continúa vigente con las banderas apagadas.
