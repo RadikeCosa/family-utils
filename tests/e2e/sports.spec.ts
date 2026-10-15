@@ -77,7 +77,10 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   const bundle = curatedBundle();
   await page.getByLabel("Contenido JSON").fill(JSON.stringify(bundle));
   await page.getByRole("button", { name: "Validar JSON" }).click();
-  await expect(page.getByText("1 partido · 1 cartelera · 1 pelea")).toBeVisible();
+  await expect(page.getByText("1 partido · 1 cartelera · 1 pelea")).toBeVisible().catch(async error => {
+    const message = await page.getByRole("alert").textContent().catch(() => "sin mensaje de validación");
+    throw new Error(`${error.message}\nError de importación: ${message}`);
+  });
   await page.getByRole("button", { name: "Confirmar importación" }).click();
   await expect(page.getByRole("heading", { name: "River Plate vs Boca Juniors" })).toBeVisible();
   await page.getByRole("button", { name: "UFC", exact: true }).click();
