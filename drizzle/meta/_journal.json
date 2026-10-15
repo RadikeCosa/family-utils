@@ -162,6 +162,34 @@
       "when": 1792043338000,
       "tag": "0022_sports_fight_block_length",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792044879189,
+      "tag": "0023_sports_agenda",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792045549715,
+      "tag": "0024_sports_river_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792045774459,
+      "tag": "0025_sports_ufc_predictions",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792046402705,
+      "tag": "0026_sports_fight_closure",
+      "breakpoints": true
     }
   ]
 }

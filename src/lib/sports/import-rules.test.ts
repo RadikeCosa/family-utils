@@ -38,3 +38,21 @@ test("rejects duplicate provider references in a bundle", () => {
   const result = parseSportsCuratedBundle(changed, new Date(checkedAt.getTime() + 60_000));
   assert.equal(result.ok, false);
 });
+
+import { agendaExample } from "./templates.ts";
+test("agenda example validates and location fields distinguish absent from null", () => {
+  const now = new Date();
+  const example = agendaExample(now);
+  const parsed = parseSportsCuratedBundle(example, now);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  const card = parsed.bundle.events.find(event => event.kind === "ufc_card");
+  assert.equal(card?.kind === "ufc_card" && card.location.eventType, "fight_night");
+  const changed = structuredClone(example) as unknown as {events:Array<Record<string,unknown>>};
+  const raw = changed.events[1]; delete raw.city; raw.venue = null;
+  const next = parseSportsCuratedBundle(changed, now);
+  assert.equal(next.ok, true);
+  if(next.ok){const c=next.bundle.events[1];if(c.kind==="ufc_card"){assert.equal(Object.hasOwn(c.location,"city"),false);assert.equal(c.location.venue,null);}}
+  raw.eventType = "unknown";
+  assert.equal(parseSportsCuratedBundle(changed,now).ok,false);
+});

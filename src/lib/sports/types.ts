@@ -26,13 +26,16 @@ export type SportsEvent = {
   automaticFights?: Array<Record<string, unknown>> | null;
   manualFights?: boolean;
   sourceAbsentAt?: string | Date | null;
+  city?: string | null;
+  country?: string | null;
+  eventType?: "numerado" | "fight_night" | "otro" | null;
   predictionCloseMode: string | null;
   createdByMemberId: string;
   updatedByMemberId: string;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
-export type SportsFight = { id: string; familyId: string; eventId: string; boutOrder: number; firstFighter: string; secondFighter: string; boutBlock: string; isMainEvent: boolean; result: string | null; externalReference?: string | null };
+export type SportsFight = { firstFighterId?:string; secondFighterId?:string; removedAt?:string|Date|null; id: string; familyId: string; eventId: string; boutOrder: number; firstFighter: string; secondFighter: string; boutBlock: string; isMainEvent: boolean; result: string | null; externalReference?: string | null };
 export type SportsFormation = { id: string; memberId: string; eventId: string; body: string; updatedAt: string | Date };
-export type SportsPageData = { familyId: string; currentMemberId: string; role: "administrator" | "member"; day: string; week: { start: string; end: string }; noUfcEvent: boolean; formations: SportsFormation[]; football: SportsEvent[]; card: SportsEvent | null; fights: SportsFight[]; members: { id:string; name:string }[]; riverThreadDates: Record<string, string>; priorRiverThreadDates: Record<string, string[]>; sync?: { enabled:boolean; categories:Array<{category:string;enabled:boolean;needed:boolean;eligible:boolean;dueAt:string|null;waitMinutes:number|null;reason:"missing"|"review"|"fresh"|"cooldown"|"leased";lastSuccessAt:string|null;ageDays:number|null;lastError:string|null;stale:boolean}> } };
+export type SportsPageData = { familyId: string; currentMemberId: string; role: "administrator" | "member"; day: string; week: { start: string; end: string }; noUfcEvent: boolean; formations: SportsFormation[]; football: SportsEvent[]; card: SportsEvent | null; fights: SportsFight[]; members: { id:string; name:string }[]; riverThreadDates: Record<string, string>; priorRiverThreadDates: Record<string, string[]>; features?: { agenda:boolean; results:boolean; ufc:boolean }; agenda?: SportsEvent[]; selectedEventId?: string | null; sync?: { enabled:boolean; categories:Array<{category:string;enabled:boolean;needed:boolean;eligible:boolean;dueAt:string|null;waitMinutes:number|null;reason:"missing"|"review"|"fresh"|"cooldown"|"leased";lastSuccessAt:string|null;ageDays:number|null;lastError:string|null;stale:boolean}> } };
 export type SportsComment = { id:string; authorMemberId:string; body:string; version:number; createdAt:string | Date; updatedAt:string | Date };
