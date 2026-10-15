@@ -28,11 +28,20 @@ independiente pendiente; esa advertencia aparece en la vista previa.
 
 ## Presentación y datos familiares
 
-La página mantiene las pestañas River y UFC. River muestra el próximo partido;
-UFC muestra la cartelera de la semana argentina actual y usa la fecha oficial
-publicada, con horarios expresados para Argentina. Comentarios y formaciones
-continúan disponibles. Ocultar un evento lo saca de la cartelera visible pero
-no borra sus datos asociados.
+La página mantiene las pestañas River y UFC y permite recorrer todos los
+eventos próximos y anteriores guardados, con enlaces estables por identificador.
+Abre el próximo disponible; cada horario se expresa en Argentina, en 24 horas.
+Comentarios y formaciones permanecen asociados al evento elegido y los
+borradores se conservan durante la navegación. Ocultar un evento lo saca de la
+cartelera visible pero no borra sus datos asociados.
+
+UFC permite elegir ganadores hasta el cierre de cada bloque. Las elecciones
+ajenas permanecen ocultas hasta entonces, incluso para administración. Un
+acierto suma un punto en la tabla de esa cartelera. No hay pronósticos River ni
+clasificación acumulada. Los resultados de ambos deportes se cargan mediante
+JSON curado, con vista previa y confirmación, desde «Administrar», cerrado por
+defecto. Contratos, integridad, publicación y reversión están documentados en
+[Agenda, resultados y pronósticos](deportes-entregas.md).
 
 Las correcciones de campos y las peleas protegidas tienen prioridad frente a
 datos automáticos posteriores. Los eventos futuros que dejan de aparecer en

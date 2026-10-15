@@ -5,7 +5,24 @@ experiencia respeten la estructura de la aplicación y la conservación de los
 datos familiares. Deportes se renueva con datos revisados y curados en el chat;
 no consulta Google ni proveedores externos desde la app.
 
-## Estructura actual
+## Pantalla publicada el 15 de octubre de 2026
+
+La agenda navegable, los resultados curados y los pronósticos UFC están activos
+en producción. `AgendaApp.tsx` y `agenda.module.css` presentan la página clara
+con ficha oscura, acentos rojos, selector compacto de eventos próximos y
+anteriores y enlaces estables por identificador. `UfcPredictions.tsx` presenta
+elecciones por pelea, cierre por bloque y tabla por cartelera.
+
+«Administrar» queda cerrado por defecto y solo se muestra a administradores.
+`CuratedImporter.tsx` separa agenda y resultados, con ejemplo, copia, plantilla,
+archivo o texto pegado, vista previa y confirmación. La autorización se valida
+también en el servidor. Los borradores de conversación y formación se conservan
+por evento durante la navegación. Se usan las fuentes y el marco de Family Utils.
+
+Los contratos completos, reglas de integridad, verificación, despliegues y
+reversión están en [Agenda, resultados y pronósticos](deportes-entregas.md).
+
+## Pantalla anterior: referencia para banderas apagadas
 
 - `src/app/deportes/page.tsx` autentica y obtiene los datos iniciales en el
   servidor.
@@ -105,10 +122,10 @@ test:e2e` cubre la vista, la carga/confirmación y la conservación de identidad
 comentarios, formaciones y eventos ocultos. No apuntar pruebas ni limpieza a la
 base productiva.
 
-## Evolución preparada detrás de banderas
+## Banderas de servidor
 
 La agenda navegable, el diseño deportivo, los pronósticos UFC y los resultados
-curados están implementados detrás de tres banderas de servidor apagadas por
-defecto. El contrato, las dependencias, la integridad y el procedimiento de
+curados usan tres banderas de servidor apagadas por defecto en el código y
+activadas explícitamente en producción el 15 de octubre de 2026. El contrato, las dependencias, la integridad y el procedimiento de
 verificación están en [Entregas A, B y C](deportes-entregas.md). La descripción
 anterior corresponde al flujo que continúa vigente con las banderas apagadas.

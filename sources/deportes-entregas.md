@@ -1,6 +1,6 @@
 # Deportes: agenda, resultados y pronósticos
 
-Implementación del 15 de octubre de 2026. Publicación autorizada por el usuario después de completar las comprobaciones. El registro operativo de publicación se agrega al final de este documento. La carga sigue siendo curada desde el chat; no se habilitan consultas automáticas a proveedores. El endpoint legado de sincronización responde desactivado aunque existan ajustes anteriores habilitados.
+Implementación del 15 de octubre de 2026. Publicación autorizada por el usuario después de completar las comprobaciones. Las tres entregas están activas en producción; el registro operativo está al final de este documento. La carga sigue siendo curada desde el chat; no se habilitan consultas automáticas a proveedores. El endpoint legado de sincronización responde desactivado aunque existan ajustes anteriores habilitados.
 
 ## Activación por etapas
 
@@ -80,3 +80,29 @@ Se verificaron las entregas en orden, antes de iniciar la siguiente:
 Comandos: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:sports-next`. La suite nueva exige `FAMILY_UTILS_TEST_DATABASE_URL`; no se ejecuta sin una base aislada. Las pruebas de rutas existentes se ejecutaron también sobre PostgreSQL descartable.
 
 Las migraciones se ensayaron en la rama Neon `sports-ux-rehearsal-2026-10-15`, creada desde producción, con respaldo previo y verificación de hashes. Expira el 17 de octubre de 2026 a las 09:00 de Argentina. Las pruebas funcionales usan familias ficticias y no modifican producción. Se generó un respaldo productivo actualizado y se comprobó su restauración en una base local separada: conserva los 6 eventos y las 35 peleas. La autorización de publicación incluye aplicar las migraciones y activar las tres entregas por etapas.
+
+
+## Registro de publicación: 15 de octubre de 2026
+
+- [PR de implementación #40](https://github.com/RadikeCosa/family-utils/pull/40), fusionado a las 04:19 de Argentina. Commit productivo: `fb0343d5d0ba92e184442304c330de5e44d91536`.
+- [CI del PR](https://github.com/RadikeCosa/family-utils/actions/runs/38697273491): aprobado. También se comprobó la integración de la rama principal.
+- Verificación local completa: tipos, lint y compilación; 90 pruebas de reglas/base, 58 de rutas, 111 recorridos generales, 12 de Deportes en Chromium móvil/escritorio y WebKit, y 3 de accesibilidad. Ninguna omitida en la ejecución final.
+- Neon: proyecto `green-meadow-92440811`, rama `production` (`br-lucky-bird-b5jop51y`). Migraciones hasta `0026` aplicadas mediante conexión directa; verificados los 27 registros de migración y sus hashes.
+- Respaldo previo: `sports-production-2026-10-15-before.dump`, local, fuera de Git y con permisos `0600`, 198631 bytes. SHA-256: `b5e8db720e2f2ba5d3e7e2afdf45809aa719e53cb16de69aff5b8b2f5d9f5935`. Se restauró correctamente en PostgreSQL 18 aislado. No contiene una copia de las nuevas tablas posteriores a la publicación.
+- Antes y después de migrar y publicar: 6 eventos y 35 peleas, con los mismos identificadores; comentarios y formaciones conservados. Las comprobaciones productivas no crearon elecciones ni resultados ficticios. La vista previa de River se verificó sin confirmar escrituras.
+
+Los despliegues se prepararon con configuración de producción sin mover el dominio, se verificaron y se promovieron en orden:
+
+| Etapa | Despliegue comprobado | Configuración |
+| --- | --- | --- |
+| A | `dpl_ELvLXagWoFbYDtpPEJSB6HGK8bMS` | Agenda activa; resultados y UFC bloqueados |
+| B | `dpl_J3mrXYCjzjRnGU4yx4VHQGYV7hGd` | Agenda y resultados River activos; UFC bloqueada |
+| C | `dpl_HM2aeU7nM4B8tfkvtger8cfSXQk9` | Las tres entregas activas |
+
+[Deportes en producción](https://family-utils-umber.vercel.app/deportes). Se recorrieron los tres partidos River y las tres carteleras UFC, incluidos los tres bloques de UFC 333, y se comprobaron cierres, tabla parcial y acceso restringido. `SPORTS_ENABLED`, `SPORTS_AGENDA_ENABLED`, `SPORTS_RIVER_RESULTS_ENABLED` y `SPORTS_UFC_PREDICTIONS_ENABLED` están en `true`; `SPORTS_AUTO_SYNC_ENABLED` permanece en `false`.
+
+### Reversión operativa
+
+Ante una incidencia, apagar primero la bandera de la funcionalidad afectada y preparar un nuevo despliegue de **este mismo código** con la configuración corregida. Para volver a la pantalla anterior, apagar A (sus dependencias B y C quedan bloqueadas); mantener la sincronización automática apagada. Los cambios de configuración requieren un nuevo despliegue para tener efecto. Verificarlo antes de promoverlo.
+
+No revertir las migraciones ni eliminar tablas, elecciones o resultados como parte de una reversión visual. Los controles de identidad y resultados deben conservarse aunque las banderas estén apagadas. El respaldo se reserva para recuperación de datos, con revisión del alcance antes de restaurarlo sobre producción; la restauración ya ensayada fue únicamente en una base descartable.
