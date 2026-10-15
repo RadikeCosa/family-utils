@@ -104,12 +104,12 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   for (const event of moved.events) {
     event.source.checkedAt = checkedAt;
     event.eventDate = newDate;
-    event.externalReference += "-moved";
+    event.externalReference = event.kind === "football_match" ? "991235" : `${event.externalReference}-moved`;
     if (event.kind === "ufc_card") { event.preliminaryDate = newDate; event.mainCardDate = newDate; }
   }
   const imported = await page.request.post(`${baseURL}/api/sports/import`, { headers: { Origin: baseURL }, data: { mode: "import", bundle: moved } });
   expect(imported.status(), await imported.text()).toBe(200);
-  const riverAfter = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match' AND external_reference='991234-moved'", [familyId])).rows[0];
+  const riverAfter = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match' AND external_reference='991235'", [familyId])).rows[0];
   const cardAfter = (await pool.query("SELECT id,hidden FROM sports_events WHERE family_id=$1 AND kind='ufc_card' AND external_reference='ufc-test-night-moved'", [familyId])).rows[0];
   expect(riverAfter.id).toBe(river.id);
   expect(cardAfter.id).toBe(card.id);
