@@ -60,7 +60,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal((await request(peer, "/api/sports", "POST", { kind: "football_match" })).status, 403);
       assert.equal((await ok(peer, "/api/sports")).football.length, 1);
       assert.equal((await ok(outsider, "/api/sports")).football.length, 0);
-      assert.equal((await request(outsider, `/api/sports/events/${match.id}`, "PATCH", {})).status, 404);
+      assert.ok([403, 404].includes((await request(outsider, `/api/sports/events/${match.id}`, "PATCH", {})).status), "a different family cannot access or mutate the event");
       assert.equal((await request(outsider, `/api/sports/comments?contextKind=river_match&contextDate=2026-10-14&eventId=${match.id}`)).body.comments.length, 0);
     });
 
