@@ -146,7 +146,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(page.football[0].venue, "Monumental");
       assert.equal(page.formations.length, 1);
       assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&eventId=${match.id}`)).comments.length, 1);
-      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => ["23503", "2BP01"].includes(error.code));
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => error.message.includes("violates RESTRICT setting"));
       await assert.rejects(pool.query("INSERT INTO sports_formations(family_id,event_id,member_id,body) VALUES($1,$2,$3,'duplicate')", [familyId,match.id,owner.id]), error => error.code === "23505");
       assert.equal((await request(peer, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" })).status, 403);
       await ok(admin, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" });
@@ -168,7 +168,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(page.card.id, card.id);
       assert.equal(page.fights.length, 1);
       await ok(owner, "/api/sports/comments", "POST", { contextKind: "ufc_card", contextEventId: card.id, body: "La estelar" });
-      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => ["23503", "2BP01"].includes(error.code));
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => error.message.includes("violates RESTRICT setting"));
       // Multiple cards coexist; creating a future card does not remove this week's card/comments.
       const future = new Date(`${contextDate}T12:00:00Z`); future.setUTCDate(future.getUTCDate() + 14);
       await ok(admin, "/api/sports", "POST", { ...data, eventDate: future.toISOString().slice(0,10), title: "Otra semana" });
