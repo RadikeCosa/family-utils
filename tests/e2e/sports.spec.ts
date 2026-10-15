@@ -42,8 +42,9 @@ test("Deportes manual: agenda, hilo diario, cartelera UFC y conversación en el 
   await expect(page.getByText("A confirmar")).toBeVisible();
   await page.getByLabel("Solo River").check();
   await page.getByLabel("Solo River").uncheck();
-  await page.getByLabel("Escribí un comentario").fill("Vamos River");
-  await page.getByRole("button", { name: "Comentar" }).click();
+  const dailyThread = page.locator('section[aria-label="Conversación familiar"]').last();
+  await dailyThread.getByLabel("Escribí un comentario").fill("Vamos River");
+  await dailyThread.getByRole("button", { name: "Comentar" }).click();
   await expect(page.getByText("Vamos River")).toBeVisible();
 
   await page.getByRole("button", { name: "UFC" }).click();
@@ -57,8 +58,9 @@ test("Deportes manual: agenda, hilo diario, cartelera UFC y conversación en el 
   await page.getByRole("button", { name: "Publicar cartelera" }).click();
   await expect(page.getByRole("heading", { name: "UFC Fight Night" })).toBeVisible();
   await expect(page.getByText("Cartelera principal")).toBeVisible();
-  await page.getByLabel("Escribí un comentario").fill("Gran estelar");
-  await page.getByRole("button", { name: "Comentar" }).click();
+  const eventThread = page.locator('section[aria-label="Conversación familiar"]');
+  await eventThread.getByLabel("Escribí un comentario").fill("Gran estelar");
+  await eventThread.getByRole("button", { name: "Comentar" }).click();
   await expect(page.getByText("Gran estelar")).toBeVisible();
   const layout = await page.evaluate(() => ({ overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, tab: document.querySelector("nav[aria-label='Deportes'] button")?.getBoundingClientRect().height }));
   expect(layout.overflow).toBeLessThanOrEqual(1);
