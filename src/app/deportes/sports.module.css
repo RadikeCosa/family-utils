@@ -7,3 +7,46 @@
 .eventCard>.actions{grid-column:1/-1;justify-content:flex-end}.eventDetails{min-width:0;overflow-wrap:anywhere}.fights li{flex-wrap:wrap}.comments textarea{font-size:16px}@media(max-width:600px){.eventCard>.actions{justify-content:flex-start}}
 
 .eventCard{grid-template-columns:minmax(0,1fr)}.eventTime{font-size:18px;overflow-wrap:anywhere}.eventCard>.actions{justify-content:flex-start}
+
+.syncBar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:1rem 0;padding:1rem 1.15rem;border:1px solid var(--line,#d9dce3);border-radius:1rem;background:var(--surface,#fff)}
+.syncBar>div{display:grid;gap:.25rem}.syncBar small{color:var(--muted,#667085)}
+@media(max-width:560px){.syncBar{align-items:flex-start;flex-direction:column}}
+
+.importPanel {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--line, #d7dee7);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.importPanel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.importPanel label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.importPanel textarea {
+  width: 100%;
+  resize: vertical;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.importPanel input[type="file"] {
+  max-width: 100%;
+}
+
+.importPreview {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--soft, #f4f7fa);
+}

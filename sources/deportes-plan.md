@@ -1,31 +1,50 @@
-# Deportes: River y UFC manuales
+# Deportes: alcance implementado
 
-La pantalla tiene dos pestañas, River y UFC. Funciona con carga manual y no hace llamadas externas. Requiere migraciones hasta `0017_sports_river_weekly` y `SPORTS_ENABLED=true`; la bandera sigue apagada por defecto.
+## Operación actual
 
-## River
+La cartelera se mantiene con archivos JSON de datos revisados y curados en el
+chat. La app no consulta Google, ESPN, UFC ni otras fuentes por su cuenta. No
+hay sondeo ni tarea programada. La documentación de la pantalla y del flujo de
+carga está en [Deportes: funcionamiento y guía UX/UI](deportes-ux-ui.md).
 
-Se muestra el primer partido no cancelado ni oculto con fecha argentina mayor o igual a hoy. El partido de hoy permanece hasta cambiar el día argentino. Los pendientes sin fecha van después de los fechados; los finalizados sin fecha se excluyen. La ficha incluye rival, cancha, torneo, fecha, hora y resultado opcional.
+Un administrador pega el JSON o lo selecciona como archivo, valida una vista
+previa y confirma la importación. La vista previa no escribe. La API valida
+permisos y contenido, y actualiza River y UFC por separado en transacciones
+breves. Si falla una categoría, se conserva la última información válida para
+esa categoría. Los IDs, comentarios, formaciones, eventos ocultos y correcciones
+manuales se conservan al actualizar. No se ofrecen formularios para crear o
+editar eventos y peleas.
 
-Cada integrante puede comentar y guardar una formación libre de hasta 500 caracteres, única por integrante y partido. `PUT /api/sports/events/:id/formation` reemplaza la propia; `DELETE` elimina únicamente la propia. Los comentarios de River se consultan por evento sin requerir fecha; las fechas anteriores siguen almacenadas y se incluyen en esa conversación.
+La carga conserva procedencia y fecha de revisión. Se rechazan datos vencidos,
+referencias duplicadas, fuentes fuera de la lista HTTPS permitida, horizontes
+no completos, carteleras UFC incompletas o peleas inválidas. Cuando cambia una
+referencia externa, solo se reutiliza un evento equivalente único dentro de
+siete días; si la coincidencia es ambigua, la categoría no se importa.
 
-## UFC
+La información actual preparada para importar está en
+[`deportes-carga-2026-10-15.json`](deportes-carga-2026-10-15.json). La cartelera
+UFC del 31 de octubre tiene validación oficial completa y verificación
+independiente pendiente; esa advertencia aparece en la vista previa.
 
-Se consideran eventos cuya fecha oficial cae en la semana argentina actual, de lunes a domingo. Se elige el primero con fecha oficial mayor o igual a hoy; si no queda ninguno, el último de esa semana. Se desempata por horario y por identificador. No se usa `is_current` para seleccionar ni se finaliza una cartelera al cargar otra.
+## Presentación y datos familiares
 
-La fecha oficial se carga directamente. Los horarios de preliminares y principal usan cada uno su propia fecha argentina. Los instantes se guardan en UTC. Una fecha oficial del sábado puede tener cartelera principal el domingo en Argentina.
+La página mantiene las pestañas River y UFC. River muestra el próximo partido;
+UFC muestra la cartelera de la semana argentina actual y usa la fecha oficial
+publicada, con horarios expresados para Argentina. Comentarios y formaciones
+continúan disponibles. Ocultar un evento lo saca de la cartelera visible pero
+no borra sus datos asociados.
 
-Solo un administrador (adulto en esta familia) puede marcar «Sin evento esta semana», mediante `PUT /api/sports/week`. Esa marca pertenece a una semana, tiene prioridad sobre las carteleras y no se hereda el lunes siguiente. Cargar o editar una cartelera desactiva la marca de la semana de su fecha oficial. Sin marca ni cartelera se muestra «No pudimos confirmar la cartelera».
+Las correcciones de campos y las peleas protegidas tienen prioridad frente a
+datos automáticos posteriores. Los eventos futuros que dejan de aparecer en
+una actualización completa se marcan como ausentes, no se borran. Una respuesta
+vacía no elimina datos ni equivale a confirmar que no hay evento.
 
-## Conservación y permisos
+## Automatización futura
 
-Reprogramar edita el mismo evento: no modifica comentarios ni formaciones. `PATCH /api/sports/events/:id` con `action=hide` lo oculta sin borrar datos; no existe DELETE para eventos. Las referencias de comentarios, peleas y formaciones impiden borrar físicamente un evento con contenido asociado. Cancelados y ocultos no se seleccionan. Se conservan registros anteriores, sin pantalla de historial.
-
-Carga, edición, ocultamiento y marca semanal requieren administración. Cada integrante administra su formación; se mantienen los permisos de autor/moderación de comentarios y el aislamiento por familia.
-
-## Automatización opcional pendiente
-
-[Resultado de la prueba de proveedores](deportes-proveedores.md): no hay categorías aprobadas. API-Football/MMA carecen de credenciales; las consultas gratuitas realizadas a TheSportsDB no devolvieron la muestra completa ni horarios UFC verificables. Por eso no se añade una integración incompleta a la app.
-
-Una futura integración requiere aprobación de cobertura y términos, bandera independiente apagada por defecto y claves solo en el servidor. El modelo ya conserva `manually_edited` y `external_reference` (varchar de 200 caracteres). Esa entrega añadirá proveedor, unicidad por familia/proveedor/referencia y una fila de sincronización por familia.
-
-Comportamiento acordado para esa entrega: devolver primero lo guardado, consultar después del renderizado con timeout de 5 segundos, registrar el intento mediante actualización condicional antes de llamar, reutilizar éxitos 60 minutos, reintentar fallos tras 10 minutos y limitar «Actualizar» a un intento por minuto. Respetar ediciones manuales y permitir a adultos volver a automático. Una API vacía no genera «No hay evento»; ante fallos se conservan datos y se muestra antigüedad. Sin cron ni pronósticos.
+La infraestructura de consulta automática está desactivada y no forma parte
+del flujo de carga vigente. No activar interruptores ni agregar consultas a
+proveedores hasta confirmar una fuente cuyo uso automatizado esté permitido.
+Los límites de uso gratuito, reglas de integridad, flags y los scripts de
+prueba/limpieza se documentan en las notas de proveedores y en sus propios
+archivos; la limpieza de pruebas debe ejecutarse con dry-run primero y sobre
+una base aislada.

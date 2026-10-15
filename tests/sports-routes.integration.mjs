@@ -54,6 +54,52 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
   }
   try {
     const familyId = await family(), owner = await identity(familyId), peer = await identity(familyId), admin = await identity(familyId, "administrator"), outsider = await identity(await family());
+    await t.test("curated JSON import is admin-only, idempotent and preserves event-linked family data", async () => {
+      const importFamily = await family(), importer = await identity(importFamily, "administrator"), participant = await identity(importFamily);
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const throughDate = new Date(`${today}T12:00:00Z`); throughDate.setUTCDate(throughDate.getUTCDate() + 20);
+      const through = throughDate.toISOString().slice(0, 10), checkedAt = new Date().toISOString();
+      const movedDate = new Date(`${today}T12:00:00Z`); movedDate.setUTCDate(movedDate.getUTCDate() + 1);
+      const bundle = {
+        schemaVersion: 1, status: "curated", checkedAt, timezone: "America/Argentina/Buenos_Aires",
+        curation: { completeHorizon: { river: { from: today, through, complete: true }, ufc: { from: today, through, complete: true } } },
+        events: [
+          { kind: "football_match", sourceProvider: "espn", externalReference: "123456", title: "River Plate vs Boca Juniors", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate: today, startTime: "20:00", venue: "Monumental", status: "scheduled", source: { primary: "https://www.ligaprofesional.ar/", checkedAt } },
+          { kind: "ufc_card", sourceProvider: "ufc_official", externalReference: "ufc-test-card", title: "UFC Test: Alpha vs Beta", eventDate: today, preliminaryDate: today, preliminaryTime: "18:00", mainCardDate: today, mainCardTime: "21:00", fights: [{ firstFighter: "Alpha", secondFighter: "Beta", boutBlock: "main", isMainEvent: true }], source: { primary: "https://www.ufc.com/events", checkedAt, validation: { officialCardComplete: true, officialFightCount: 1, independentCrossCheck: "passed" } } },
+        ],
+      };
+      assert.equal((await request(participant, "/api/sports/import", "POST", { mode: "preview", bundle })).status, 403);
+      const preview = await ok(importer, "/api/sports/import", "POST", { mode: "preview", bundle });
+      assert.equal(preview.summary.riverMatches, 1);
+      assert.equal(preview.summary.ufcCards, 1);
+      const result = await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      assert.equal(result.river[0], "inserted");
+      assert.equal(result.ufc[0], "inserted");
+      let river = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match' AND external_reference='123456'", [importFamily])).rows[0];
+      let ufc = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='ufc_card' AND external_reference='ufc-test-card'", [importFamily])).rows[0];
+      await ok(participant, `/api/sports/events/${river.id}/formation`, "PUT", { body: "4-3-3" });
+      await ok(participant, "/api/sports/comments", "POST", { contextKind: "river_match", contextEventId: river.id, body: "Conservar esta charla" });
+      await ok(importer, `/api/sports/events/${ufc.id}`, "PATCH", { action: "hide" });
+
+      bundle.checkedAt = new Date(Date.now() + 1_000).toISOString();
+      for (const event of bundle.events) {
+        event.source.checkedAt = bundle.checkedAt;
+        event.eventDate = movedDate.toISOString().slice(0, 10);
+        if (event.kind === "football_match") { event.externalReference = "123457"; event.title = "River Plate vs Boca Juniors reprogramado"; }
+        else { event.externalReference = "ufc-test-card-moved"; event.title = "UFC Test reprogramado: Alpha vs Beta"; event.preliminaryDate = event.eventDate; event.mainCardDate = event.eventDate; }
+      }
+      const updated = await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      assert.equal(updated.river[0], "updated");
+      assert.equal(updated.ufc[0], "updated");
+      const riverAfter = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match' AND external_reference='123457'", [importFamily])).rows[0];
+      const ufcAfter = (await pool.query("SELECT id,hidden FROM sports_events WHERE family_id=$1 AND kind='ufc_card' AND external_reference='ufc-test-card-moved'", [importFamily])).rows[0];
+      assert.equal(riverAfter.id, river.id);
+      assert.equal(ufcAfter.id, ufc.id);
+      assert.equal(ufcAfter.hidden, true);
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_formations WHERE event_id=$1", [river.id])).rows[0].count, 1);
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_comments WHERE context_event_id=$1", [river.id])).rows[0].count, 1);
+    });
+
     await t.test("manual football agenda is private and members cannot edit it", async () => {
       assert.equal((await request(null, "/api/sports")).status, 403);
       const match = await ok(admin, "/api/sports", "POST", { kind: "football_match", title: "River Plate vs Boca", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()), startTime: null });
@@ -100,7 +146,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(page.football[0].venue, "Monumental");
       assert.equal(page.formations.length, 1);
       assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&eventId=${match.id}`)).comments.length, 1);
-      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => error.code === "23503");
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => error.message.includes("violates RESTRICT setting"));
       await assert.rejects(pool.query("INSERT INTO sports_formations(family_id,event_id,member_id,body) VALUES($1,$2,$3,'duplicate')", [familyId,match.id,owner.id]), error => error.code === "23505");
       assert.equal((await request(peer, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" })).status, 403);
       await ok(admin, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" });
@@ -122,7 +168,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(page.card.id, card.id);
       assert.equal(page.fights.length, 1);
       await ok(owner, "/api/sports/comments", "POST", { contextKind: "ufc_card", contextEventId: card.id, body: "La estelar" });
-      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => error.code === "23503");
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => error.message.includes("violates RESTRICT setting"));
       // Multiple cards coexist; creating a future card does not remove this week's card/comments.
       const future = new Date(`${contextDate}T12:00:00Z`); future.setUTCDate(future.getUTCDate() + 14);
       await ok(admin, "/api/sports", "POST", { ...data, eventDate: future.toISOString().slice(0,10), title: "Otra semana" });

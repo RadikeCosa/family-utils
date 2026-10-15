@@ -59,7 +59,7 @@ export async function loadSportsData(actor: MemberContext) {
   const week = sportsWeek(now);
   const db = getDb();
   const [events, familyMembers, weeks] = await Promise.all([
-    db.select().from(sportsEvents).where(and(eq(sportsEvents.familyId, actor.familyId), eq(sportsEvents.hidden, false), or(isNull(sportsEvents.eventDate), gte(sportsEvents.eventDate, week.start)))),
+    db.select().from(sportsEvents).where(and(eq(sportsEvents.familyId, actor.familyId), eq(sportsEvents.hidden, false), isNull(sportsEvents.sourceAbsentAt), or(isNull(sportsEvents.eventDate), gte(sportsEvents.eventDate, week.start)))),
     db.select({ id: members.id, name: members.name }).from(members).where(and(eq(members.familyId, actor.familyId), isNull(members.archivedAt))).orderBy(asc(members.createdAt)),
     db.select().from(sportsWeeks).where(and(eq(sportsWeeks.familyId, actor.familyId), eq(sportsWeeks.weekStart, week.start))),
   ]);
@@ -99,7 +99,7 @@ export async function createSportsEvent(request: Request) {
       const input = ufcCardInput(body);
       if (!input) fail(400, "INVALID", "Completá el evento y al menos una pelea; elegí exactamente una estelar.");
       await clearNoUfcEvent(tx, actor, input.eventDate);
-      const { rows: [event] } = await tx.query("INSERT INTO sports_events(family_id,kind,title,event_date,preliminary_starts_at,main_card_starts_at,card_status,is_current,manually_edited,prediction_close_mode,created_by_member_id,updated_by_member_id) VALUES($1,'ufc_card',$2,$3,$4,$5,'upcoming',true,true,NULL,$6,$6) RETURNING id", [actor.familyId,input.title,input.eventDate,input.preliminaryStartsAt,input.mainCardStartsAt,actor.memberId]);
+      const { rows: [event] } = await tx.query("INSERT INTO sports_events(family_id,kind,title,event_date,early_preliminaries_starts_at,preliminary_starts_at,main_card_starts_at,card_status,is_current,manually_edited,prediction_close_mode,created_by_member_id,updated_by_member_id) VALUES($1,'ufc_card',$2,$3,$4,$5,$6,'upcoming',true,true,NULL,$7,$7) RETURNING id", [actor.familyId,input.title,input.eventDate,input.earlyPreliminariesStartsAt,input.preliminaryStartsAt,input.mainCardStartsAt,actor.memberId]);
       for (const fight of input.fights) await tx.query("INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event) VALUES($1,$2,$3,$4,$5,$6,$7)", [actor.familyId,event.id,fight.boutOrder,fight.firstFighter,fight.secondFighter,fight.boutBlock,fight.isMainEvent]);
       await record(tx,actor,"sports_event",event.id,"created",{ ...input, fights: input.fights });
       await tx.query("COMMIT"); return NextResponse.json({ id:event.id },{ status:201 });
@@ -121,6 +121,17 @@ export async function updateSportsEvent(request: Request, eventId: string) {
     const member = await activeActor(tx,actor); requireAdmin(member);
     const { rows: [current] } = await tx.query("SELECT * FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE", [eventId,actor.familyId]);
     if (!current) fail(404,"NOT_FOUND","No encontramos este evento.");
+    if (body.action === "reset_field") {
+      const fieldMap:Record<string,{column:string;key:string}>={title:{column:"title",key:"title"},competition:{column:"competition",key:"competition"},firstParticipant:{column:"first_participant",key:"firstParticipant"},secondParticipant:{column:"second_participant",key:"secondParticipant"},eventDate:{column:"event_date",key:"eventDate"},startsAt:{column:"starts_at",key:"startsAt"},venue:{column:"venue",key:"venue"},channel:{column:"channel",key:"channel"},status:{column:"status",key:"status"},result:{column:"result",key:"result"},earlyPreliminariesStartsAt:{column:"early_preliminaries_starts_at",key:"earlyPreliminariesStartsAt"},preliminaryStartsAt:{column:"preliminary_starts_at",key:"preliminaryStartsAt"},mainCardStartsAt:{column:"main_card_starts_at",key:"mainCardStartsAt"}};
+      const field=typeof body.field==="string"?fieldMap[body.field]:undefined;const automatic=current.automatic_data??{};if(!field||automatic[field.key]===undefined)fail(400,"INVALID","No se puede recuperar el dato automático.");
+      const overrides=(current.manual_overrides??[]).filter((key:string)=>key!==field.key);await tx.query(`UPDATE sports_events SET ${field.column}=$1,manual_overrides=$2,manually_edited=$3,updated_by_member_id=$4,updated_at=now() WHERE id=$5 AND family_id=$6`,[automatic[field.key],JSON.stringify(overrides),overrides.length>0||current.manual_fights,actor.memberId,eventId,actor.familyId]);await record(tx,actor,"sports_event",eventId,"reset_automatic_field",{field:field.key});await tx.query("COMMIT");return NextResponse.json({id:eventId,field:field.key});
+    }
+    if(body.action==="reset_fights"){
+      if(current.kind!=="ufc_card"||!Array.isArray(current.automatic_fights))fail(400,"INVALID","No hay una cartelera automática para recuperar.");
+      const input=ufcCardInput({title:current.title,eventDate:current.event_date,fights:current.automatic_fights});if(!input)fail(409,"CONFLICT","La cartelera automática guardada ya no es válida.");
+      await tx.query("DELETE FROM sports_fights WHERE event_id=$1 AND family_id=$2",[eventId,actor.familyId]);for(const fight of input.fights)await tx.query("INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event) VALUES($1,$2,$3,$4,$5,$6,$7)",[actor.familyId,eventId,fight.boutOrder,fight.firstFighter,fight.secondFighter,fight.boutBlock,fight.isMainEvent]);
+      const overrides=current.manual_overrides??[];await tx.query("UPDATE sports_events SET manual_fights=false,manually_edited=$1,updated_by_member_id=$2,updated_at=now() WHERE id=$3 AND family_id=$4",[overrides.length>0,actor.memberId,eventId,actor.familyId]);await record(tx,actor,"sports_event",eventId,"reset_automatic_fights",{});await tx.query("COMMIT");return NextResponse.json({id:eventId,fightsReset:true});
+    }
     if (body.action === "hide") {
       await tx.query("UPDATE sports_events SET hidden=true,manually_edited=true,updated_by_member_id=$1,updated_at=now() WHERE id=$2 AND family_id=$3", [actor.memberId,eventId,actor.familyId]);
       await record(tx,actor,"sports_event",eventId,"hidden",{});
@@ -130,15 +141,16 @@ export async function updateSportsEvent(request: Request, eventId: string) {
     if (current.kind === "football_match") {
       const input = footballEventInput(body);
       if (!input) fail(400,"INVALID","Completá los equipos y el torneo; revisá la fecha y el horario si los ingresaste.");
-      await tx.query("UPDATE sports_events SET title=$1,competition=$2,first_participant=$3,second_participant=$4,event_date=$5,starts_at=$6,channel=$7,status=$8,result=$9,manually_edited=true,updated_by_member_id=$10,updated_at=now() WHERE id=$11 AND family_id=$12", [input.title,input.competition,input.firstParticipant,input.secondParticipant,input.eventDate,input.startsAt,input.channel,input.status,input.result,actor.memberId,eventId,actor.familyId]);
-      await tx.query("UPDATE sports_events SET venue=$1 WHERE id=$2 AND family_id=$3", [input.venue,eventId,actor.familyId]);
+      const values:Record<string,unknown>={title:input.title,competition:input.competition,firstParticipant:input.firstParticipant,secondParticipant:input.secondParticipant,eventDate:input.eventDate,startsAt:input.startsAt?.toISOString()??null,channel:input.channel,status:input.status,result:input.result,venue:input.venue};const previous=current.automatic_data??{};const overrides=Object.keys(values).filter(key=>previous[key]!==undefined&&String(previous[key]??"")!==String(values[key]??""));
+      await tx.query("UPDATE sports_events SET title=$1,competition=$2,first_participant=$3,second_participant=$4,event_date=$5,starts_at=$6,channel=$7,status=$8,result=$9,venue=$10,manual_overrides=$11,manually_edited=$12,updated_by_member_id=$13,updated_at=now() WHERE id=$14 AND family_id=$15", [input.title,input.competition,input.firstParticipant,input.secondParticipant,input.eventDate,input.startsAt,input.channel,input.status,input.result,input.venue,JSON.stringify(overrides),overrides.length>0||!current.source_provider,actor.memberId,eventId,actor.familyId]);
       await record(tx,actor,"sports_event",eventId,"edited",input);
     } else {
 
       const input = ufcCardInput(body);
       if (!input) fail(400,"INVALID","Completá el evento y al menos una pelea; elegí exactamente una estelar.");
       await clearNoUfcEvent(tx, actor, input.eventDate);
-      await tx.query("UPDATE sports_events SET title=$1,event_date=$2,preliminary_starts_at=$3,main_card_starts_at=$4,manually_edited=true,updated_by_member_id=$5,updated_at=now() WHERE id=$6 AND family_id=$7", [input.title,input.eventDate,input.preliminaryStartsAt,input.mainCardStartsAt,actor.memberId,eventId,actor.familyId]);
+      const values:Record<string,unknown>={title:input.title,eventDate:input.eventDate,earlyPreliminariesStartsAt:input.earlyPreliminariesStartsAt?.toISOString()??null,preliminaryStartsAt:input.preliminaryStartsAt?.toISOString()??null,mainCardStartsAt:input.mainCardStartsAt?.toISOString()??null};const previous=current.automatic_data??{};const overrides=Object.keys(values).filter(key=>previous[key]!==undefined&&String(previous[key]??"")!==String(values[key]??""));
+      await tx.query("UPDATE sports_events SET title=$1,event_date=$2,early_preliminaries_starts_at=$3,preliminary_starts_at=$4,main_card_starts_at=$5,manual_overrides=$6,manual_fights=true,manually_edited=true,updated_by_member_id=$7,updated_at=now() WHERE id=$8 AND family_id=$9", [input.title,input.eventDate,input.earlyPreliminariesStartsAt,input.preliminaryStartsAt,input.mainCardStartsAt,JSON.stringify(overrides),actor.memberId,eventId,actor.familyId]);
       await tx.query("DELETE FROM sports_fights WHERE event_id=$1 AND family_id=$2", [eventId,actor.familyId]);
       for (const fight of input.fights) await tx.query("INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event) VALUES($1,$2,$3,$4,$5,$6,$7)", [actor.familyId,eventId,fight.boutOrder,fight.firstFighter,fight.secondFighter,fight.boutBlock,fight.isMainEvent]);
       await record(tx,actor,"sports_event",eventId,"edited",{ ...input, fights: input.fights });
