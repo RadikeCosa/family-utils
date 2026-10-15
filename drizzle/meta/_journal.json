@@ -113,6 +113,13 @@
       "when": 1791912356858,
       "tag": "0015_meal_daily_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792028315630,
+      "tag": "0016_sports_v1a",
+      "breakpoints": true
     }
   ]
 }
