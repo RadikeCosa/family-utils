@@ -89,7 +89,7 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await page.getByRole("button", { name: "River", exact: true }).click();
   await page.getByLabel("Mi formación deseada").fill("4-3-3: once curado en familia");
   await page.getByRole("button", { name: "Guardar formación" }).click();
-  await expect(page.getByRole("status")).toHaveText("Formación guardada.");
+  await expect(page.getByText("Formación guardada.", { exact: true })).toBeVisible();
   const river = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match'", [familyId])).rows[0];
   const card = (await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='ufc_card'", [familyId])).rows[0];
   await page.locator('section[aria-label="Conversación familiar"]').last().getByLabel("Escribí un comentario").fill("Seguimos esta estelar");

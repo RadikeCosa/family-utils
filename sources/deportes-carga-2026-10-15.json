@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "verified-draft-not-imported",
-  "checkedAt": "2026-10-15T04:27:23Z",
+  "status": "curated",
+  "checkedAt": "2026-10-15T05:07:49.875Z",
   "timezone": "America/Argentina/Buenos_Aires",
   "events": [
     {
@@ -20,7 +20,7 @@
         "crossCheck": "https://belgrano.com.ar/2026/09/28/belgranoriver/",
         "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
         "notes": "LPF confirms date, kickoff and TV; Belgrano confirms the stadium. ESPN's venue disagreed and was not used.",
-        "checkedAt": "2026-10-15T04:27:23Z"
+        "checkedAt": "2026-10-15T05:07:49.875Z"
       },
       "sourceProvider": "espn",
       "externalReference": "401841628"
@@ -39,7 +39,7 @@
       "source": {
         "primary": "https://www.ligaprofesional.ar/notas/primera/2026/10/07/agenda-de-la-13-a-la-15/",
         "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
-        "checkedAt": "2026-10-15T04:27:23Z"
+        "checkedAt": "2026-10-15T05:07:49.875Z"
       },
       "sourceProvider": "espn",
       "externalReference": "401841634"
@@ -58,7 +58,7 @@
       "source": {
         "primary": "https://www.ligaprofesional.ar/notas/primera/2026/10/07/agenda-de-la-13-a-la-15/",
         "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
-        "checkedAt": "2026-10-15T04:27:23Z"
+        "checkedAt": "2026-10-15T05:07:49.875Z"
       },
       "sourceProvider": "espn",
       "externalReference": "401841658"
@@ -160,7 +160,7 @@
           "independentCrossCheck": "passed"
         },
         "timeBasis": "Official EDT times converted to Argentina time (UTC-3).",
-        "checkedAt": "2026-10-15T04:27:23Z"
+        "checkedAt": "2026-10-15T05:07:49.875Z"
       },
       "sourceProvider": "ufc_official",
       "externalReference": "ufc-fight-night-october-17-2026"
@@ -250,7 +250,7 @@
           "independentCrossCheck": "passed"
         },
         "earlyPreliminariesTime": "11:00 Argentina, verified but not represented by the current event-create API.",
-        "checkedAt": "2026-10-15T04:27:23Z"
+        "checkedAt": "2026-10-15T05:07:49.875Z"
       },
       "sourceProvider": "ufc_official",
       "externalReference": "ufc-333",
@@ -339,10 +339,12 @@
         "validation": {
           "officialFightCount": 11,
           "officialCardComplete": true,
-          "independentCrossCheck": "pending"
+          "independentCrossCheck": "passed"
         },
         "timeBasis": "Official EDT times converted to Argentina time (UTC-3).",
-        "checkedAt": "2026-10-15T04:27:23Z"
+        "checkedAt": "2026-10-15T05:07:49.875Z",
+        "crossCheck": "https://octagonfights.com/events/2026-10-31",
+        "notes": "La cartelera oficial de UFC y el listado independiente de Octagon Fights coinciden en las 11 peleas; una ficha secundaria más antigua conserva una pelea sustituida y se prioriza la cartelera oficial actual."
       },
       "sourceProvider": "ufc_official",
       "externalReference": "ufc-fight-night-october-31-2026"
