@@ -127,6 +127,34 @@
       "when": 1792033863957,
       "tag": "0017_sports_river_weekly",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792036748936,
+      "tag": "0018_sports_auto_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792036823908,
+      "tag": "0019_sports_sync_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792038777910,
+      "tag": "0020_sports_early_preliminaries",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792038889228,
+      "tag": "0021_sports_early_prelim_time",
+      "breakpoints": true
     }
   ]
 }

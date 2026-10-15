@@ -291,12 +291,19 @@ export const sportsEvents = pgTable("sports_events", {
   channel: varchar("channel", { length: 160 }),
   status: varchar("status", { length: 20 }).notNull().default("scheduled"),
   result: varchar("result", { length: 160 }),
+  earlyPreliminariesStartsAt: timestamp("early_preliminaries_starts_at", { withTimezone: true }),
   preliminaryStartsAt: timestamp("preliminary_starts_at", { withTimezone: true }),
   mainCardStartsAt: timestamp("main_card_starts_at", { withTimezone: true }),
   cardStatus: varchar("card_status", { length: 20 }),
   isCurrent: boolean("is_current").notNull().default(false),
   manuallyEdited: boolean("manually_edited").notNull().default(true),
   externalReference: varchar("external_reference", { length: 200 }),
+  sourceProvider: varchar("source_provider", { length: 40 }),
+  automaticData: jsonb("automatic_data").$type<Record<string, unknown>>(),
+  manualOverrides: jsonb("manual_overrides").$type<string[]>().notNull().default([]),
+  automaticFights: jsonb("automatic_fights").$type<Array<Record<string, unknown>>>(),
+  manualFights: boolean("manual_fights").notNull().default(false),
+  sourceAbsentAt: timestamp("source_absent_at", { withTimezone: true }),
   predictionCloseMode: varchar("prediction_close_mode", { length: 12 }),
   createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
   updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
@@ -304,6 +311,7 @@ export const sportsEvents = pgTable("sports_events", {
   updatedAt: updatedAt(),
 }, (table) => [
   index("sports_events_family_date_idx").on(table.familyId, table.kind, table.eventDate),
+  uniqueIndex("sports_events_source_reference_unique_idx").on(table.familyId, table.kind, table.sourceProvider, table.externalReference).where(sql`${table.externalReference} IS NOT NULL AND ${table.sourceProvider} IS NOT NULL`),
   check("sports_events_ufc_date", sql`${table.kind} <> 'ufc_card' OR ${table.eventDate} IS NOT NULL`),
   check("sports_events_status", sql`${table.status} IN ('scheduled', 'postponed', 'completed', 'cancelled')`),
   check("sports_events_card_status", sql`${table.cardStatus} IS NULL OR ${table.cardStatus} IN ('upcoming', 'finalized')`),
@@ -333,6 +341,45 @@ export const sportsWeeks = pgTable("sports_weeks", {
   updatedAt: updatedAt(),
 }, (table) => [uniqueIndex("sports_weeks_family_week_unique").on(table.familyId, table.weekStart)]);
 
+export const sportsAutoSyncSettings = pgTable("sports_auto_sync_settings", {
+  familyId: uuid("family_id").primaryKey().references(() => families.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  updatedAt: updatedAt(),
+});
+
+export const sportsSyncState = pgTable("sports_sync_state", {
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 16 }).notNull(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  coveredThrough: date("covered_through", { mode: "string" }),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+  attemptToken: uuid("attempt_token"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  lastError: varchar("last_error", { length: 120 }),
+  updatedAt: updatedAt(),
+}, (table) => [
+  uniqueIndex("sports_sync_state_family_category_unique").on(table.familyId, table.category),
+  check("sports_sync_state_category", sql`${table.category} IN ('river', 'ufc')`),
+  check("sports_sync_state_failures", sql`${table.consecutiveFailures} >= 0`),
+]);
+
+export const sportsSyncItemState = pgTable("sports_sync_item_state", {
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 16 }).notNull(),
+  externalReference: varchar("external_reference", { length: 200 }).notNull(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+  lastError: varchar("last_error", { length: 120 }),
+}, (table) => [
+  uniqueIndex("sports_sync_item_state_unique").on(table.familyId, table.category, table.externalReference),
+  check("sports_sync_item_state_category", sql`${table.category} = 'ufc'`),
+  check("sports_sync_item_state_failures", sql`${table.consecutiveFailures} >= 0`),
+]);
+
 export const sportsFights = pgTable("sports_fights", {
   id: uuid("id").primaryKey().defaultRandom(),
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
@@ -350,7 +397,7 @@ export const sportsFights = pgTable("sports_fights", {
   index("sports_fights_family_event_order_idx").on(table.familyId, table.eventId, table.boutOrder),
   uniqueIndex("sports_fights_one_main_event_idx").on(table.eventId).where(sql`${table.isMainEvent} = true`),
   check("sports_fights_bout_order", sql`${table.boutOrder} > 0`),
-  check("sports_fights_bout_block", sql`${table.boutBlock} IN ('preliminaries', 'main')`),
+  check("sports_fights_bout_block", sql`${table.boutBlock} IN ('early_preliminaries', 'preliminaries', 'main')`),
   check("sports_fights_result", sql`${table.result} IS NULL OR ${table.result} IN ('first', 'second', 'draw', 'no_contest', 'cancelled')`),
 ]);
 

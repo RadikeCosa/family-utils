@@ -1,0 +1,2 @@
+ALTER TABLE "sports_fights" DROP CONSTRAINT "sports_fights_bout_block";--> statement-breakpoint
+ALTER TABLE "sports_fights" ADD CONSTRAINT "sports_fights_bout_block" CHECK ("sports_fights"."bout_block" IN ('early_preliminaries', 'preliminaries', 'main'));

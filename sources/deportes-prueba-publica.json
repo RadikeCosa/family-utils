@@ -1,0 +1,486 @@
+{
+  "checkedAt": "2026-10-15T03:32:26.290Z",
+  "purpose": "Coverage experiment, not production approval",
+  "sources": {
+    "googleRiver": {
+      "url": "https://www.google.com/search?q=River+Plate+proximos+partidos&hl=es&gl=ar",
+      "bytes": 92312,
+      "status": "javascript_or_challenge_page",
+      "structuredSportsExtracted": false
+    },
+    "riverEspn": {
+      "url": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
+      "status": "sample_coverage_passed",
+      "officialComparison": "pending",
+      "matches": [
+        {
+          "id": "401841628",
+          "title": "River Plate at Belgrano (Córdoba)",
+          "competition": "2026 Argentine Liga Profesional de Fútbol",
+          "phase": "Torneo Clausura",
+          "providerDate": "2026-10-18T23:15Z",
+          "startsAt": "2026-10-18T23:15Z",
+          "argentina": "18/10/26, 8:15 p. m.",
+          "timeValid": true,
+          "venue": "El Gigante de Alberdi",
+          "teams": [
+            {
+              "id": "4",
+              "name": "Belgrano (Córdoba)",
+              "homeAway": "home"
+            },
+            {
+              "id": "16",
+              "name": "River Plate",
+              "homeAway": "away"
+            }
+          ]
+        },
+        {
+          "id": "401841634",
+          "title": "Racing Club at River Plate",
+          "competition": "2026 Argentine Liga Profesional de Fútbol",
+          "phase": "Torneo Clausura",
+          "providerDate": "2026-10-25T22:15Z",
+          "startsAt": "2026-10-25T22:15Z",
+          "argentina": "25/10/26, 7:15 p. m.",
+          "timeValid": true,
+          "venue": "Estadio Más Monumental",
+          "teams": [
+            {
+              "id": "16",
+              "name": "River Plate",
+              "homeAway": "home"
+            },
+            {
+              "id": "15",
+              "name": "Racing Club",
+              "homeAway": "away"
+            }
+          ]
+        },
+        {
+          "id": "401841658",
+          "title": "River Plate at Boca Juniors",
+          "competition": "2026 Argentine Liga Profesional de Fútbol",
+          "phase": "Torneo Clausura",
+          "providerDate": "2026-11-01T18:00Z",
+          "startsAt": "2026-11-01T18:00Z",
+          "argentina": "1/11/26, 3:00 p. m.",
+          "timeValid": true,
+          "venue": "Alberto José Armando (La Bombonera)",
+          "teams": [
+            {
+              "id": "5",
+              "name": "Boca Juniors",
+              "homeAway": "home"
+            },
+            {
+              "id": "16",
+              "name": "River Plate",
+              "homeAway": "away"
+            }
+          ]
+        },
+        {
+          "id": "401841659",
+          "title": "River Plate at Aldosivi",
+          "competition": "2026 Argentine Liga Profesional de Fútbol",
+          "phase": "Torneo Clausura",
+          "providerDate": "2026-11-08T20:00Z",
+          "startsAt": null,
+          "argentina": "Hora a confirmar; fecha tentativa del proveedor",
+          "timeValid": false,
+          "venue": "José María Minella",
+          "teams": [
+            {
+              "id": "9739",
+              "name": "Aldosivi",
+              "homeAway": "home"
+            },
+            {
+              "id": "16",
+              "name": "River Plate",
+              "homeAway": "away"
+            }
+          ]
+        }
+      ]
+    },
+    "googleUfc": {
+      "url": "https://www.google.com/search?q=UFC+proximo+evento+cartelera&hl=es&gl=ar",
+      "bytes": 92198,
+      "status": "javascript_or_challenge_page",
+      "structuredSportsExtracted": false
+    },
+    "ufc": {
+      "espnUrl": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261015-20270113&limit=100",
+      "officialUrl": "https://www.ufc.com/events",
+      "status": "sample_requires_review",
+      "cards": [
+        {
+          "id": "600060773",
+          "title": "UFC Fight Night: Buckley vs. Malott",
+          "officialUrl": "https://www.ufc.com/event/ufc-fight-night-october-17-2026",
+          "officialDisplayedDate": "Sáb, Oct 17 / 9:00 PM -03",
+          "providerEventStart": "2026-10-17T21:00Z",
+          "officialBlocks": [
+            {
+              "block": "main-card",
+              "startsAt": "2026-10-18T00:00:00.000Z",
+              "argentina": "17/10/26, 9:00 p. m.",
+              "fights": [
+                [
+                  "Joaquin Buckley",
+                  "Mike Malott"
+                ],
+                [
+                  "Erin Blanchfield",
+                  "Jasmine Jasudavicius"
+                ],
+                [
+                  "Kyle Nelson",
+                  "Cristian Perez"
+                ],
+                [
+                  "Marc-Andre Barriault",
+                  "Kyle Daukaus"
+                ],
+                [
+                  "Louis Jourdain",
+                  "Timmy Cuamba"
+                ],
+                [
+                  "Mandel Nallo",
+                  "Nate Landwehr"
+                ]
+              ]
+            },
+            {
+              "block": "prelims-card",
+              "startsAt": "2026-10-17T21:00:00.000Z",
+              "argentina": "17/10/26, 6:00 p. m.",
+              "fights": [
+                [
+                  "Tanner Boser",
+                  "Jhonata Diniz"
+                ],
+                [
+                  "Julien Leblanc",
+                  "Nick Galanti"
+                ],
+                [
+                  "Javad Mahjoub",
+                  "Joel Faglier"
+                ],
+                [
+                  "Katlyn Cerminara",
+                  "Mackenzie Stiller"
+                ],
+                [
+                  "Chad Anheliger",
+                  "Steven Koslow"
+                ],
+                [
+                  "Melissa Croden",
+                  "Chelsea Chandler"
+                ],
+                [
+                  "Cody Chovancek",
+                  "SuYoung You"
+                ]
+              ]
+            }
+          ],
+          "espnFights": [
+            {
+              "id": "401919643",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "SuYoung You",
+                "Cody Chovancek"
+              ]
+            },
+            {
+              "id": "401908373",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "Chelsea Chandler",
+                "Melissa Croden"
+              ]
+            },
+            {
+              "id": "401914039",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "Chad Anheliger",
+                "Steven Koslow"
+              ]
+            },
+            {
+              "id": "401929675",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "Katlyn Cerminara",
+                "Mackenzie Stiller"
+              ]
+            },
+            {
+              "id": "401929676",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "Javad Mahjoub",
+                "Joel Faglier"
+              ]
+            },
+            {
+              "id": "401911807",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "Julien LeBlanc",
+                "Nick Galanti"
+              ]
+            },
+            {
+              "id": "401908371",
+              "providerStart": "2026-10-17T21:00Z",
+              "fighters": [
+                "Tanner Boser",
+                "Jhonata Diniz"
+              ]
+            },
+            {
+              "id": "401905374",
+              "providerStart": "2026-10-18T00:00Z",
+              "fighters": [
+                "Nate Landwehr",
+                "Mandel Nallo"
+              ]
+            },
+            {
+              "id": "401909783",
+              "providerStart": "2026-10-18T00:00Z",
+              "fighters": [
+                "Louis Jourdain",
+                "Timmy Cuamba"
+              ]
+            },
+            {
+              "id": "401908372",
+              "providerStart": "2026-10-18T00:00Z",
+              "fighters": [
+                "Kyle Daukaus",
+                "Marc-Andre Barriault"
+              ]
+            },
+            {
+              "id": "401923630",
+              "providerStart": "2026-10-18T00:00Z",
+              "fighters": [
+                "Kyle Nelson",
+                "Cristian Pérez"
+              ]
+            },
+            {
+              "id": "401897729",
+              "providerStart": "2026-10-18T00:00Z",
+              "fighters": [
+                "Erin Blanchfield",
+                "Jasmine Jasudavicius"
+              ]
+            },
+            {
+              "id": "401897388",
+              "providerStart": "2026-10-18T00:00Z",
+              "fighters": [
+                "Mike Malott",
+                "Joaquin Buckley"
+              ]
+            }
+          ],
+          "comparison": {
+            "officialFightCount": 13,
+            "espnFightCount": 13,
+            "missingOnEspn": [],
+            "extraOnEspn": [],
+            "allOfficialBlockTimesFound": true,
+            "officialStartsPresentOnEspn": true
+          }
+        },
+        {
+          "id": "600061267",
+          "title": "UFC 333: Volkanovski vs. Evloev",
+          "officialUrl": "https://www.ufc.com/event/ufc-333",
+          "officialDisplayedDate": "Sáb, Oct 24 / 3:00 PM -03",
+          "providerEventStart": "2026-10-24T14:00Z",
+          "officialBlocks": [
+            {
+              "block": "main-card",
+              "startsAt": "2026-10-24T18:00:00.000Z",
+              "argentina": "24/10/26, 3:00 p. m.",
+              "fights": [
+                [
+                  "Alexander Volkanovski",
+                  "Movsar Evloev"
+                ],
+                [
+                  "Petr Yan",
+                  "Merab Dvalishvili"
+                ],
+                [
+                  "Lone’er Kavanagh",
+                  "Ramazan Temirov"
+                ],
+                [
+                  "Alexander Volkov",
+                  "Rizvan Kuniev"
+                ],
+                [
+                  "Aaron Pico",
+                  "Losene Keita"
+                ]
+              ]
+            },
+            {
+              "block": "prelims-card",
+              "startsAt": "2026-10-24T16:00:00.000Z",
+              "argentina": "24/10/26, 1:00 p. m.",
+              "fights": [
+                [
+                  "Azamat Murzakanov",
+                  "Dominick Reyes"
+                ],
+                [
+                  "Nikita Krylov",
+                  "Abdul Rakhman Yakhyaev"
+                ],
+                [
+                  "Abus Magomedov",
+                  "Cam Rowston"
+                ],
+                [
+                  "Grant Dawson",
+                  "Nurullo Aliev"
+                ]
+              ]
+            },
+            {
+              "block": "early-prelims",
+              "startsAt": "2026-10-24T14:00:00.000Z",
+              "argentina": "24/10/26, 11:00 a. m.",
+              "fights": [
+                [
+                  "Colby Thicknesse",
+                  "Asaf Chopurov"
+                ],
+                [
+                  "Abubakar Vagaev",
+                  "Jacob Malkoun"
+                ]
+              ]
+            }
+          ],
+          "espnFights": [
+            {
+              "id": "401930357",
+              "providerStart": "2026-10-24T14:00Z",
+              "fighters": [
+                "Abubakar Vagaev",
+                "Jacob Malkoun"
+              ]
+            },
+            {
+              "id": "401928047",
+              "providerStart": "2026-10-24T14:00Z",
+              "fighters": [
+                "Colby Thicknesse",
+                "Asaf Chopurov"
+              ]
+            },
+            {
+              "id": "401929495",
+              "providerStart": "2026-10-24T18:00Z",
+              "fighters": [
+                "Aaron Pico",
+                "Losene Keita"
+              ]
+            },
+            {
+              "id": "401911640",
+              "providerStart": "2026-10-24T16:00Z",
+              "fighters": [
+                "Grant Dawson",
+                "Nurullo Aliev"
+              ]
+            },
+            {
+              "id": "401911638",
+              "providerStart": "2026-10-24T16:00Z",
+              "fighters": [
+                "Abus Magomedov",
+                "Cam Rowston"
+              ]
+            },
+            {
+              "id": "401911639",
+              "providerStart": "2026-10-24T16:00Z",
+              "fighters": [
+                "Nikita Krylov",
+                "Abdul-Rakhman Yakhyaev"
+              ]
+            },
+            {
+              "id": "401911637",
+              "providerStart": "2026-10-24T16:00Z",
+              "fighters": [
+                "Azamat Murzakanov",
+                "Dominick Reyes"
+              ]
+            },
+            {
+              "id": "401911635",
+              "providerStart": "2026-10-24T18:00Z",
+              "fighters": [
+                "Alexander Volkov",
+                "Rizvan Kuniev"
+              ]
+            },
+            {
+              "id": "401911634",
+              "providerStart": "2026-10-24T18:00Z",
+              "fighters": [
+                "Ramazan Temirov",
+                "Lone'er Kavanagh"
+              ]
+            },
+            {
+              "id": "401911633",
+              "providerStart": "2026-10-24T18:00Z",
+              "fighters": [
+                "Merab Dvalishvili",
+                "Petr Yan"
+              ]
+            },
+            {
+              "id": "401911632",
+              "providerStart": "2026-10-24T18:00Z",
+              "fighters": [
+                "Alexander Volkanovski",
+                "Movsar Evloev"
+              ]
+            }
+          ],
+          "comparison": {
+            "officialFightCount": 11,
+            "espnFightCount": 11,
+            "missingOnEspn": [],
+            "extraOnEspn": [],
+            "allOfficialBlockTimesFound": true,
+            "officialStartsPresentOnEspn": true
+          }
+        }
+      ],
+      "note": "ESPN dates do not explicitly label blocks or the main event. Official HTML provides those blocks; do not infer them from array order or UTC day."
+    }
+  }
+}

@@ -4,7 +4,7 @@ export const SPORTS_TIME_ZONE = FAMILY_TIME_ZONE;
 export const SPORTS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const SPORTS_KINDS = ["football_match", "ufc_card"] as const;
 export const FOOTBALL_STATUSES = ["scheduled", "postponed", "completed", "cancelled"] as const;
-export const FIGHT_BLOCKS = ["preliminaries", "main"] as const;
+export const FIGHT_BLOCKS = ["early_preliminaries", "preliminaries", "main"] as const;
 export const PREDICTION_CLOSE_MODES = ["event", "block", "fight"] as const;
 
 export function sportsEnabled() {
@@ -94,23 +94,28 @@ export function footballEventInput(body: Record<string, unknown>): FootballEvent
 }
 
 export type FightInput = { boutOrder: number; firstFighter: string; secondFighter: string; boutBlock: typeof FIGHT_BLOCKS[number]; isMainEvent: boolean };
-export type UfcCardInput = { title: string; eventDate: string; preliminaryStartsAt: Date | null; mainCardStartsAt: Date | null; fights: FightInput[] };
+export type UfcCardInput = { title: string; eventDate: string; earlyPreliminariesStartsAt: Date | null; preliminaryStartsAt: Date | null; mainCardStartsAt: Date | null; fights: FightInput[] };
 
 export function ufcCardInput(body: Record<string, unknown>): UfcCardInput | null {
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const eventDate = body.eventDate;
   const preliminaryTime = body.preliminaryTime == null || body.preliminaryTime === "" ? null : body.preliminaryTime;
   const mainCardTime = body.mainCardTime == null || body.mainCardTime === "" ? null : body.mainCardTime;
+  const earlyPreliminariesTime = body.earlyPreliminariesTime == null || body.earlyPreliminariesTime === "" ? null : body.earlyPreliminariesTime;
   const fights = body.fights;
   if (!title || Array.from(title).length > 160 || !isSportsDate(eventDate)) return null;
   if ((preliminaryTime !== null && !isSportsTime(preliminaryTime)) || (mainCardTime !== null && !isSportsTime(mainCardTime))) return null;
   // The official date is independent of each block's Argentine calendar date.
   const preliminaryDate = body.preliminaryDate ?? eventDate;
   const mainCardDate = body.mainCardDate ?? eventDate;
+  const earlyPreliminariesDate = body.earlyPreliminariesDate ?? eventDate;
   if ((preliminaryTime && !isSportsDate(preliminaryDate)) || (mainCardTime && !isSportsDate(mainCardDate))) return null;
+  if ((earlyPreliminariesTime !== null && !isSportsTime(earlyPreliminariesTime)) || (earlyPreliminariesTime && !isSportsDate(earlyPreliminariesDate))) return null;
+  if ((preliminaryTime !== null && !isSportsTime(preliminaryTime)) || (mainCardTime !== null && !isSportsTime(mainCardTime))) return null;
+  const earlyPreliminariesStartsAt = earlyPreliminariesTime ? sportsLocalDateTime(earlyPreliminariesDate as string, earlyPreliminariesTime as string) : null;
   const preliminaryStartsAt = preliminaryTime ? sportsLocalDateTime(preliminaryDate as string, preliminaryTime as string) : null;
   const mainCardStartsAt = mainCardTime ? sportsLocalDateTime(mainCardDate as string, mainCardTime as string) : null;
-  if ((preliminaryTime && !preliminaryStartsAt) || (mainCardTime && !mainCardStartsAt)) return null;
+  if ((earlyPreliminariesTime && !earlyPreliminariesStartsAt) || (preliminaryTime && !preliminaryStartsAt) || (mainCardTime && !mainCardStartsAt)) return null;
   if (!Array.isArray(fights) || fights.length < 1 || fights.length > 40) return null;
   const mapped: FightInput[] = [];
   for (let index = 0; index < fights.length; index++) {
@@ -125,7 +130,7 @@ export function ufcCardInput(body: Record<string, unknown>): UfcCardInput | null
     mapped.push({ boutOrder: index + 1, firstFighter, secondFighter, boutBlock: boutBlock as FightInput["boutBlock"], isMainEvent: fight.isMainEvent });
   }
   if (mapped.filter((fight) => fight.isMainEvent).length !== 1) return null;
-  return { title, eventDate, preliminaryStartsAt, mainCardStartsAt, fights: mapped };
+  return { title, eventDate, earlyPreliminariesStartsAt, preliminaryStartsAt, mainCardStartsAt, fights: mapped };
 }
 
 export function isSportsContext(value: string | null): value is "football_day" | "river_match" | "ufc_card" {
@@ -151,7 +156,7 @@ export function sportsWeek(now = new Date()) {
 type SelectableEvent = {
   id: string; eventDate: string | null; startsAt: string | Date | null;
   status: string; hidden: boolean; firstParticipant?: string | null;
-  secondParticipant?: string | null; mainCardStartsAt?: string | Date | null;
+  secondParticipant?: string | null; mainCardStartsAt?: string | Date | null; sourceAbsentAt?: string | Date | null;
 };
 function eventOrder(a: SelectableEvent, b: SelectableEvent) {
   const date = (a.eventDate ?? "9999-12-31").localeCompare(b.eventDate ?? "9999-12-31");
@@ -161,7 +166,7 @@ function eventOrder(a: SelectableEvent, b: SelectableEvent) {
 }
 export function selectRiverEvent<T extends SelectableEvent>(events: T[], now = new Date()): T | null {
   const today = sportsNowDay(now);
-  return events.filter(event => !event.hidden && event.status !== "cancelled" &&
+  return events.filter(event => !event.hidden && !event.sourceAbsentAt && event.status !== "cancelled" &&
     isRiverMatch(event.firstParticipant, event.secondParticipant) &&
     (event.eventDate ? event.eventDate >= today : event.status !== "completed"))
     .sort(eventOrder)[0] ?? null;
@@ -169,7 +174,7 @@ export function selectRiverEvent<T extends SelectableEvent>(events: T[], now = n
 export function selectUfcEvent<T extends SelectableEvent>(events: T[], now = new Date()): T | null {
   const today = sportsNowDay(now);
   const week = sportsWeek(now);
-  const eligible = events.filter(event => !event.hidden && event.status !== "cancelled" &&
+  const eligible = events.filter(event => !event.hidden && !event.sourceAbsentAt && event.status !== "cancelled" &&
     event.eventDate && event.eventDate >= week.start && event.eventDate <= week.end).sort(eventOrder);
   return eligible.find(event => event.eventDate! >= today) ?? eligible.at(-1) ?? null;
 }
