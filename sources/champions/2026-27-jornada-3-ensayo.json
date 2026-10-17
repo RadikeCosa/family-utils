@@ -1,6 +1,6 @@
 {
-  "testedAt": "2026-10-17T23:00:32.413Z",
-  "environment": "Worktree limpio del candidato cb1a789, PostgreSQL aislado local 127.0.0.1:55439/champions_tag_20261017; producción no consultada",
+  "testedAt": "2026-10-17T23:24:39.188Z",
+  "environment": "Copia limpia de 538d88f; PostgreSQL local aislado 127.0.0.1:55439/champions_tag_20261017; producción no consultada",
   "actions": [
     "Importación confirmada con token de vista previa",
     "Mismo archivo previsualizado y confirmado por segunda vez",
@@ -42,7 +42,7 @@
     },
     "noForeignChoicesReturned": true
   },
-  "codeCommit": "cb1a789",
+  "codeCommit": "538d88f",
   "appliedMigrations": 38,
   "sourceRevalidation": "Pendiente revalidación humana el 19/10/2026 por la mañana (Argentina); checkedAt del borrador sigue provisional."
 }

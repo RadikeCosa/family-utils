@@ -144,13 +144,13 @@ La matriz de requisito por requisito está en [verificaciones-fase-1.md](verific
 
 ## Revalidación final en copia limpia
 
-La copia limpia sobre UFC publicado (`cb1a789`) pasó `npm ci`, tipos, lint, build, 38 migraciones con hashes, reglas/base **107/107**, rutas **103/103**, recorridos generales **111/111**, Deportes **24/24**, Champions **32/32** en iPhone, Android, WebKit iPhone y escritorio, y accesibilidad **3/3**. No hubo pruebas omitidas.
+La copia limpia sobre el cierre UFC 0037 publicado y la corrección `ed9d679`/`4d54860` (`538d88f`) pasó tipos, lint, build y `db:migrate`: **38 migraciones en orden y 38 hashes aplicados verificados**. En PostgreSQL aislado: reglas/base **106/106**, rutas **103/103**, recorridos generales **111/111**, Deportes **20/20**, Champions **32/32** (iPhone, Android, WebKit iPhone y escritorio) y accesibilidad **3/3**; cero omitidas. `npm ci --offline` completó desde la caché npm local copiada a `/tmp` (417 paquetes); el gestor advirtió que 4 scripts de instalación no estaban aprobados por su lista de permisos. Tipos, lint y build pasan con esa instalación.
 
-El ensayo real de agenda con autenticación confirmó: **HTTP 200**, 36 equipos, 18 partidos y 0 errores; la segunda confirmación devolvió HTTP 200 / `changed:false` sin alterar dominio ni auditoría. Los 18 pares UEFA de partido/local/visitante coincidieron, nueve por día; horarios argentinos: cuatro a las 13:45 y catorce a las 16:00. Dos integrantes guardaron pronósticos distintos; cada uno recibió solo su elección y el administrador obtuvo `choices: []`. Se registró el ensayo en `2026-27-jornada-3-ensayo.json`.
+El ensayo desde la copia limpia `538d88f` confirmó HTTP 200, 36 equipos, 18 partidos y cero errores; la reimportación devolvió `changed:false` y no alteró filas ni auditoría. Los 18 pares UEFA coinciden, nueve partidos por día; Argentina: 4 a las 13:45 y 14 a las 16:00. Dos integrantes solo recibieron su propio pronóstico y el administrador recibió `choices: []`. El registro actualizado está en `2026-27-jornada-3-ensayo.json`; la base usada es aislada.
 
 Procedencia registrada: calendario oficial UEFA de fase liga actualizado el 14/10/2026 y página oficial de clubes consultados el 17/10/2026; horarios corroborados contra Sky Sports, FC Barcelona y otros calendarios GMT/CET; ESPN no cubre esta temporada. La revalidación humana y el `checkedAt` real siguen pendientes para el 19/10 por la mañana.
 
 **Bloqueante para publicar:** todos los pasos manuales del runbook de producción y la revalidación humana. Si no están verificados antes del 19/10/2026 18:00 Argentina, el estreno pasa a Jornada 4. No se tocó producción.
 
 
-La regresión UFC se ejecutó con el cierre de cartelera publicado y la puntuación 5/3/1 integrada antes de Champions; la importación de Jornada 3 no alteró eventos ni cálculos UFC.
+La regresión UFC se ejecutó con el cierre de cartelera 0037 publicado y puntuación vigente de 1 por acierto. La puntuación 5/3/1 no está publicada: permanece aislada en `codex/ufc-puntajes` hasta `6b0d547`, para integrarla tras Champions reconciliando el registro y snapshot.
