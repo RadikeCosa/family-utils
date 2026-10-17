@@ -125,7 +125,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <div className={styles.panel}>
         <h3>Tus pronósticos</h3>
         <p>
-          Elegiste {data.chosen} de {data.total} peleas. Un punto por acierto.
+          Elegiste {data.chosen} de {data.total} peleas. Por acertar al ganador: 5 puntos en la estelar, 3 en la coestelar y 1 en las demás.
         </p>
         <p>
           Los pronósticos de toda la cartelera cierran al comenzar el primer bloque de peleas, incluidas las preliminares.
@@ -169,8 +169,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   className={fight.isMainEvent ? styles.mainFight : undefined}
                 >
                   {fight.isMainEvent && (
-                    <strong className={styles.badge}>ESTELAR</strong>
+                    <strong className={styles.badge}>ESTELAR · 5 PUNTOS</strong>
                   )}
+                  {fight.isCoMainEvent && <strong className={styles.badge}>COESTELAR · 3 PUNTOS</strong>}
                   <strong>
                     {fight.firstFighter} <small>vs</small> {fight.secondFighter}
                   </strong>
@@ -214,6 +215,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                     <p>Tu pronóstico: {winnerName(fight, fight.ownWinnerId)}</p>
                   )}
                   <p>{outcomeLabel(fight)}</p>
+                  {fight.prodeEligible && !fight.isMainEvent && !fight.isCoMainEvent && <p>1 punto por acertar al ganador.</p>}
                   {fight.closed && (
                     <details>
                       <summary>Elecciones de la familia</summary>
@@ -253,7 +255,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <section id="ranking" className={styles.panel}>
         <h3>Tabla de la cartelera · {data.final ? "Final" : "Parcial"}</h3>
         <table className={styles.ranking}>
-          <caption>Un punto por ganador acertado</caption>
+          <caption>Puntos por ganador acertado: estelar 5 · coestelar 3 · demás peleas 1</caption>
           <thead>
             <tr>
               <th scope="col">Puesto</th>
