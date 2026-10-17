@@ -11,6 +11,7 @@ type Actor = { familyId: string; memberId: string; authUser: { id: string } };
 type EventRow = Record<string, unknown> & {
   id: string;
   kind: string;
+  football_category: string | null;
   title: string;
   competition: string | null;
   first_participant: string | null;
@@ -87,14 +88,19 @@ async function findOrInsertEvent(
         "SELECT to_regclass('public.sports_predictions') IS NOT NULL AS enabled",
       )
     ).rows[0].enabled === true;
+  if (item.kind === "football_match") {
+    const linked = await tx.query("SELECT e.football_category FROM sports_football_event_sources s JOIN sports_events e ON e.id=s.event_id AND e.family_id=s.family_id WHERE s.family_id=$1 AND s.provider=$2 AND s.external_id=$3",[familyId,item.sourceProvider,item.externalReference]);
+    if (linked.rows.some(row=>row.football_category === "champions")) fail(409,"La referencia pertenece a Champions; no se modificó River.");
+  }
   const { rows: exactRows } = await tx.query(
     "SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND source_provider=$3 AND external_reference=$4 FOR UPDATE",
     [familyId, item.kind, item.sourceProvider, item.externalReference],
   );
   let current = exactRows[0] as EventRow | undefined;
+  if (current?.football_category === "champions") fail(409, "La referencia pertenece a Champions; no se modificó River.");
   if (!current) {
     const { rows: nearby } = await tx.query(
-      "SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND source_provider=$3 AND event_date BETWEEN ($4::date - 7) AND ($4::date + 7) FOR UPDATE",
+      "SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND (kind='ufc_card' OR football_category='river') AND source_provider=$3 AND event_date BETWEEN ($4::date - 7) AND ($4::date + 7) FOR UPDATE",
       [familyId, item.kind, item.sourceProvider, day],
     );
     let equivalent: EventRow[] = [];
@@ -527,7 +533,7 @@ async function importCategory(
       }
 
       await tx.query(
-        "UPDATE sports_events SET source_absent_at=now(),updated_at=now() WHERE family_id=$1 AND kind=$2 AND source_provider=$3 AND source_absent_at IS NULL AND status <> 'completed' AND (card_status IS NULL OR card_status <> 'finalized') AND event_date BETWEEN $4 AND $5 AND event_date >= $6 AND NOT (external_reference=ANY($7::text[]))",
+        "UPDATE sports_events SET source_absent_at=now(),updated_at=now() WHERE family_id=$1 AND kind=$2 AND (kind='ufc_card' OR football_category='river') AND source_provider=$3 AND source_absent_at IS NULL AND status <> 'completed' AND (card_status IS NULL OR card_status <> 'finalized') AND event_date BETWEEN $4 AND $5 AND event_date >= $6 AND NOT (external_reference=ANY($7::text[]))",
         [
           actor.familyId,
           kind,
