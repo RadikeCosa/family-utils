@@ -13,7 +13,6 @@ import {
 import {
   closedAt,
   ranked,
-  ufcFightPoints,
   type UfcView,
   type Outcome,
 } from "./prediction-rules";
@@ -36,7 +35,6 @@ export type UfcEventRow = {
 };
 export type UfcFightRow = {
   is_main_event: boolean;
-  bout_order: number;
   prode_eligible: boolean;
   prediction_closed_at: Date | null;
   id: string;
@@ -80,7 +78,7 @@ export function blockDeadline(event: UfcEventRow, block: string) {
 export function deadline(snapshot: UfcSnapshot) {
   return snapshot.event.ufc_prediction_closed_at ?? snapshot.event.ufc_prediction_closes_at;
 }
-export function fightDeadline(snapshot: UfcSnapshot, _fight?: UfcFightRow) {
+export function fightDeadline(snapshot: UfcSnapshot) {
   return deadline(snapshot);
 }
 export async function refreshUfcClose(tx: PoolClient, familyId: string, eventId: string) {
@@ -94,7 +92,7 @@ export async function ufcSnapshot(
   tx: PoolClient,
   familyId: string,
   event: UfcEventRow,
-  memberId?: string,
+  memberId: string | null,
 ): Promise<UfcSnapshot> {
   // A transaction uses one connection; keep its queries sequential.
   const fights = await tx.query(
@@ -110,7 +108,7 @@ export async function ufcSnapshot(
      WHERE family_id=$1 AND event_id=$2 AND
        ($3::uuid IS NULL OR member_id=$3 OR $4::timestamptz<=clock_timestamp())
      ORDER BY member_id,fight_id`,
-    [familyId, event.id, memberId ?? null, event.ufc_prediction_closed_at ?? event.ufc_prediction_closes_at],
+    [familyId, event.id, memberId, event.ufc_prediction_closed_at ?? event.ufc_prediction_closes_at],
   );
   const members = await tx.query(
     "SELECT id,name FROM members WHERE family_id=$1 ORDER BY name,id",
@@ -133,7 +131,6 @@ export async function ufcSnapshot(
 }
 export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
   const points = new Map<string, number>();
-  const fightPoints = ufcFightPoints(snapshot.fights);
   for (const vote of snapshot.votes) {
     const fight = snapshot.fights.find((f) => f.id === vote.fight_id);
     const result = results.find((r) => r.fight_id === vote.fight_id);
@@ -143,11 +140,11 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
       fight &&
       !fight.removed_at &&
       fight.prode_eligible &&
-      closedAt(fightDeadline(snapshot, fight), snapshot.now) &&
+      closedAt(fightDeadline(snapshot), snapshot.now) &&
       result?.outcome === "winner" &&
       result.winner_id === vote.winner_id
     )
-      points.set(vote.member_id, (points.get(vote.member_id) ?? 0) + (fightPoints.get(fight.id) ?? 0));
+      points.set(vote.member_id, (points.get(vote.member_id) ?? 0) + 1);
   }
   return ranked(
     snapshot.members.map((member) => ({
@@ -158,15 +155,12 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
   );
 }
 export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
-  const fightPoints = ufcFightPoints(snapshot.fights);
   const fights = snapshot.fights.map((fight) => {
-    const close = fightDeadline(snapshot, fight);
+    const close = fightDeadline(snapshot);
     const closed = closedAt(close, snapshot.now);
     const result = snapshot.results.find((r) => r.fight_id === fight.id);
     return {
       isMainEvent: fight.is_main_event,
-      isCoMainEvent: fightPoints.get(fight.id) === 3,
-      points: fightPoints.get(fight.id) ?? 0,
       id: fight.id,
       firstFighter: fight.first_fighter,
       secondFighter: fight.second_fighter,
@@ -258,7 +252,7 @@ export async function sportsPredictions(request: Request, eventId: string) {
         snapshot.results.some((r) => r.fight_id === fight.id)
       )
         reject(409, "Esta pelea ya no admite elecciones.");
-      const close = fightDeadline(snapshot, fight);
+      const close = fightDeadline(snapshot);
       if (!close) reject(409, "El primer bloque todavía no tiene horario confirmado.");
       if (closedAt(close, snapshot.now))
         reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
@@ -272,13 +266,11 @@ export async function sportsPredictions(request: Request, eventId: string) {
           "DELETE FROM sports_predictions WHERE family_id=$1 AND fight_id=$2 AND member_id=$3 AND $4::timestamptz>clock_timestamp()",
           [actor.familyId, fight.id, actor.memberId, close],
         );
-        if (
-          !removed.rowCount &&
-          snapshot.votes.some(
-            (v) => v.member_id === actor.memberId && v.fight_id === fight.id,
-          )
-        )
-          reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
+        if (!removed.rowCount) {
+          const { rows: [afterDelete] } = await tx.query("SELECT clock_timestamp() AS now");
+          if (closedAt(close, afterDelete.now))
+            reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
+        }
       } else {
         if (
           body.winnerId !== fight.first_fighter_id &&
@@ -312,7 +304,7 @@ export async function sportsPredictions(request: Request, eventId: string) {
         await tx.query("ROLLBACK TO SAVEPOINT prediction_write");
         // An exact-boundary write may have been suppressed by the DB trigger.
         // Re-evaluate after rollback, then commit only the closure.
-        await refreshUfcClose(tx, predictionFamilyId!, eventId);
+        await refreshUfcClose(tx, predictionFamilyId, eventId);
         await tx.query("COMMIT");
       } else await tx.query("ROLLBACK");
     }
