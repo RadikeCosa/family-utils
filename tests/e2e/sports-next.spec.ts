@@ -755,6 +755,13 @@ test("UFC: weighted points agree across previews, saved results, ties and correc
   };
   const winners = fights.map(f => ({ fightId: f.id, result: { outcome: 'winner', winnerId: f.first_fighter_id } }));
   await save(winners, 10);
+  // Composition edits after close cannot move bonus identities or score values.
+  await pool.query("UPDATE sports_fights SET bout_order=4,bout_block='preliminaries' WHERE id=$1", [fights[1].id]);
+  await pool.query("UPDATE sports_fights SET bout_order=2 WHERE id=$1", [fights[2].id]);
+  const reordered = await (await api.get(endpoint)).json();
+  expect(reordered.fights.find((f: { id: string }) => f.id === fights[1].id)).toMatchObject({ points: 3, isCoMainEvent: true });
+  expect(reordered.fights.find((f: { id: string }) => f.id === fights[2].id)).toMatchObject({ points: 1, isCoMainEvent: false });
+  expect(reordered.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(10);
   await page.goto(`/deportes?sport=ufc&event=${event.id}`);
   await expect(page.getByText('ESTELAR · 5 PUNTOS', { exact: true })).toBeVisible();
   await expect(page.getByText('COESTELAR · 3 PUNTOS', { exact: true })).toBeVisible();
@@ -765,4 +772,27 @@ test("UFC: weighted points agree across previews, saved results, ties and correc
   expect(cancelled.fights.find((f: { id: string }) => f.id === fights[2].id).points).toBe(1);
   await save([{ fightId: fights[2].id, result: { outcome: 'draw', winnerId: null } }], 1);
   await save([{ fightId: fights[3].id, result: { outcome: 'no_contest', winnerId: null } }], 0);
+});
+
+
+test("UFC: historical cards keep one point, including result previews and labels", async ({ page }) => {
+  const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,main_card_starts_at,is_current,created_by_member_id,updated_by_member_id)
+    VALUES($1,'ufc_card','UFC: Histórica','2026-10-16',clock_timestamp()+interval '1 hour',true,$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
+  const fight = (await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+    VALUES($1,$2,1,'Histórico Uno','Histórico Dos','main',true) RETURNING *`, [familyId, event.id])).rows[0];
+  await pool.query('INSERT INTO sports_predictions(family_id,event_id,fight_id,member_id,winner_id) VALUES($1,$2,$3,$4,$5)', [familyId,event.id,fight.id,memberId,fight.first_fighter_id]);
+  await pool.query("UPDATE sports_events SET main_card_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
+  const bundle = { version: 1, checkedAt: new Date().toISOString(), source: 'Historical scoring fixture', events: [{ eventId: event.id, fights: [{fightId:fight.id, result:{outcome:'winner',winnerId:fight.first_fighter_id}}] }] };
+  const preview = await (await api.post('/api/sports/results/import', { data: { mode: 'preview', bundle } })).json();
+  expect(preview.errors).toEqual([]);
+  expect(preview.events[0].points).toHaveLength(1);
+  expect(preview.events[0].points[0].after).toBe(1);
+  expect((await (await api.post('/api/sports/results/import',{data:{mode:'import',bundle,token:preview.token}})).json()).errors).toEqual([]);
+  const view = await (await api.get(`/api/sports/events/${event.id}/predictions`)).json();
+  expect(view.scoringVersion).toBe(1);
+  expect(view.fights[0]).toMatchObject({points:1,isCoMainEvent:false});
+  expect(view.ranking.find((r: { memberId: string })=>r.memberId===memberId).points).toBe(1);
+  await page.goto(`/deportes?sport=ufc&event=${event.id}`);
+  await expect(page.getByText('ESTELAR · 1 PUNTO',{exact:true})).toBeVisible();
+  await expect(page.getByText('Cada ganador acertado suma 1 punto.',{exact:false})).toBeVisible();
 });

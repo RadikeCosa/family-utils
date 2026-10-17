@@ -197,6 +197,13 @@
       "when": 1792046402706,
       "tag": "0037_ufc_card_closure",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792278236366,
+      "tag": "0038_ufc_scoring",
+      "breakpoints": true
     }
   ]
 }

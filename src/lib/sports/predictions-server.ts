@@ -15,9 +15,10 @@ import {
   ranked,
   ufcFightPoints,
   type UfcView,
+  type UfcScoring,
   type Outcome,
 } from "./prediction-rules";
-export type UfcEventRow = {
+export type UfcEventRow = UfcScoring & {
   id: string;
   title: string;
   kind: string;
@@ -133,7 +134,7 @@ export async function ufcSnapshot(
 }
 export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
   const points = new Map<string, number>();
-  const fightPoints = ufcFightPoints(snapshot.fights);
+  const fightPoints = ufcFightPoints(snapshot.fights, snapshot.event);
   for (const vote of snapshot.votes) {
     const fight = snapshot.fights.find((f) => f.id === vote.fight_id);
     const result = results.find((r) => r.fight_id === vote.fight_id);
@@ -158,14 +159,15 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
   );
 }
 export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
-  const fightPoints = ufcFightPoints(snapshot.fights);
+  const fightPoints = ufcFightPoints(snapshot.fights, snapshot.event);
   const fights = snapshot.fights.map((fight) => {
     const close = fightDeadline(snapshot);
     const closed = closedAt(close, snapshot.now);
     const result = snapshot.results.find((r) => r.fight_id === fight.id);
     return {
-      isMainEvent: fight.is_main_event,
-      isCoMainEvent: fightPoints.get(fight.id) === 3,
+      isMainEvent: snapshot.event.ufc_scoring_version === 2
+        ? fight.id === snapshot.event.ufc_main_fight_id : fight.is_main_event,
+      isCoMainEvent: snapshot.event.ufc_scoring_version === 2 && fight.id === snapshot.event.ufc_co_main_fight_id,
       points: fightPoints.get(fight.id) ?? 0,
       id: fight.id,
       firstFighter: fight.first_fighter,
@@ -203,6 +205,7 @@ export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
     };
   });
   return {
+    scoringVersion: snapshot.event.ufc_scoring_version ?? 1,
     fights,
     closesAt: deadline(snapshot)?.toISOString() ?? null,
     closed: closedAt(deadline(snapshot), snapshot.now),

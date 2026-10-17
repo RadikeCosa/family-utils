@@ -44,33 +44,17 @@ test("UFC result templates allow null and reject invalid winners, duplicates and
   assert.equal(parseResultsBundle(value), null);
 });
 
-test("UFC awards 5/3/1 by card role, not array position or prelim block", async () => {
+test("UFC uses stored version and roles, preserving historical scores and reserved slots", async () => {
   const { ufcFightPoints } = await import("./prediction-rules.ts");
-  const fight = (id: string, order: number, block = "main", main = false) => ({
-    id, bout_order: order, bout_block: block, is_main_event: main,
-    prode_eligible: true, removed_at: null as Date | null,
-  });
-  const main = fight("main", 1, "main", true);
-  const coMain = fight("co", 2);
-  const ordinary = fight("ordinary", 3);
-  const prelim = fight("prelim", 4, "preliminaries");
-  const early = fight("early", 5, "early_preliminaries");
-  const weights = ufcFightPoints([early, ordinary, coMain, main, prelim]);
-  assert.equal(weights.get(main.id), 5);
-  assert.equal(weights.get(coMain.id), 3);
-  assert.equal(weights.get(ordinary.id), 1);
-  assert.equal(weights.get(prelim.id), 1);
-  assert.equal(weights.get(early.id), 1);
-  assert.equal(ufcFightPoints([main, prelim]).get(prelim.id), 1);
-  // Removed co-main keeps its slot: nobody inherits its bonus after cancellation.
-  coMain.removed_at = new Date();
-  const removed = ufcFightPoints([main, coMain, ordinary]);
-  assert.equal(removed.get(coMain.id), 0);
-  assert.equal(removed.get(ordinary.id), 1);
-  // An eligible replacement at the original slot is the new co-main.
-  const replacement = fight("replacement", 2);
-  assert.equal(ufcFightPoints([main, coMain, replacement, ordinary]).get(replacement.id), 3);
-  replacement.prode_eligible = false;
-  assert.equal(ufcFightPoints([main, coMain, replacement, ordinary]).get(replacement.id), 0);
-  assert.equal(ufcFightPoints([main, coMain, replacement, ordinary]).get(ordinary.id), 1);
+  const main = { id: "main", prode_eligible: true, removed_at: null as Date | null };
+  const co = { ...main, id: "co" };
+  const other = { ...main, id: "other" };
+  const late = { ...main, id: "late", prode_eligible: false };
+  const scoring = { ufc_scoring_version: 2, ufc_main_fight_id: main.id, ufc_co_main_fight_id: co.id };
+  const weights = ufcFightPoints([other, co, late, main], scoring);
+  assert.deepEqual([...weights.values()], [1, 3, 0, 5]);
+  assert.deepEqual([...ufcFightPoints([main, co, other], {...scoring, ufc_scoring_version: 1}).values()], [1, 1, 1]);
+  co.removed_at = new Date();
+  assert.deepEqual([...ufcFightPoints([other, co, main], scoring).values()], [1, 0, 5]);
+  assert.equal(ufcFightPoints([other], scoring).get(other.id), 1);
 });

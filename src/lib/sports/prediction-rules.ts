@@ -26,6 +26,7 @@ export type RankingRow = {
   rank: number;
 };
 export type UfcView = {
+  scoringVersion: number;
   closesAt: string | null;
   closed: boolean;
   transition: boolean;
@@ -52,23 +53,27 @@ export function closedAt(value: Date | string | null | undefined, now: Date) {
   return !!value && new Date(value).getTime() <= now.getTime();
 }
 
+export type UfcScoring = {
+  ufc_scoring_version: number | null;
+  ufc_main_fight_id: string | null;
+  ufc_co_main_fight_id: string | null;
+};
 type ScoringFight = {
   id: string;
-  bout_order: number;
-  bout_block: string;
-  is_main_event: boolean;
   prode_eligible: boolean;
   removed_at: Date | string | null;
 };
 
-// Cards are stored in display order, with the main event first. Keep a removed
-// co-main's slot reserved: cancelling it must not upgrade another fight to 3.
-// At the same slot, prefer its active replacement if it was added before closing.
-export function ufcFightPoints(fights: readonly ScoringFight[]): Map<string, number> {
-  const coMain = fights
-    .filter((fight) => fight.bout_block === "main" && !fight.is_main_event && fight.prode_eligible)
-    .toSorted((a, b) => a.bout_order - b.bout_order || Number(!!a.removed_at) - Number(!!b.removed_at) || a.id.localeCompare(b.id))[0];
+// The database stores the rule and reserves both fight identities at card close.
+// Never infer bonuses from the current order, block or cancellation state.
+export function ufcFightPoints(
+  fights: readonly ScoringFight[],
+  scoring: UfcScoring,
+): Map<string, number> {
   return new Map(fights.map((fight) => [fight.id,
-    !fight.prode_eligible || fight.removed_at ? 0 : fight.is_main_event ? 5 : fight.id === coMain?.id ? 3 : 1,
+    !fight.prode_eligible || fight.removed_at ? 0
+      : scoring.ufc_scoring_version !== 2 ? 1
+      : fight.id === scoring.ufc_main_fight_id ? 5
+      : fight.id === scoring.ufc_co_main_fight_id ? 3 : 1,
   ]));
 }

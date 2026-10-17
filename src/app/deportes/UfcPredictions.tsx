@@ -125,7 +125,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <div className={styles.panel}>
         <h3>Tus pronósticos</h3>
         <p>
-          Elegiste {data.chosen} de {data.total} peleas. Por acertar al ganador: 5 puntos en la estelar, 3 en la coestelar y 1 en las demás.
+          Elegiste {data.chosen} de {data.total} peleas. {data.scoringVersion === 2
+            ? "Por acertar al ganador: 5 puntos en la estelar, 3 en la coestelar y 1 en las demás."
+            : "Cada ganador acertado suma 1 punto."}
         </p>
         <p>
           Los pronósticos de toda la cartelera cierran al comenzar el primer bloque de peleas, incluidas las preliminares.
@@ -169,7 +171,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   className={fight.isMainEvent ? styles.mainFight : undefined}
                 >
                   {fight.isMainEvent && (
-                    <strong className={styles.badge}>ESTELAR · 5 PUNTOS</strong>
+                    <strong className={styles.badge}>ESTELAR · {data.scoringVersion === 2 ? "5 PUNTOS" : "1 PUNTO"}</strong>
                   )}
                   {fight.isCoMainEvent && <strong className={styles.badge}>COESTELAR · 3 PUNTOS</strong>}
                   <strong>
@@ -255,7 +257,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <section id="ranking" className={styles.panel}>
         <h3>Tabla de la cartelera · {data.final ? "Final" : "Parcial"}</h3>
         <table className={styles.ranking}>
-          <caption>Puntos por ganador acertado: estelar 5 · coestelar 3 · demás peleas 1</caption>
+          <caption>{data.scoringVersion === 2
+            ? "Puntos por ganador acertado: estelar 5 · coestelar 3 · demás peleas 1"
+            : "Un punto por ganador acertado"}</caption>
           <thead>
             <tr>
               <th scope="col">Puesto</th>
