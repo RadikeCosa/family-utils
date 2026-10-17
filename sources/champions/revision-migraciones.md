@@ -1,6 +1,6 @@
 # Revisión de seguridad de migraciones Champions
 
-Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreSQL aislado. La copia de SQL completa al final permite revisión externa. No contiene credenciales ni datos de familias.
+Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreSQL aislado. UFC `0037` ya está publicado y se conserva como migración aplicada antes de Champions, inmediatamente después de `0026`; no se vuelve a aplicar. La copia de SQL completa al final permite revisión externa. No contiene credenciales ni datos de familias.
 
 ## Hallazgos por migración
 

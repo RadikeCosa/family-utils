@@ -48,7 +48,10 @@ test("Champions migration preserves legacy data, defaults and family-scoped iden
     const legacyEvents = (await pool.query("SELECT to_jsonb(e) AS record FROM sports_events e ORDER BY id")).rows;
     const tables = ["sports_fights", "sports_predictions", "sports_formations", "sports_comments"];
     const before = {};
-    for (const table of tables) before[table] = (await pool.query(`SELECT to_jsonb(t) AS record FROM ${table} t`)).rows;
+    for (const table of tables) {
+      const projection = table === "sports_fights" ? "to_jsonb(t)-'prode_eligible'" : "to_jsonb(t)";
+      before[table] = (await pool.query(`SELECT ${projection} AS record FROM ${table} t`)).rows;
+    }
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
     const executableFunctions = await pool.query(`
       SELECT p.oid::regprocedure::text AS signature

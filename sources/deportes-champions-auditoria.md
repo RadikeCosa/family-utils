@@ -450,4 +450,4 @@ Estado histórico al cierre del Bloque 6: seguían pendientes la publicación op
 
 ## Cierre final para RC1 (2026-10-17)
 
-UFC se incorporó como base publicada en `884c313`; el journal reconoce `0037_ufc_card_closure` con el hash y timestamp ya aplicados en producción, inmediatamente después de `0026`. Las diez migraciones Champions quedan después de UFC. No se modificaron las migraciones publicadas ni se consultó producción. El árbol final se validará desde un worktree limpio del tag RC1.
+UFC se incorporó como base publicada en `884c313`, incluyendo el cierre de pronósticos y la puntuación 5/3/1; el journal reconoce `0037_ufc_card_closure` con el hash y timestamp ya aplicados en producción, inmediatamente después de `0026`. Las diez migraciones Champions quedan después de UFC. No se modificaron las migraciones publicadas ni se consultó producción. El árbol final se validará desde un worktree limpio del tag RC1.
