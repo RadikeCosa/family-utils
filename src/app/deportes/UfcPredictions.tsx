@@ -24,6 +24,7 @@ function winnerName(fight: UfcFightView, id: string | null) {
       : "";
 }
 function outcomeLabel(fight: UfcFightView) {
+  if (!fight.prodeEligible) return "Agregada después del cierre · no puntúa";
   if (fight.removed || fight.cancelled) return "Pelea anulada · no puntúa";
   if (!fight.result) return "Resultado pendiente";
   return fight.result.outcome === "winner"
@@ -85,7 +86,15 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
         },
       );
       const value = await response.json();
-      if (!response.ok) throw new Error(value.error);
+      if (!response.ok) {
+        if (response.status === 409) {
+          setPending(null);
+          const refreshed = await fetch(`/api/sports/events/${eventId}/predictions`, { cache: "no-store" });
+          if (refreshed.ok) { setData(await refreshed.json()); setLoadError(""); }
+          else setLoadError("No se pudo actualizar la cartelera. Recargá la página.");
+        }
+        throw new Error(value.error);
+      }
       setData(value);
       setMessage(winnerId ? "Pronóstico guardado." : "Pronóstico retirado.");
       setPending(null);
@@ -116,11 +125,14 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <div className={styles.panel}>
         <h3>Tus pronósticos</h3>
         <p>
-          Elegiste {data.chosen} de {data.total} peleas. Un punto por acierto.
+          Elegiste {data.chosen} de {data.total} peleas. Por acertar al ganador: 5 puntos en la estelar, 3 en la coestelar y 1 en las demás.
         </p>
         <p>
-          Las elecciones de la familia se revelan cuando cierra cada bloque.
+          Los pronósticos de toda la cartelera cierran al comenzar el primer bloque de peleas, incluidas las preliminares.
+          Esto incluye la cartelera principal. Las elecciones de la familia se revelan todas juntas.
         </p>
+        <p>{data.closesAt ? `${data.closed ? "La cartelera cerró" : "Toda la cartelera cierra"} ${time(data.closesAt)} · Argentina` : "Horario del primer bloque a confirmar · pronósticos no habilitados"}</p>
+        {data.transition && <p role="status">Actualizamos la regla: se cerraron todos los pronósticos y se revelaron también las elecciones de la cartelera principal. Conservamos las elecciones ya guardadas.</p>}
         {loadError && <p role="alert">{loadError}</p>}
         {message && <p role="status">{message}</p>}
         {error && (
@@ -146,9 +158,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
           <section className={styles.block} key={block.key}>
             <h3>{block.label}</h3>
             <p>
-              {fights[0].closesAt
-                ? `${fights[0].closed ? "Cerró" : "Cierra"} ${time(fights[0].closesAt)} · Argentina`
-                : "Horario a confirmar · elecciones no habilitadas"}
+              {fights[0].startsAt
+                ? `Inicio del bloque: ${time(fights[0].startsAt)} · Argentina`
+                : "Horario del bloque a confirmar"}
             </p>
             <ol className={styles.fights}>
               {fights.map((fight) => (
@@ -157,8 +169,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   className={fight.isMainEvent ? styles.mainFight : undefined}
                 >
                   {fight.isMainEvent && (
-                    <strong className={styles.badge}>ESTELAR</strong>
+                    <strong className={styles.badge}>ESTELAR · 5 PUNTOS</strong>
                   )}
+                  {fight.isCoMainEvent && <strong className={styles.badge}>COESTELAR · 3 PUNTOS</strong>}
                   <strong>
                     {fight.firstFighter} <small>vs</small> {fight.secondFighter}
                   </strong>
@@ -172,6 +185,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                         disabled={
                           busy ||
                           fight.closed ||
+                          !fight.prodeEligible ||
                           !fight.closesAt ||
                           fight.cancelled ||
                           !!fight.result
@@ -187,6 +201,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   </div>
                   {fight.ownWinnerId &&
                     !fight.closed &&
+                    fight.prodeEligible &&
                     !fight.cancelled &&
                     !fight.result && (
                       <button
@@ -200,6 +215,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                     <p>Tu pronóstico: {winnerName(fight, fight.ownWinnerId)}</p>
                   )}
                   <p>{outcomeLabel(fight)}</p>
+                  {fight.prodeEligible && !fight.isMainEvent && !fight.isCoMainEvent && <p>1 punto por acertar al ganador.</p>}
                   {fight.closed && (
                     <details>
                       <summary>Elecciones de la familia</summary>
@@ -239,7 +255,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <section id="ranking" className={styles.panel}>
         <h3>Tabla de la cartelera · {data.final ? "Final" : "Parcial"}</h3>
         <table className={styles.ranking}>
-          <caption>Un punto por ganador acertado</caption>
+          <caption>Puntos por ganador acertado: estelar 5 · coestelar 3 · demás peleas 1</caption>
           <thead>
             <tr>
               <th scope="col">Puesto</th>

@@ -43,3 +43,34 @@ test("UFC result templates allow null and reject invalid winners, duplicates and
   value.events[0].fights.push(value.events[0].fights[0]);
   assert.equal(parseResultsBundle(value), null);
 });
+
+test("UFC awards 5/3/1 by card role, not array position or prelim block", async () => {
+  const { ufcFightPoints } = await import("./prediction-rules.ts");
+  const fight = (id: string, order: number, block = "main", main = false) => ({
+    id, bout_order: order, bout_block: block, is_main_event: main,
+    prode_eligible: true, removed_at: null as Date | null,
+  });
+  const main = fight("main", 1, "main", true);
+  const coMain = fight("co", 2);
+  const ordinary = fight("ordinary", 3);
+  const prelim = fight("prelim", 4, "preliminaries");
+  const early = fight("early", 5, "early_preliminaries");
+  const weights = ufcFightPoints([early, ordinary, coMain, main, prelim]);
+  assert.equal(weights.get(main.id), 5);
+  assert.equal(weights.get(coMain.id), 3);
+  assert.equal(weights.get(ordinary.id), 1);
+  assert.equal(weights.get(prelim.id), 1);
+  assert.equal(weights.get(early.id), 1);
+  assert.equal(ufcFightPoints([main, prelim]).get(prelim.id), 1);
+  // Removed co-main keeps its slot: nobody inherits its bonus after cancellation.
+  coMain.removed_at = new Date();
+  const removed = ufcFightPoints([main, coMain, ordinary]);
+  assert.equal(removed.get(coMain.id), 0);
+  assert.equal(removed.get(ordinary.id), 1);
+  // An eligible replacement at the original slot is the new co-main.
+  const replacement = fight("replacement", 2);
+  assert.equal(ufcFightPoints([main, coMain, replacement, ordinary]).get(replacement.id), 3);
+  replacement.prode_eligible = false;
+  assert.equal(ufcFightPoints([main, coMain, replacement, ordinary]).get(replacement.id), 0);
+  assert.equal(ufcFightPoints([main, coMain, replacement, ordinary]).get(ordinary.id), 1);
+});
