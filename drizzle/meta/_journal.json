@@ -190,6 +190,83 @@
       "when": 1792046402705,
       "tag": "0026_sports_fight_closure",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792046402706,
+      "tag": "0037_ufc_card_closure",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792251557431,
+      "tag": "0027_sports_champions_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792252220845,
+      "tag": "0028_sports_football_predictions",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792253079571,
+      "tag": "0029_sports_football_function_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792255638811,
+      "tag": "0030_sports_function_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792255794079,
+      "tag": "0031_sports_champions_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792256714427,
+      "tag": "0032_sports_champions_round_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792268413534,
+      "tag": "0033_sports_champions_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792270047901,
+      "tag": "0034_champions_suspended_resolution",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792270244327,
+      "tag": "0035_champions_result_corrections",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792271000000,
+      "tag": "0036_champions_managed_grants",
+      "breakpoints": true
     }
   ]
 }

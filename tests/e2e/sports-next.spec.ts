@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, request as playwrightRequest, test } from "@playwright/test";
 import pg from "pg";
+import { championsFixture, championsCleanupTables, championsIdentityTables } from "../helpers/champions";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 test.skip(!connectionString, "requires isolated PostgreSQL");
@@ -9,6 +10,7 @@ let pool: pg.Pool,
   familyId: string,
   memberId: string,
   userId: string,
+  championsId: string,
   api: Awaited<ReturnType<typeof playwrightRequest.newContext>>;
 
 function familyDay(value = new Date()) {
@@ -110,6 +112,7 @@ test.beforeEach(async ({ page }) => {
     "INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)",
     [memberId, userId],
   );
+  championsId = (await championsFixture(pool, familyId, memberId)).event;
   await page.context().addCookies((await api.storageState()).cookies);
 });
 
@@ -120,7 +123,16 @@ test.afterEach(async () => {
       "DELETE FROM audit_events WHERE family_id=$1 AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import','sports_result')",
       [familyId],
     );
+    // Test-only cleanup: production triggers intentionally prevent late vote deletion.
+    const cleanup = await pool.connect();
+    try {
+      await cleanup.query("BEGIN");
+      await cleanup.query("SET LOCAL session_replication_role=replica");
+      await cleanup.query("DELETE FROM sports_predictions WHERE family_id=$1", [familyId]);
+      await cleanup.query("COMMIT");
+    } finally { await cleanup.query("ROLLBACK"); cleanup.release(); }
     for (const table of [
+      ...championsCleanupTables,
       "sports_predictions",
       "sports_fight_results",
       "sports_block_closures",
@@ -132,6 +144,7 @@ test.afterEach(async () => {
       "sports_events",
     ])
       await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
+    for (const table of championsIdentityTables) await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
     await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
   }
   if (userId) await pool.query('DELETE FROM "user" WHERE id=$1', [userId]);
@@ -141,6 +154,16 @@ test.afterEach(async () => {
 test("agenda: all events, independent drafts, templates and mobile accessibility", async ({
   page,
 }) => {
+  const before = await (await api.get(`/api/sports?event=${championsId}`)).json();
+  expect(JSON.stringify(before)).not.toContain(championsId);
+  expect((await api.patch(`/api/sports/events/${championsId}`, { data: { action: "hide" } })).status()).toBe(404);
+  const hiddenResults = await (await api.get("/api/sports/templates?kind=results")).json();
+  expect(JSON.stringify(hiddenResults)).not.toContain(championsId);
+  const deniedResult = await api.post("/api/sports/results/import", { data: { mode: "preview", bundle: { version: 1, checkedAt: new Date().toISOString(), source: "Regression fixture", events: [{ eventId: championsId, result: { homeGoals: 1, awayGoals: 0 } }] } } });
+  expect(deniedResult.status()).toBe(200);
+  const deniedBody = await deniedResult.json();
+  expect(deniedBody.events).toEqual([]);
+  expect(deniedBody.errors).toHaveLength(1);
   const bundle = curatedBundle();
   const future = structuredClone(bundle.events[0]);
   future.externalReference = "991235";
@@ -156,6 +179,7 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
     ).status(),
   ).toBe(200);
   await page.goto("/deportes?sport=river");
+  await expect(page.getByText("Champions sentinel", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /Próximos \(2\)/ }),
   ).toBeVisible();
@@ -251,7 +275,7 @@ test("River results: preview, concurrency, corrections and idempotence", async (
   const {
     rows: [match],
   } = await pool.query(
-    "SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match'",
+    "SELECT id FROM sports_events WHERE family_id=$1 AND kind='football_match' AND football_category='river'",
     [familyId],
   );
   const template = await (
@@ -376,6 +400,9 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   page,
 }) => {
   const bundle = curatedBundle();
+  // Keep this scenario open regardless of the actual local time of the test run.
+  const tomorrow = familyDay(new Date(Date.now() + 86400000));
+  Object.assign(bundle.events[1], { eventDate: tomorrow, preliminaryDate: tomorrow, mainCardDate: tomorrow });
   const card = bundle.events[1] as {
     fights: Array<{
       firstFighter: string;
@@ -414,7 +441,7 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
     [familyId],
   );
   await pool.query(
-    "UPDATE sports_events SET main_card_starts_at=now()+interval '1 hour',preliminary_starts_at=NULL WHERE id=$1",
+    "UPDATE sports_events SET main_card_starts_at=clock_timestamp()+interval '1 hour',preliminary_starts_at=clock_timestamp()+interval '30 minutes' WHERE id=$1",
     [event.id],
   );
   const endpoint = `/api/sports/events/${event.id}/predictions`;
@@ -459,7 +486,7 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
         data: { fightId: prelim.id, winnerId: prelim.firstFighterId },
       })
     ).status(),
-  ).toBe(409);
+  ).toBe(200);
   expect(
     (
       await api.put(endpoint, {
@@ -633,4 +660,80 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   ).toBe(true);
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+
+test("UFC: one closure reveals all picks, rejects a stale screen and excludes later additions", async ({ page }) => {
+  const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,preliminary_starts_at,main_card_starts_at,is_current,created_by_member_id,updated_by_member_id)
+    VALUES($1,'ufc_card','UFC: Cierre único',CURRENT_DATE,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '3 hours',true,$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
+  const fights = [];
+  for (const [order, first, second, block] of [[1, 'Cody Chovancek', 'SuYoung You', 'preliminaries'], [2, 'Alpha', 'Beta', 'main']] as const) {
+    fights.push((await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [familyId, event.id, order, first, second, block, block === 'main'])).rows[0]);
+  }
+  const peer = (await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Peer with private choice','member') RETURNING id", [familyId])).rows[0];
+  const endpoint = `/api/sports/events/${event.id}/predictions`;
+  const beforePeerVote = await (await api.get(endpoint)).json();
+  const agendaBeforePeerVote = await (await api.get(`/api/sports?event=${event.id}`)).json();
+  await pool.query('INSERT INTO sports_predictions(family_id,event_id,fight_id,member_id,winner_id) VALUES($1,$2,$3,$4,$5)', [familyId, event.id, fights[1].id, peer.id, fights[1].second_fighter_id]);
+  const open = await (await api.get(endpoint)).json();
+  expect(open).toEqual(beforePeerVote);
+  expect(await (await api.get(`/api/sports?event=${event.id}`)).json()).toEqual(agendaBeforePeerVote);
+  expect(open.closed).toBe(false);
+  expect(open.fights.every((f: { choices: unknown[]; closesAt: string }) => f.choices.length === 0 && f.closesAt === open.closesAt)).toBe(true);
+  expect(open.chosen).toBe(0);
+  expect(open.ranking.every((r: { points: number }) => r.points === 0)).toBe(true);
+  // A missing first-block time disables all fights, including the main card.
+  await pool.query('UPDATE sports_events SET preliminary_starts_at=NULL WHERE id=$1', [event.id]);
+  expect((await api.put(endpoint, { data: { fightId: fights[1].id, winnerId: fights[1].first_fighter_id } })).status()).toBe(409);
+  expect((await (await api.get(endpoint)).json()).fights.every((f: { choices: unknown[] }) => f.choices.length === 0)).toBe(true);
+  await pool.query("UPDATE sports_events SET preliminary_starts_at=clock_timestamp()+interval '1 hour' WHERE id=$1", [event.id]);
+  await page.goto(`/deportes?sport=ufc&event=${event.id}`);
+  await expect(page.getByText(/Los pronósticos de toda la cartelera cierran/)).toBeVisible();
+  const choose = page.getByRole('button', { name: 'Elegir a Alpha', exact: true });
+  await expect(choose).toBeEnabled();
+  await pool.query("UPDATE sports_events SET preliminary_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
+  await choose.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'La cartelera ya cerró. Tu cambio no se guardó.' })).toBeVisible();
+  await expect(choose).toBeDisabled();
+  const closed = await (await api.get(endpoint)).json();
+  expect(closed.closed).toBe(true);
+  expect(closed.fights.find((f: { id: string }) => f.id === fights[1].id).choices).toHaveLength(1);
+  expect(closed.chosen).toBe(0);
+  expect((await api.delete(endpoint, { data: { fightId: fights[1].id } })).status()).toBe(409);
+  await pool.query("UPDATE sports_events SET preliminary_starts_at=clock_timestamp()+interval '1 day' WHERE id=$1", [event.id]);
+  const added = (await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+    VALUES($1,$2,3,'New fighter','New opponent','main',false) RETURNING id,prode_eligible`, [familyId, event.id])).rows[0];
+  expect(added.prode_eligible).toBe(false);
+  const preserved = await (await api.get(endpoint)).json();
+  expect(preserved.closesAt).toBe(closed.closesAt);
+  expect(preserved.total).toBe(2);
+  await page.reload();
+  await expect(page.getByText('Agregada después del cierre · no puntúa')).toBeVisible();
+});
+
+
+test("UFC: partial result preview persists first closure and its confirmation stays valid", async () => {
+  const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,main_card_starts_at,is_current,created_by_member_id,updated_by_member_id)
+    VALUES($1,'ufc_card','UFC: Resultados parciales',CURRENT_DATE,clock_timestamp()+interval '1 hour',true,$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
+  const fights = [];
+  for (const order of [1, 2]) {
+    fights.push((await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+      VALUES($1,$2,$3,$4,$5,'main',$6) RETURNING *`, [familyId, event.id, order, `First ${order}`, `Second ${order}`, order === 1])).rows[0]);
+  }
+  const endpoint = `/api/sports/events/${event.id}/predictions`;
+  expect((await api.put(endpoint, { data: { fightId: fights[0].id, winnerId: fights[0].second_fighter_id } })).status()).toBe(200);
+  // Make the closure part of the preview's base state. If the deadline crossed
+  // between preview and confirmation, the signed state must correctly expire.
+  await pool.query("UPDATE sports_events SET main_card_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
+  const bundle = { version: 1, checkedAt: new Date().toISOString(), source: 'Synthetic verified result', events: [{ eventId: event.id, fights: [{ fightId: fights[0].id, result: { outcome: 'winner', winnerId: fights[0].second_fighter_id } }] }] };
+  const preview = await (await api.post('/api/sports/results/import', { data: { mode: 'preview', bundle } })).json();
+  expect(preview.errors).toEqual([]);
+  const saved = await (await api.post('/api/sports/results/import', { data: { mode: 'import', bundle, token: preview.token } })).json();
+  expect(saved.errors).toEqual([]);
+  const view = await (await api.get(endpoint)).json();
+  expect(view.closed).toBe(true);
+  expect(view.final).toBe(false);
+  expect(view.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(1);
+  expect(view.fights.find((f: { id: string }) => f.id === fights[1].id).result).toBeNull();
 });

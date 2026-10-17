@@ -8,7 +8,7 @@ if (process.env.CI && !process.env.FAMILY_UTILS_TEST_DATABASE_URL) {
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testIgnore: /sports-next\.spec\.ts/,
+  testIgnore: /(sports-next|champions)\.spec\.ts/,
   workers: 1,
   reporter: "list",
   use: { baseURL, trace: "retain-on-failure" },
@@ -23,6 +23,12 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 45_000,
-    env: { BETTER_AUTH_URL: baseURL, LIBRARY_ENABLED: "true", SPORTS_ENABLED: "true" },
+    env: {
+      DATABASE_URL: process.env.FAMILY_UTILS_TEST_DATABASE_URL,
+      CODE_PEPPER: process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci",
+      BETTER_AUTH_URL: baseURL,
+      LIBRARY_ENABLED: "true",
+      SPORTS_ENABLED: "true",
+    },
   },
 });
