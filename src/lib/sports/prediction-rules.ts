@@ -7,6 +7,8 @@ export type UfcFightView = {
   firstFighterId: string;
   secondFighterId: string;
   block: string;
+  startsAt: string | null;
+  prodeEligible: boolean;
   removed: boolean;
   cancelled: boolean;
   closed: boolean;
@@ -22,6 +24,9 @@ export type RankingRow = {
   rank: number;
 };
 export type UfcView = {
+  closesAt: string | null;
+  closed: boolean;
+  transition: boolean;
   fights: UfcFightView[];
   ranking: RankingRow[];
   final: boolean;

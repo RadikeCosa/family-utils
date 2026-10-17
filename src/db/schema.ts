@@ -308,6 +308,9 @@ export const sportsEvents = pgTable("sports_events", {
   country: varchar("country", { length: 160 }),
   eventType: varchar("event_type", { length: 16 }).$type<"numerado" | "fight_night" | "otro">(),
   predictionCloseMode: varchar("prediction_close_mode", { length: 12 }),
+  ufcPredictionClosesAt: timestamp("ufc_prediction_closes_at", { withTimezone: true }),
+  ufcPredictionClosedAt: timestamp("ufc_prediction_closed_at", { withTimezone: true }),
+  ufcPredictionTransitionAt: timestamp("ufc_prediction_transition_at", { withTimezone: true }),
   createdByMemberId: uuid("created_by_member_id").notNull().references(() => members.id),
   updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
   createdAt: createdAt(),
@@ -385,6 +388,7 @@ export const sportsSyncItemState = pgTable("sports_sync_item_state", {
 ]);
 
 export const sportsFights = pgTable("sports_fights", {
+  prodeEligible: boolean("prode_eligible").notNull().default(true),
   predictionClosedAt: timestamp("prediction_closed_at", {withTimezone:true}),
   firstFighterId: uuid("first_fighter_id").notNull().defaultRandom(),
   secondFighterId: uuid("second_fighter_id").notNull().defaultRandom(),

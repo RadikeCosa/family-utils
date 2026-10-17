@@ -190,6 +190,13 @@
       "when": 1792046402705,
       "tag": "0026_sports_fight_closure",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792046402706,
+      "tag": "0037_ufc_card_closure",
+      "breakpoints": true
     }
   ]
 }

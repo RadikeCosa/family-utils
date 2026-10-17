@@ -46,6 +46,10 @@ export default defineConfig({
     timeout: 45_000,
     env: {
       BETTER_AUTH_URL: baseURL,
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "ci-only-better-auth-secret-not-used-outside-ci",
+      CODE_PEPPER: process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci",
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? "",
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
       LIBRARY_ENABLED: "true",
       SPORTS_ENABLED: "true",
       SPORTS_AGENDA_ENABLED: "true",

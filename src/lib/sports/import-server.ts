@@ -105,7 +105,7 @@ async function findOrInsertEvent(
       for (const row of nearby) {
         if (ufcIntegrityEnabled) {
           const { rows: closed } = await tx.query(
-            "SELECT 1 FROM sports_block_closures WHERE family_id=$1 AND event_id=$2 LIMIT 1",
+            "SELECT 1 FROM sports_events WHERE family_id=$1 AND id=$2 AND ufc_prediction_closed_at IS NOT NULL",
             [familyId, row.id],
           );
           if (closed.length) continue;
@@ -246,7 +246,7 @@ async function findOrInsertEvent(
     await freezeClosedBlocks(tx, familyId, current as unknown as UfcEventRow);
     if (current.event_date !== item.payload.eventDate) {
       const { rows: closed } = await tx.query(
-        "SELECT 1 FROM sports_block_closures WHERE family_id=$1 AND event_id=$2 LIMIT 1",
+        "SELECT 1 FROM sports_events WHERE family_id=$1 AND id=$2 AND ufc_prediction_closed_at IS NOT NULL",
         [familyId, current.id],
       );
       if (closed.length)
