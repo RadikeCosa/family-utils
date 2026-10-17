@@ -60,10 +60,10 @@ async function inspect(tx: PoolClient, familyId: string, entry: ResultEntry) {
   const {
     rows: [event],
   } = await tx.query(
-    "SELECT id,title,kind,status,updated_at FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE",
+    "SELECT id,title,kind,football_category,status,updated_at FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE",
     [entry.eventId, familyId],
   );
-  if (!event || event.kind !== "football_match")
+  if (!event || event.kind !== "football_match" || event.football_category !== "river")
     reject(400, "No encontramos ese partido de River en la familia.");
   const {
     rows: [previous],
@@ -228,7 +228,7 @@ export async function resultsTemplate(request: Request) {
   try {
     const actor = await sportsActor(request, true);
     const { rows } = await getPool().query(
-      "SELECT id,title,event_date,kind FROM sports_events WHERE family_id=$1 AND (kind='football_match' OR $2) AND hidden=false ORDER BY event_date DESC,id LIMIT 20",
+      "SELECT id,title,event_date,kind FROM sports_events WHERE family_id=$1 AND ((kind='football_match' AND football_category='river') OR (kind='ufc_card' AND $2)) AND hidden=false ORDER BY event_date DESC,id LIMIT 20",
       [actor.familyId, sportsFeatures().ufc],
     );
     const bundle: ResultsBundle = {
