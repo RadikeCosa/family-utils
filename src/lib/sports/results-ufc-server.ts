@@ -39,7 +39,7 @@ export async function inspectUfcResults(
   );
   if (!event) reject(400, "No encontramos esa cartelera en la familia.");
   const refreshed = await refreshUfcClose(tx, familyId, event.id);
-  const snapshot = await ufcSnapshot(tx, familyId, refreshed);
+  const snapshot = await ufcSnapshot(tx, familyId, refreshed, null);
   const after = [...snapshot.results];
   const fights = [];
   for (const item of entry.fights ?? []) {
@@ -50,7 +50,7 @@ export async function inspectUfcResults(
       reject(409, "La pelea fue retirada; solo se admite cancelación.");
     if (
       item.result.outcome !== "cancelled" &&
-      !closedAt(fightDeadline(snapshot, fight), snapshot.now)
+      !closedAt(fightDeadline(snapshot), snapshot.now)
     )
       reject(409, "La cartelera no cerró o su primer bloque no tiene horario confirmado.");
     if (
@@ -109,7 +109,7 @@ export async function inspectUfcResults(
   const state = createHmac("sha256", secret)
     .update(
       JSON.stringify({
-        event,
+        event: refreshed,
         fights: snapshot.fights,
         results: snapshot.results,
         votes: snapshot.votes,
