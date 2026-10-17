@@ -1,0 +1,647 @@
+{
+  "testedAt": "2026-10-17T17:04:31.134Z",
+  "environment": "PostgreSQL aislado local; producción no consultada",
+  "action": "Dos POST /api/sports/champions/import, mode preview, issueToken false; NO se envió confirmación",
+  "valid": true,
+  "errors": [],
+  "previewTokenIssued": false,
+  "previews": [
+    {
+      "httpStatus": 200,
+      "body": {
+        "valid": true,
+        "errors": [],
+        "summary": {
+          "season": "2026/27",
+          "round": "Jornada 3",
+          "teams": 36,
+          "matches": 18
+        },
+        "matches": [
+          {
+            "reference": "2049595",
+            "title": "Fenerbahçe vs Slavia Praha",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049597",
+            "title": "Sabah vs Borussia Dortmund",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049592",
+            "title": "Roma vs Slovan Bratislava",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049593",
+            "title": "Porto vs PSV Eindhoven",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049590",
+            "title": "Liverpool vs Villarreal",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049591",
+            "title": "Manchester City vs AEK Athens",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049589",
+            "title": "Paris Saint-Germain vs Barcelona",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049594",
+            "title": "Napoli vs Bodø/Glimt",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049596",
+            "title": "Stuttgart vs Atlético de Madrid",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049606",
+            "title": "Como vs Manchester United",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049605",
+            "title": "Lille vs Galatasaray",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049602",
+            "title": "Aston Villa vs Viking",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049603",
+            "title": "Club Brugge vs Lens",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049598",
+            "title": "Bayern München vs Arsenal",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049600",
+            "title": "Inter vs Shakhtar Donetsk",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049599",
+            "title": "Real Madrid vs Leipzig",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049604",
+            "title": "Real Betis vs Feyenoord",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049601",
+            "title": "Sporting CP vs LASK",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "httpStatus": 200,
+      "body": {
+        "valid": true,
+        "errors": [],
+        "summary": {
+          "season": "2026/27",
+          "round": "Jornada 3",
+          "teams": 36,
+          "matches": 18
+        },
+        "matches": [
+          {
+            "reference": "2049595",
+            "title": "Fenerbahçe vs Slavia Praha",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049597",
+            "title": "Sabah vs Borussia Dortmund",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049592",
+            "title": "Roma vs Slovan Bratislava",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049593",
+            "title": "Porto vs PSV Eindhoven",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049590",
+            "title": "Liverpool vs Villarreal",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049591",
+            "title": "Manchester City vs AEK Athens",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049589",
+            "title": "Paris Saint-Germain vs Barcelona",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049594",
+            "title": "Napoli vs Bodø/Glimt",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049596",
+            "title": "Stuttgart vs Atlético de Madrid",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-20",
+              "startsAt": "2026-10-20T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049606",
+            "title": "Como vs Manchester United",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049605",
+            "title": "Lille vs Galatasaray",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T16:45:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049602",
+            "title": "Aston Villa vs Viking",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049603",
+            "title": "Club Brugge vs Lens",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049598",
+            "title": "Bayern München vs Arsenal",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049600",
+            "title": "Inter vs Shakhtar Donetsk",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049599",
+            "title": "Real Madrid vs Leipzig",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049604",
+            "title": "Real Betis vs Feyenoord",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          },
+          {
+            "reference": "2049601",
+            "title": "Sporting CP vs LASK",
+            "before": null,
+            "after": {
+              "eventDate": "2026-10-21",
+              "startsAt": "2026-10-21T19:00:00.000Z",
+              "status": "scheduled"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "identicalPreviews": true,
+  "providerReferences": {
+    "uefaTeams": 36,
+    "uefaMatches": 18,
+    "allMatchHomeAwayPairsVerified": true,
+    "source": "Referencias oficiales suministradas por el usuario y verificadas por él el 17/10/2026"
+  },
+  "checkedAt": {
+    "current": "2026-10-17T00:00:00Z",
+    "provisional": true,
+    "revalidation": "19/10/2026 por la mañana (Argentina); consignar la hora real"
+  },
+  "timeVerification": {
+    "engine": "PostgreSQL AT TIME ZONE",
+    "matches": 18,
+    "early1345": 4,
+    "late1600": 14,
+    "perDay": 9,
+    "allPassed": true
+  },
+  "matches": [
+    {
+      "ordinal": 1,
+      "matchuefaid": "2049595",
+      "homeuefaid": "52692",
+      "awayuefaid": "52498",
+      "home": "Fenerbahçe",
+      "away": "Slavia Praha",
+      "utc": "2026-10-20T16:45:00Z",
+      "day": "2026-10-20",
+      "argentina": "13:45",
+      "paris": "18:45"
+    },
+    {
+      "ordinal": 2,
+      "matchuefaid": "2049597",
+      "homeuefaid": "2609356",
+      "awayuefaid": "52758",
+      "home": "Sabah",
+      "away": "Borussia Dortmund",
+      "utc": "2026-10-20T16:45:00Z",
+      "day": "2026-10-20",
+      "argentina": "13:45",
+      "paris": "18:45"
+    },
+    {
+      "ordinal": 3,
+      "matchuefaid": "2049592",
+      "homeuefaid": "50137",
+      "awayuefaid": "52797",
+      "home": "Roma",
+      "away": "Slovan Bratislava",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 4,
+      "matchuefaid": "2049593",
+      "homeuefaid": "50064",
+      "awayuefaid": "50062",
+      "home": "Porto",
+      "away": "PSV Eindhoven",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 5,
+      "matchuefaid": "2049590",
+      "homeuefaid": "7889",
+      "awayuefaid": "70691",
+      "home": "Liverpool",
+      "away": "Villarreal",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 6,
+      "matchuefaid": "2049591",
+      "homeuefaid": "52919",
+      "awayuefaid": "50129",
+      "home": "Manchester City",
+      "away": "AEK Athens",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 7,
+      "matchuefaid": "2049589",
+      "homeuefaid": "52747",
+      "awayuefaid": "50080",
+      "home": "Paris Saint-Germain",
+      "away": "Barcelona",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 8,
+      "matchuefaid": "2049594",
+      "homeuefaid": "50136",
+      "awayuefaid": "59333",
+      "home": "Napoli",
+      "away": "Bodø/Glimt",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 9,
+      "matchuefaid": "2049596",
+      "homeuefaid": "50107",
+      "awayuefaid": "50124",
+      "home": "Stuttgart",
+      "away": "Atlético de Madrid",
+      "utc": "2026-10-20T19:00:00Z",
+      "day": "2026-10-20",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 10,
+      "matchuefaid": "2049606",
+      "homeuefaid": "79946",
+      "awayuefaid": "52682",
+      "home": "Como",
+      "away": "Manchester United",
+      "utc": "2026-10-21T16:45:00Z",
+      "day": "2026-10-21",
+      "argentina": "13:45",
+      "paris": "18:45"
+    },
+    {
+      "ordinal": 11,
+      "matchuefaid": "2049605",
+      "homeuefaid": "75797",
+      "awayuefaid": "50067",
+      "home": "Lille",
+      "away": "Galatasaray",
+      "utc": "2026-10-21T16:45:00Z",
+      "day": "2026-10-21",
+      "argentina": "13:45",
+      "paris": "18:45"
+    },
+    {
+      "ordinal": 12,
+      "matchuefaid": "2049602",
+      "homeuefaid": "52683",
+      "awayuefaid": "52319",
+      "home": "Aston Villa",
+      "away": "Viking",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 13,
+      "matchuefaid": "2049603",
+      "homeuefaid": "50043",
+      "awayuefaid": "52277",
+      "home": "Club Brugge",
+      "away": "Lens",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 14,
+      "matchuefaid": "2049598",
+      "homeuefaid": "50037",
+      "awayuefaid": "52280",
+      "home": "Bayern München",
+      "away": "Arsenal",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 15,
+      "matchuefaid": "2049600",
+      "homeuefaid": "50138",
+      "awayuefaid": "52707",
+      "home": "Inter",
+      "away": "Shakhtar Donetsk",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 16,
+      "matchuefaid": "2049599",
+      "homeuefaid": "50051",
+      "awayuefaid": "2603790",
+      "home": "Real Madrid",
+      "away": "Leipzig",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 17,
+      "matchuefaid": "2049604",
+      "homeuefaid": "52265",
+      "awayuefaid": "52749",
+      "home": "Real Betis",
+      "away": "Feyenoord",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    },
+    {
+      "ordinal": 18,
+      "matchuefaid": "2049601",
+      "homeuefaid": "50149",
+      "awayuefaid": "63405",
+      "home": "Sporting CP",
+      "away": "LASK",
+      "utc": "2026-10-21T19:00:00Z",
+      "day": "2026-10-21",
+      "argentina": "16:00",
+      "paris": "21:00"
+    }
+  ],
+  "writtenDomainRecords": {
+    "sports_events": 0,
+    "sports_football_teams": 0,
+    "sports_football_rounds": 0,
+    "sports_football_seasons": 0,
+    "sports_football_event_sources": 0,
+    "sports_football_team_sources": 0,
+    "audit_events": 0
+  }
+}

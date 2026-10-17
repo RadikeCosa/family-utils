@@ -1,0 +1,72 @@
+{
+  "testedAt": "2026-10-17T21:36:43.932Z",
+  "environment": "Base PostgreSQL local aislada, 127.0.0.1:55439/champions_test; producción no consultada",
+  "appliedMigrations": 36,
+  "actions": [
+    "Importación confirmada con token de vista previa",
+    "Mismo archivo previsualizado y confirmado por segunda vez",
+    "Pronóstico propio guardado por dos integrantes autenticados",
+    "Resultado ficticio confirmado para un partido iniciado",
+    "Corrección ficticia confirmada mediante vista previa y confirmación explícita",
+    "Anulación ficticia para el prode de un partido suspendido"
+  ],
+  "import": {
+    "httpStatus": 200,
+    "changed": true,
+    "teams": 36,
+    "matches": 18,
+    "teamReferences": 36,
+    "matchReferences": 18,
+    "errors": [],
+    "reimportHttpStatus": 200,
+    "reimportChanged": false,
+    "noDomainOrAuditChangesOnReimport": true,
+    "teamCountAfterReimport": 36,
+    "matchCountAfterReimport": 18
+  },
+  "schedule": {
+    "all18PairsMatchSuppliedUEFAIds": true,
+    "verifiedArgentinaTimes": {
+      "13:45": 4,
+      "16:00": 14
+    },
+    "perDay": 9,
+    "all18Passed": true
+  },
+  "privacy": {
+    "memberA": {
+      "ownChoice": "home",
+      "otherChoices": []
+    },
+    "memberB": {
+      "ownChoice": "away",
+      "otherChoices": []
+    },
+    "administrator": {
+      "ownChoice": null,
+      "otherChoices": []
+    },
+    "noForeignChoicesReturned": true
+  },
+  "fictionalResultsExercise": {
+    "scope": "Familia y partidos temporales de la base aislada; limpiados al terminar",
+    "resultImport": {
+      "httpStatus": 200,
+      "records": 1
+    },
+    "correction": {
+      "previewHttpStatus": 200,
+      "confirmationHttpStatus": 200,
+      "auditCorrectionRecords": 1
+    },
+    "suspendedProdeVoid": {
+      "httpStatus": 200,
+      "resolution": "void_for_prode",
+      "sportingStatusRemainsSuspended": true,
+      "resultRecords": 0,
+      "resolutionRecords": 1
+    },
+    "temporaryFamilyAndUsersRemoved": true,
+    "productionTouched": false
+  }
+}
