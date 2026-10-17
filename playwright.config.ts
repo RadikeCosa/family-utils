@@ -26,6 +26,9 @@ export default defineConfig({
     env: {
       DATABASE_URL: process.env.FAMILY_UTILS_TEST_DATABASE_URL,
       CODE_PEPPER: process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci",
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "ci-only-better-auth-secret-not-used-outside-ci",
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? "",
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
       BETTER_AUTH_URL: baseURL,
       LIBRARY_ENABLED: "true",
       SPORTS_ENABLED: "true",

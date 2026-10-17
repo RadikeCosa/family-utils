@@ -1,14 +1,10 @@
 {
-  "testedAt": "2026-10-17T21:36:43.932Z",
-  "environment": "Base PostgreSQL local aislada, 127.0.0.1:55439/champions_test; producción no consultada",
-  "appliedMigrations": 36,
+  "testedAt": "2026-10-17T23:00:32.413Z",
+  "environment": "Worktree limpio del candidato cb1a789, PostgreSQL aislado local 127.0.0.1:55439/champions_tag_20261017; producción no consultada",
   "actions": [
     "Importación confirmada con token de vista previa",
     "Mismo archivo previsualizado y confirmado por segunda vez",
-    "Pronóstico propio guardado por dos integrantes autenticados",
-    "Resultado ficticio confirmado para un partido iniciado",
-    "Corrección ficticia confirmada mediante vista previa y confirmación explícita",
-    "Anulación ficticia para el prode de un partido suspendido"
+    "Pronóstico propio guardado por dos integrantes autenticados"
   ],
   "import": {
     "httpStatus": 200,
@@ -20,9 +16,7 @@
     "errors": [],
     "reimportHttpStatus": 200,
     "reimportChanged": false,
-    "noDomainOrAuditChangesOnReimport": true,
-    "teamCountAfterReimport": 36,
-    "matchCountAfterReimport": 18
+    "noDomainOrAuditChangesOnReimport": true
   },
   "schedule": {
     "all18PairsMatchSuppliedUEFAIds": true,
@@ -48,25 +42,7 @@
     },
     "noForeignChoicesReturned": true
   },
-  "fictionalResultsExercise": {
-    "scope": "Familia y partidos temporales de la base aislada; limpiados al terminar",
-    "resultImport": {
-      "httpStatus": 200,
-      "records": 1
-    },
-    "correction": {
-      "previewHttpStatus": 200,
-      "confirmationHttpStatus": 200,
-      "auditCorrectionRecords": 1
-    },
-    "suspendedProdeVoid": {
-      "httpStatus": 200,
-      "resolution": "void_for_prode",
-      "sportingStatusRemainsSuspended": true,
-      "resultRecords": 0,
-      "resolutionRecords": 1
-    },
-    "temporaryFamilyAndUsersRemoved": true,
-    "productionTouched": false
-  }
+  "codeCommit": "cb1a789",
+  "appliedMigrations": 38,
+  "sourceRevalidation": "Pendiente revalidación humana el 19/10/2026 por la mañana (Argentina); checkedAt del borrador sigue provisional."
 }

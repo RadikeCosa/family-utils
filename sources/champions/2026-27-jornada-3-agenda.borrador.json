@@ -30,13 +30,13 @@
       "matches": 0,
       "espn": "No corresponde: sin cobertura de esta temporada."
     },
-    "draftFields": "Referencias UEFA completas (solo números suministrados). homeTeamName y awayTeamName son etiquetas de revisión. Pendiente revalidación de checkedAt el 19/10 por la mañana; no se autoriza confirmación en esta tarea.",
+    "draftFields": "Referencias UEFA completas; las etiquetas homeTeamName y awayTeamName son solo para revisión. checkedAt permanece provisional y no indica una hora de verificación. Revalidación humana de fuentes programada para el 19/10 por la mañana; no confirmar antes.",
     "checkedAtProvisional": true,
     "revalidationScheduled": "19/10/2026 por la mañana (Argentina): revalidar fuente y consignar en checkedAt la hora real de revisión.",
     "referencesVerification": {
       "provider": "uefa",
       "verifiedOn": "2026-10-17",
-      "method": "Datos e IDs tomados de las páginas oficiales UEFA consultadas el 17/10/2026",
+      "method": "Datos y referencias UEFA tomados del calendario oficial de la fase liga actualizado el 14/10/2026 y de la página oficial de clubes consultados el 17/10/2026; horarios corroborados contra Sky Sports, el sitio oficial del FC Barcelona y otros calendarios GMT/CET. ESPN no cubre esta temporada. Pendiente revalidación humana el 19/10/2026 por la mañana (Argentina).",
       "sources": [
         "Página de clubes de la temporada en uefa.com",
         "Calendario de la fase liga en uefa.com"

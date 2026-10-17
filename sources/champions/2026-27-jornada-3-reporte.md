@@ -140,3 +140,17 @@ La matriz de requisito por requisito está en [verificaciones-fase-1.md](verific
 **Bloqueante para abrir Jornada 3:** únicamente la publicación operativa que ejecutará el usuario: respaldo y ensayo de restauración, migraciones en producción y chequeo SQL de permisos, despliegue temporal protegido, revalidación UEFA de agenda y `checkedAt`, importación y verificación, despliegue final, retiro comprobado del acceso temporal y ejercicio de apagado. Producción no fue consultada ni modificada. Si no se completa antes del **19/10/2026 18:00 Argentina**, el estreno pasa a Jornada 4.
 
 **Puede llegar después:** nada de los Bloques 7 u 8 queda pendiente en código o pruebas. Antes del primer resultado en producción, se debe cargar un resultado oficial verificado; la anulación de suspendidos y el flujo auditado de corrección ya están implementados y ensayados localmente.
+
+
+## Revalidación final en copia limpia
+
+La copia limpia sobre UFC publicado (`cb1a789`) pasó `npm ci`, tipos, lint, build, 38 migraciones con hashes, reglas/base **107/107**, rutas **103/103**, recorridos generales **111/111**, Deportes **24/24**, Champions **32/32** en iPhone, Android, WebKit iPhone y escritorio, y accesibilidad **3/3**. No hubo pruebas omitidas.
+
+El ensayo real de agenda con autenticación confirmó: **HTTP 200**, 36 equipos, 18 partidos y 0 errores; la segunda confirmación devolvió HTTP 200 / `changed:false` sin alterar dominio ni auditoría. Los 18 pares UEFA de partido/local/visitante coincidieron, nueve por día; horarios argentinos: cuatro a las 13:45 y catorce a las 16:00. Dos integrantes guardaron pronósticos distintos; cada uno recibió solo su elección y el administrador obtuvo `choices: []`. Se registró el ensayo en `2026-27-jornada-3-ensayo.json`.
+
+Procedencia registrada: calendario oficial UEFA de fase liga actualizado el 14/10/2026 y página oficial de clubes consultados el 17/10/2026; horarios corroborados contra Sky Sports, FC Barcelona y otros calendarios GMT/CET; ESPN no cubre esta temporada. La revalidación humana y el `checkedAt` real siguen pendientes para el 19/10 por la mañana.
+
+**Bloqueante para publicar:** todos los pasos manuales del runbook de producción y la revalidación humana. Si no están verificados antes del 19/10/2026 18:00 Argentina, el estreno pasa a Jornada 4. No se tocó producción.
+
+
+La regresión UFC se ejecutó con el cierre de cartelera publicado y la puntuación 5/3/1 integrada antes de Champions; la importación de Jornada 3 no alteró eventos ni cálculos UFC.

@@ -21,6 +21,8 @@ export default defineConfig({
     env: {
       ...process.env,
       DATABASE_URL: process.env.FAMILY_UTILS_TEST_DATABASE_URL,
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "ci-only-better-auth-secret-not-used-outside-ci",
+      CODE_PEPPER: process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci",
       LIBRARY_ENABLED: "true",
       BETTER_AUTH_URL: `http://localhost:${port}`,
     },
