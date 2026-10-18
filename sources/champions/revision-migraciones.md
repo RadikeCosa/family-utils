@@ -1,6 +1,6 @@
 # Revisión de seguridad de migraciones Champions
 
-Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreSQL aislado. UFC `0037` ya está publicado y se conserva como migración aplicada antes de Champions, inmediatamente después de `0026`; no se vuelve a aplicar. La copia de SQL completa al final permite revisión externa. No contiene credenciales ni datos de familias.
+Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreSQL aislado. **no verificado: main no contiene 0037 y no se consultó la base de producción**. Esta revisión del repositorio incluye 0037 en la secuencia local, inmediatamente después de `0026`; eso no prueba si se aplicó en producción. La copia de SQL completa al final permite revisión externa. No contiene credenciales ni datos de familias.
 
 ## Hallazgos por migración
 
@@ -16,6 +16,100 @@ Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreS
 | 0034 | Resolución oficial/anulación auditada; tabla solo suma partidos cerrados y resueltos. Función SECDEF tokenizada, search_path fijo; revoca `PUBLIC`/`anon`, no `authenticated`. | ACL corregida en 0036. Tabla nueva sin reescritura de historial; apagado conserva resoluciones. |
 | 0035 | Correcciones con token, old/new, confirmación y bloqueo; vista previa muestra marcadores, nunca elecciones. No se identificó SQL dinámico concatenado. | Tabla nueva; solo confirmación cambia resultados. Bloquea partidos ordenados; no toca elecciones abiertas. Apagado conserva auditoría/correcciones. |
 | 0036 | Hallazgo real: privilegio `authenticated` y ACL directa de tablas no estaban garantizados como revocados en Postgres gestionado. | Nueva migración: defaults de funciones/tablas para `anon`/`authenticated`, revoke efectivo actual sobre `sports_%` y tablas `sports_football_%`/switch. Objetos del catálogo se pasan por `regprocedure`/`regclass` y `format`. Sin cambios de datos. El test crea roles gestionados y verifica ACL efectiva. |
+
+## Respuestas operativas por migración (incluye UFC 0037)
+
+Las duraciones exactas no se midieron contra producción y dependen del volumen, la latencia y las transacciones concurrentes. Donde una migración toma un lock fuerte o recorre datos existentes, se indica el riesgo; no afirmo una duración de producción que no observé. “SQL dinámico por concatenación” se refiere a concatenar texto o datos no confiables para formar SQL; el uso de `format()` con identificadores del catálogo queda señalado aparte.
+
+### 0027 — `sports_champions_identity.sql`
+
+- **Orden de locks (familia, partido, interruptor):** en migración no toma locks de filas de familia, partido ni interruptor; el interruptor aún no existe. En runtime, los triggers de identidad no toman esos locks explícitamente. No hay ciclo de locks de aplicación identificado.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles con escritura directa:** una escritura SQL normal sigue ejecutando los triggers de normalización y sincronización. Un propietario/superusuario puede deshabilitarlos o usar `session_replication_role=replica`; el rol de aplicación no tiene escritura directa a las tablas Champions. La normalización de UFC también queda protegida por el CHECK de categoría.
+- **Locks de tablas existentes / tiempo:** `ALTER TABLE sports_events` agrega columnas, índices/FK/CHECK y reemplaza restricciones, por lo que requiere locks DDL fuertes en `sports_events`; el backfill `UPDATE ... WHERE kind='ufc_card'` toma `ROW EXCLUSIVE` y locks de fila para todas las filas UFC que actualiza. También lee `families` y `members` al crear/validar FKs. El backfill escala con la cantidad de eventos UFC; duración real no medida.
+- **Apagar bandera:** no revierte ni borra columnas, referencias, equipos, eventos ni historial. La bandera Champions no apaga River ni UFC.
+
+### 0028 — `sports_football_predictions.sql`
+
+- **Orden de locks:** las funciones nuevas no bloquean familia ni interruptor. Una escritura de pronóstico bloquea el partido (`sports_events ... FOR UPDATE`) antes de materializar el cierre y escribir la elección. No hay lock de switch en esta versión. No se observa un camino inverso que retenga una elección y luego espere el partido.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles:** una escritura directa normal sigue pasando por `sports_football_preserve_close`; no puede evitar el trigger desde SQL ordinario. Propietario/superusuario o replicación sí pueden deshabilitar triggers. Las tablas de elecciones/cierres no se conceden a roles Data API.
+- **Locks existentes / tiempo:** cambia la restricción de estado de `sports_events` (lock DDL fuerte); FKs consultan/bloquean `families`, `members` y `sports_events` al validarse. Crea tablas e índices vacíos, sin backfill; el trabajo de validación depende de tablas referenciadas, duración no medida.
+- **Apagar bandera:** no elimina ni modifica elecciones/cierres; permanecen almacenados.
+
+### 0029 — `sports_football_function_access.sql`
+
+- **Orden de locks:** igual al escritor de 0028: partido, sin lock de familia ni switch.
+- **SQL dinámico por concatenación:** no. Itera firmas del catálogo y usa `format()` con `regprocedure`; no interpola entradas del usuario.
+- **Triggers eludibles:** no añade triggers. Las reglas de cierre existentes siguen activas ante escrituras SQL normales; solo un rol privilegiado puede deshabilitarlas.
+- **Locks existentes / tiempo:** reemplaza funciones y revoca permisos; no cambia filas ni toma locks de fila de `sports_events`. Los locks de catálogo son breves, pero no se midieron.
+- **Apagar bandera:** conserva elecciones y cierres.
+
+### 0030 — `sports_function_defaults.sql`
+
+- **Orden de locks:** no toma locks de familia, partido o switch; actúa sobre ACLs y catálogo.
+- **SQL dinámico por concatenación:** no. Usa `format()` para las firmas obtenidas del catálogo (`regprocedure`).
+- **Triggers eludibles:** no añade ni altera triggers.
+- **Locks existentes / tiempo:** cambia privilegios por defecto del propietario y ACLs de funciones existentes; no bloquea filas de negocio. Duración esperada corta por ser operaciones de catálogo, no medida.
+- **Apagar bandera:** no afecta datos.
+
+### 0031 — `sports_champions_results.sql`
+
+- **Orden de locks:** no introduce escrituras con locks de familia/partido/switch; la función lee resultados y cierres ya persistidos.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles:** no añade triggers. La consulta solo agrega partidos cerrados y resueltos; una escritura directa privilegiada en tablas de resultados sigue fuera del flujo autorizado por API.
+- **Locks existentes / tiempo:** crea/reemplaza función y ACL; no reescribe tablas existentes. Locks de catálogo breves, no medidos.
+- **Apagar bandera:** la tabla conserva resultados y cierres; quedan inaccesibles mediante las rutas Champions apagadas.
+
+### 0032 — `sports_champions_round_comments.sql`
+
+- **Orden de locks:** no toma locks de familia, partido o switch durante la migración. Runtime bloquea la fila de comentario que se edita; no bloquea partidos. No se encontró un camino de comentario hacia partido/switch.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles:** no hay trigger de autorización; las FKs siguen protegiendo integridad ante escrituras directas, pero no reemplazan la autorización de la API. El rol de aplicación no recibe escritura de tabla.
+- **Locks existentes / tiempo:** crea tabla e índices vacíos y valida FKs contra `families`, `members` y `sports_football_rounds`; sin backfill. La validación puede recorrer referencias, duración no medida.
+- **Apagar bandera:** conserva comentarios y borradores; las rutas Champions no los devuelven mientras esté apagado.
+
+### 0033 — `sports_champions_switch.sql`
+
+- **Orden de locks:** durante migración, lock explícito `SHARE ROW EXCLUSIVE` sobre `families`, luego inserta switches apagados. En runtime, las escrituras toman primero el lock compartido de la fila switch, después el partido; los importadores/resultados toman switch antes del advisory lock familiar y de los partidos en orden estable. Apagar toma lock exclusivo de switch y no espera partidos. El setter autentica familia/rol y bloquea switch, pero no partido. No encontré un camino partido→switch, así que no hay ciclo que cierre interbloqueo entre esos locks.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles:** una inserción de familia normal dispara el trigger que crea el switch apagado. Un superusuario/propietario puede deshabilitar triggers o replicar; la aplicación no puede. Una escritura SQL normal no puede saltarse el trigger.
+- **Locks existentes / tiempo:** el lock de `families` dura desde el `LOCK TABLE` hasta que termina la migración; bloquea escrituras de familia durante el backfill completo de una fila por familia. Cantidad de familias y duración no medidas en producción. FKs también consultan `families`/`members`.
+- **Apagar bandera:** solo cambia `enabled` y deja auditoría; no borra switches ni datos Champions. Las filas quedan preservadas.
+
+### 0034 — `champions_suspended_resolution.sql`
+
+- **Orden de locks:** la migración no bloquea familia, partido o switch. En runtime, la resolución bloquea el partido; no toma lock de switch en SQL de la migración. La ruta de aplicación comprueba la habilitación antes de la mutación y retiene el lock compartido de switch durante su transacción.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles:** no crea triggers. Una escritura privilegiada directa en la tabla de resoluciones puede saltarse la autorización/auditoría de la ruta; los roles Data API no tienen ese permiso.
+- **Locks existentes / tiempo:** crea tabla vacía y valida FKs a `families`, `sports_events`, `members`; actualiza la función de tabla. No reescribe datos previos; validación sin duración medida.
+- **Apagar bandera:** conserva las resoluciones y auditoría, sin exponerlas en lecturas Champions apagadas.
+
+### 0035 — `champions_result_corrections.sql`
+
+- **Orden de locks:** la migración no toma locks de familia, partido o switch. En runtime, el importador toma switch, advisory lock familiar y partidos de la jornada ordenados por ID; la corrección no vuelve a bloquear una elección ni toca partidos abiertos. No hay ruta de partido→switch.
+- **SQL dinámico por concatenación:** no.
+- **Triggers eludibles:** no crea triggers. Un dueño de base podría insertar filas de auditoría/corrección directamente y omitir la confirmación de API; los roles de aplicación no tienen acceso directo a esas tablas.
+- **Locks existentes / tiempo:** crea tabla vacía y valida FKs a `families`, `sports_events`, `members`; no reescribe resultados previos. Sin duración medida.
+- **Apagar bandera:** conserva resultados, historial de corrección y auditoría; no elimina datos.
+
+### 0036 — `champions_managed_grants.sql`
+
+- **Orden de locks:** no toma locks de familia, partido o switch; actualiza ACLs de objetos.
+- **SQL dinámico por concatenación:** no concatena datos de usuario. Sí ejecuta SQL construido con `format()` sobre firmas (`regprocedure`), relaciones (`regclass`) y nombres de roles del catálogo.
+- **Triggers eludibles:** no crea ni cambia triggers.
+- **Locks existentes / tiempo:** toma locks de catálogo/ACL sobre funciones y tablas `sports_%` / `sports_football_%` y el switch; no bloquea filas de negocio ni hace backfill. Duración esperada corta, no medida.
+- **Apagar bandera:** los permisos permanecen cerrados y todos los datos existentes se conservan.
+
+### 0037 — `ufc_card_closure.sql` (UFC; estado en producción no verificado)
+
+- **Orden de locks:** no toma locks de familia ni switch. La API de pronósticos, resultados y cambios de cartelera serializa por fila de evento UFC; triggers de pelea/resultado refrescan el cierre bloqueando su evento. No existe lock Champions en ese flujo.
+- **SQL dinámico por concatenación:** no concatena entrada de usuario. El bloque de permisos usa `format()` con nombres de roles de `pg_roles`.
+- **Triggers eludibles:** las protecciones de cierre siguen aplicándose a escrituras SQL normales, incluso directas. Dueño/superusuario y `session_replication_role=replica` pueden deshabilitarlas; las credenciales de aplicación no tienen esos privilegios.
+- **Locks existentes / tiempo:** agrega columnas a `sports_events`/`sports_fights` (DDL con lock fuerte), instala/reemplaza triggers y recorre todas las filas `sports_events` de UFC para derivar horarios/cierres/transiciones. Las filas UFC actualizadas quedan bloqueadas durante ese backfill. No toca filas de pronósticos ni resultados. Volumen y tiempo real de producción no se consultaron desde esta tarea; el test usa datos sintéticos.
+- **Apagar bandera Champions:** no apaga ni borra la función de cierre UFC ni sus columnas, cierres, elegibilidad, pronósticos o resultados.
+
+**Conclusión del orden:** para Champions el orden de runtime comprobado es identidad de familia → switch compartido → partido (y, donde corresponda, advisory lock de familia antes de bloquear los partidos ordenados). El apagado espera el lock compartido y luego obtiene el exclusivo del switch; no intenta adquirir partido. Los endpoints de importación/resultados y las predicciones no adquieren el switch después de un partido. Esto descarta el ciclo de interbloqueo entre familia/partido/switch que se buscó en el código; no equivale a una garantía contra cualquier deadlock externo o SQL privilegiado.
 
 ## Controles transversales
 

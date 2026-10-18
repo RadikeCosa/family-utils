@@ -58,6 +58,7 @@ test("Deportes ofrece importación curada y no intenta sincronizar fuentes", asy
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
   await page.getByText("Administrar", { exact: true }).click();
+  await expect(page.getByLabel("Contenido JSON").first()).toBeVisible();
   await expect(page.getByText("Automatización desactivada", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Actualizar", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cargar partido", exact: true })).toHaveCount(0);
