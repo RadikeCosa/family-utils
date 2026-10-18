@@ -119,6 +119,58 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.deepEqual((await pool.query("SELECT to_jsonb(e) AS record FROM sports_events e WHERE id=$1", [champions.event])).rows[0].record, championBefore);
     });
 
+    await t.test("UFC import respects single closure from 0037", async (t) => {
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const date = (offset) => {
+        const value = new Date(`${today}T12:00:00Z`);
+        value.setUTCDate(value.getUTCDate() + offset);
+        return value.toISOString().slice(0, 10);
+      };
+      const makeBundle = (externalReference, eventDate) => {
+        const checkedAt = new Date().toISOString();
+        return {
+          schemaVersion: 1, status: "curated", checkedAt, timezone: "America/Argentina/Buenos_Aires",
+          curation: { completeHorizon: { river: { from: today, through: date(20), complete: true }, ufc: { from: today, through: date(20), complete: true } } },
+          events: [
+            { kind: "football_match", sourceProvider: "espn", externalReference: "990000000001", title: "River Plate vs Boca Juniors", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate, startTime: "20:00", venue: "Monumental", status: "scheduled", source: { primary: "https://www.ligaprofesional.ar/", checkedAt } },
+            { kind: "ufc_card", sourceProvider: "ufc_official", externalReference, title: `UFC single closure ${externalReference}`, eventDate, preliminaryDate: eventDate, preliminaryTime: "18:00", mainCardDate: eventDate, mainCardTime: "21:00", fights: [{ firstFighter: "Closure Alpha", secondFighter: "Closure Beta", boutBlock: "main", isMainEvent: true }], source: { primary: "https://www.ufc.com/events", checkedAt, validation: { officialCardComplete: true, officialFightCount: 1, independentCrossCheck: "passed" } } },
+          ],
+        };
+      };
+      const createClosedCard = async (externalReference) => {
+        const familyId = await family(), importer = await identity(familyId, "administrator");
+        const bundle = makeBundle(externalReference, date(1));
+        const imported = await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+        assert.equal(imported.ufc[0], "inserted");
+        const { rows: [event] } = await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='ufc_card' AND external_reference=$2", [familyId, externalReference]);
+        await pool.query("UPDATE sports_events SET main_card_starts_at=clock_timestamp()-interval '1 minute' WHERE id=$1", [event.id]);
+        const { rows: [closed] } = await pool.query("SELECT ufc_prediction_closed_at FROM sports_events WHERE id=$1", [event.id]);
+        assert.ok(closed.ufc_prediction_closed_at, "0037 must persist the single UFC close on sports_events");
+        assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_block_closures WHERE family_id=$1 AND event_id=$2", [familyId, event.id])).rows[0].count, 0, "the single-close path must not require a block-closure row");
+        return { familyId, importer, event, bundle };
+      };
+
+      await t.test("closed card is excluded from equivalents", async () => {
+        const { familyId, importer, event } = await createClosedCard("ufc-single-close-equivalent");
+        const incoming = makeBundle("ufc-single-close-equivalent-new", date(1));
+        const result = await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle: incoming });
+        assert.equal(result.ufc[0], "inserted");
+        assert.equal((await pool.query("SELECT external_reference FROM sports_events WHERE id=$1", [event.id])).rows[0].external_reference, "ufc-single-close-equivalent");
+        assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_events WHERE family_id=$1 AND kind='ufc_card'", [familyId])).rows[0].count, 2);
+      });
+
+      await t.test("date change of a closed card is rejected", async () => {
+        const { importer, bundle } = await createClosedCard("ufc-single-close-reschedule");
+        const rescheduled = makeBundle("ufc-single-close-reschedule", date(2));
+        rescheduled.checkedAt = new Date(Date.now() + 1_000).toISOString();
+        rescheduled.events[0].source.checkedAt = rescheduled.checkedAt;
+        const response = await request(importer, "/api/sports/import", "POST", { mode: "import", bundle: rescheduled });
+        assert.equal(response.status, 409);
+        assert.match(response.body.error, /cartelera ya cerró/i);
+        assert.equal((await pool.query("SELECT event_date::text AS event_date FROM sports_events WHERE external_reference='ufc-single-close-reschedule'", [])).rows[0].event_date, bundle.events[0].eventDate);
+      });
+    });
+
     await t.test("manual football agenda is private and members cannot edit it", async () => {
       assert.equal((await request(null, "/api/sports")).status, 403);
       const match = await ok(admin, "/api/sports", "POST", { kind: "football_match", title: "River Plate vs Boca", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()), startTime: null });
