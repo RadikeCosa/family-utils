@@ -199,12 +199,16 @@ export default function CuratedImporter({
               (item: {
                 eventId: string;
                 title: string;
+                homeTeam?: string;
+                awayTeam?: string;
                 before: unknown;
                 after: unknown;
                 changed: boolean;
                 fights?: Array<{
                   fightId: string;
                   title: string;
+                homeTeam?: string;
+                awayTeam?: string;
                   before: string;
                   after: string;
                 }>;
@@ -212,6 +216,7 @@ export default function CuratedImporter({
               }) => (
                 <article key={item.eventId}>
                   <h4>{item.title}</h4>
+                  {item.homeTeam && <p>Local: {item.homeTeam} · Visitante: {item.awayTeam}. Marcador en orden local–visitante.</p>}
                   {item.fights ? (
                     <>
                       {item.fights.map((fight) => (

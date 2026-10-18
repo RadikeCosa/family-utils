@@ -882,3 +882,19 @@ export const sportsFootballPredictions = pgTable("sports_football_predictions", 
   foreignKey({ columns: [table.memberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "sports_football_predictions_member_fk" }),
   check("sports_football_predictions_choice", sql`${table.choice} IN ('home','draw','away')`),
 ]);
+
+export const sportsRiverLineups = pgTable("sports_river_lineups", {
+  eventId: uuid("event_id").primaryKey(),
+  familyId: uuid("family_id").notNull(),
+  body: text("body").notNull(),
+  source: varchar("source", { length: 1000 }).notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_river_lineups_event_family_fk" }).onDelete("restrict"),
+  foreignKey({ columns: [table.updatedByMemberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "sports_river_lineups_author_family_fk" }).onDelete("restrict"),
+  check("sports_river_lineups_body", sql`char_length(btrim(${table.body})) BETWEEN 1 AND 4000`),
+  check("sports_river_lineups_source", sql`${table.source} ~ '^https://'`),
+]);

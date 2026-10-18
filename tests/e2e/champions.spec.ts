@@ -96,14 +96,11 @@ test('Champions: a delayed comment response cannot erase newer text after return
  await page.getByRole('button',{name:/Jornada 4/}).click();await expect(page.getByRole('heading',{name:'Jornada 4',exact:true})).toBeVisible();await page.getByRole('button',{name:/Jornada 3/}).click();await expect(page.getByRole('heading',{name:'Jornada 3',exact:true})).toBeVisible();await expect(input).toHaveValue('Envío anterior en curso');await input.fill('Texto nuevo todavía sin enviar');release();
  await expect.poll(async()=>(await (await api.get(path)).json()).comments.length).toBe(1);await page.getByRole('button',{name:/Jornada 4/}).click();await expect(page.getByRole('heading',{name:'Jornada 4',exact:true})).toBeVisible();await page.getByRole('button',{name:/Jornada 3/}).click();await expect(page.getByRole('heading',{name:'Jornada 3',exact:true})).toBeVisible();await expect(input).toHaveValue('Texto nuevo todavía sin enviar');await expect(thread.getByText('Envío anterior en curso',{exact:true})).toBeVisible();expect((await (await api.get(path)).json()).comments).toHaveLength(1);
 });
-test('Champions: the administrator switch blocks access and can restore the preserved jornada',async({page})=>{
+test('Champions: remains available without a family switch and preserves the jornada',async({page})=>{
  const round=await importAgenda(championsBundle());await page.goto('/deportes?sport=champions&round='+round);
- const switchButton=page.getByRole('button',{name:'Champions: encendido',exact:true});await expect(switchButton).toBeVisible();
- await switchButton.click();await expect(page.getByRole('button',{name:'Champions: apagado',exact:true})).toBeVisible();
- expect((await api.get('/api/sports/champions?round='+round)).status()).toBe(404);
- await page.getByRole('button',{name:'Champions: apagado',exact:true}).click();
- await expect(page.getByRole('button',{name:'Champions: encendido',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Jornada 3',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:/Champions: (encendido|apagado)/})).toHaveCount(0);
  expect((await api.get('/api/sports/champions?round='+round)).status()).toBe(200);
+ await page.reload();await expect(page.getByRole('heading',{name:'Jornada 3',exact:true})).toBeVisible();
  expect((await pool.query("SELECT count(*)::int n FROM sports_events WHERE family_id=$1 AND round_id=$2",[familyId,round])).rows[0].n).toBe(2);
 });

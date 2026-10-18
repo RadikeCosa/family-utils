@@ -281,6 +281,13 @@
       "when": 1792357591307,
       "tag": "0049_champions_always_available",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792361762198,
+      "tag": "0050_sports_river_lineups",
+      "breakpoints": true
     }
   ]
 }

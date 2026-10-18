@@ -60,7 +60,7 @@ async function inspect(tx: PoolClient, familyId: string, entry: ResultEntry) {
   const {
     rows: [event],
   } = await tx.query(
-    "SELECT id,title,kind,football_category,status,updated_at FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE",
+    "SELECT id,title,first_participant,second_participant,kind,football_category,status,updated_at FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE",
     [entry.eventId, familyId],
   );
   if (!event || event.kind !== "football_match" || event.football_category !== "river")
@@ -81,6 +81,8 @@ async function inspect(tx: PoolClient, familyId: string, entry: ResultEntry) {
     preview: {
       eventId: event.id,
       title: event.title,
+      homeTeam: event.first_participant,
+      awayTeam: event.second_participant,
       before,
       after: entry.result,
       changed: entry.result !== null && hash(before) !== hash(entry.result),
@@ -228,7 +230,7 @@ export async function resultsTemplate(request: Request) {
   try {
     const actor = await sportsActor(request, true);
     const { rows } = await getPool().query(
-      "SELECT id,title,event_date,kind FROM sports_events WHERE family_id=$1 AND ((kind='football_match' AND football_category='river') OR (kind='ufc_card' AND $2)) AND hidden=false ORDER BY event_date DESC,id LIMIT 20",
+      "SELECT id,title,first_participant,second_participant,event_date,kind FROM sports_events WHERE family_id=$1 AND ((kind='football_match' AND football_category='river') OR (kind='ufc_card' AND $2)) AND hidden=false ORDER BY event_date DESC,id LIMIT 20",
       [actor.familyId, sportsFeatures().ufc],
     );
     const bundle: ResultsBundle = {
@@ -242,6 +244,8 @@ export async function resultsTemplate(request: Request) {
                 eventId: event.id,
                 title: event.title,
                 date: event.event_date,
+                homeTeam: event.first_participant,
+                awayTeam: event.second_participant,
                 result: null,
               }
             : {

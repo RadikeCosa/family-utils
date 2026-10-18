@@ -121,7 +121,7 @@ test.afterEach(async () => {
   await api?.dispose();
   if (familyId) {
     await pool.query(
-      "DELETE FROM audit_events WHERE family_id=$1 AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import','sports_result')",
+      "DELETE FROM audit_events WHERE family_id=$1 AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import','sports_result','sports_river_lineup')",
       [familyId],
     );
     // Test-only cleanup: production triggers intentionally prevent late vote deletion.
@@ -138,6 +138,7 @@ test.afterEach(async () => {
       "sports_fight_results",
       "sports_block_closures",
       "sports_football_results",
+      "sports_river_lineups",
       "sports_formations",
       "sports_comments",
       "sports_fights",
@@ -737,4 +738,74 @@ test("UFC: partial result preview persists first closure and its confirmation st
   expect(view.final).toBe(false);
   expect(view.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(1);
   expect(view.fights.find((f: { id: string }) => f.id === fights[1].id).result).toBeNull();
+});
+
+test("River official lineup: protected publication, conflicts, corrections and refresh preserving drafts", async ({page}) => {
+  await api.post("/api/sports/import",{data:{mode:"import",bundle:curatedBundle()}});
+  const match=(await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND football_category='river'",[familyId])).rows[0];
+  const path="/api/sports/river/lineup/import";
+  const template=await (await api.get(`/api/sports/river/lineup/templates?event=${match.id}`)).json();
+  expect(template.eventId).toBe(match.id);expect(template.homeTeam).toBe("River Plate");
+  const bundle={...template,body:"Titulares: Once oficial de prueba\nSuplentes: Banco confirmado",source:"https://www.cariverplate.com.ar/"};
+  const post=(mode:string,b=bundle,token?:string)=>api.post(path,{data:{mode,bundle:b,token}});
+  for(const id of [championsId,randomUUID(),(await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND kind='ufc_card'",[familyId])).rows[0].id])expect((await post("preview",{...bundle,eventId:id})).status()).toBe(404);
+  const other=(await pool.query("INSERT INTO families(name) VALUES('Lineup outsider') RETURNING id")).rows[0].id;
+  try {
+    await expect(pool.query("INSERT INTO sports_river_lineups(family_id,event_id,body,source,checked_at,updated_by_member_id) VALUES($1,$2,'Test','https://example.com',now(),$3)",[other,match.id,memberId])).rejects.toMatchObject({code:"23503"});
+    const outside=(await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Outside','administrator') RETURNING id",[other])).rows[0].id;
+    await expect(pool.query("INSERT INTO sports_river_lineups(family_id,event_id,body,source,checked_at,updated_by_member_id) VALUES($1,$2,'Test','https://example.com',now(),$3)",[familyId,match.id,outside])).rejects.toMatchObject({code:"23503"});
+  }finally{await pool.query("DELETE FROM families WHERE id=$1",[other]);}
+  const preview=await (await post("preview")).json();
+  expect((await pool.query("SELECT count(*)::int n FROM sports_river_lineups WHERE event_id=$1",[match.id])).rows[0].n).toBe(0);
+  await pool.query("UPDATE members SET role='member' WHERE id=$1",[memberId]);
+  expect((await post("import",bundle,preview.token)).status()).toBe(403);
+  expect((await api.get(`/api/sports/river/lineup/templates?event=${match.id}`)).status()).toBe(403);
+  await pool.query("UPDATE members SET role='administrator' WHERE id=$1",[memberId]);
+  expect((await post("import",{...bundle,body:"Changed"},preview.token)).status()).toBe(409);
+  expect((await post("import",bundle,"bad.token")).status()).toBe(409);
+  const encoded=JSON.parse(Buffer.from(preview.token.split('.')[0],'base64url').toString());encoded.expires=Date.now()-1000;
+  const raw=Buffer.from(JSON.stringify(encoded)).toString('base64url');
+  const {createHmac}=await import('node:crypto');
+  const signed=createHmac('sha256',process.env.BETTER_AUTH_SECRET??'ci-only-better-auth-secret-not-used-outside-ci').update(`river-lineup:${raw}`).digest('base64url');
+  expect((await post("import",bundle,`${raw}.${signed}`)).status()).toBe(409);
+  await pool.query("UPDATE sports_events SET updated_at=now() WHERE id=$1",[match.id]);
+  expect((await post("import",bundle,preview.token)).status()).toBe(409);
+  await page.goto(`/deportes?sport=river&event=${match.id}`);
+  await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText("Todavía no se publicó");
+  await page.getByLabel("Mi formación deseada").fill("Mi borrador intacto");
+  await page.getByLabel("Escribí un comentario").fill("Comentario sin enviar");
+  const fresh=await (await post("preview")).json();
+  const concurrent=await Promise.all([post("import",bundle,fresh.token),post("import",bundle,fresh.token)]);
+  expect(concurrent.map(r=>r.status()).sort()).toEqual([200,409]);
+  await page.getByRole('button',{name:'Actualizar',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText(bundle.body);
+  await expect(page.getByLabel("Mi formación deseada")).toHaveValue("Mi borrador intacto");
+  await expect(page.getByLabel("Escribí un comentario")).toHaveValue("Comentario sin enviar");
+  const repeat=await (await post("preview")).json();expect(repeat.changed).toBe(false);expect((await post("import",bundle,repeat.token)).status()).toBe(200);
+  expect((await pool.query("SELECT count(*)::int n FROM audit_events WHERE family_id=$1 AND entity_type='sports_river_lineup'",[familyId])).rows[0].n).toBe(1);
+  bundle.body="Titulares: Formación corregida";
+  await page.getByText('Administrar',{exact:true}).click();
+  await page.getByLabel("Contenido JSON de formación oficial").fill(JSON.stringify(bundle));
+  await page.getByRole('button',{name:'Validar formación oficial',exact:true}).click();
+  await expect(page.getByText('Anterior',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Confirmar formación oficial',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText("Formación corregida");
+  bundle.body="Titulares: Actualizada al volver";
+  const focusPreview=await(await post('preview')).json();await post('import',bundle,focusPreview.token);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText("Actualizada al volver");
+  await expect(page.getByLabel("Mi formación deseada")).toHaveValue("Mi borrador intacto");
+  const result={version:1,checkedAt:new Date().toISOString(),source:bundle.source,events:[{eventId:match.id,result:{homeGoals:1,awayGoals:2}}]};
+  const rp=await(await api.post('/api/sports/results/import',{data:{mode:'preview',bundle:result}})).json();
+  expect(rp.events[0].homeTeam).toBe('River Plate');expect(rp.events[0].awayTeam).toBe('Boca Juniors');
+  await api.post('/api/sports/results/import',{data:{mode:'import',bundle:result,token:rp.token}});
+  await page.getByRole('button',{name:'Actualizar',exact:true}).click();
+  await expect(page.getByText('Finalizado · 1–2',{exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText("Actualizada al volver");
+  await expect(page.getByLabel("Escribí un comentario")).toHaveValue("Comentario sin enviar");
+  await page.screenshot({path:"test-results/river-lineup-"+test.info().project.name.replaceAll(" ","-")+".png",fullPage:true});
+  await pool.query("UPDATE members SET role='member' WHERE id=$1",[memberId]);
+  await page.reload();await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText("Actualizada al volver");
+  await expect(page.getByText('Administrar',{exact:true})).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });

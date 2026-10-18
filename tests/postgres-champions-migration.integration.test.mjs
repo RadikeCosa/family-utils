@@ -14,7 +14,8 @@ const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("Isolated PostgreSQL required");
 test("journal preserves production migrations and orders the Champions toggle removal", async () => {
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.length, 40);
+  assert.ok(journal.entries.length >= 41);
+  assert.equal(journal.entries[40].tag, "0050_sports_river_lineups");
   assert.deepEqual(
     journal.entries.slice(27, 38).map(entry => entry.tag),
     ["0037_ufc_card_closure", "0038_sports_champions_identity", "0039_sports_football_predictions", "0040_sports_football_function_access", "0041_sports_function_defaults", "0042_sports_champions_results", "0043_sports_champions_round_comments", "0044_sports_champions_switch", "0045_champions_suspended_resolution", "0046_champions_result_corrections", "0047_champions_managed_grants"],
