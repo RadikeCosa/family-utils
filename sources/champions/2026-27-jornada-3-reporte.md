@@ -154,3 +154,20 @@ Procedencia registrada: calendario oficial UEFA de fase liga actualizado el 14/1
 
 
 La regresión UFC se ejecutó con el cierre de cartelera 0037 publicado y puntuación vigente de 1 por acierto. La puntuación 5/3/1 no está publicada: permanece aislada en `codex/ufc-puntajes` hasta `6b0d547`, para integrarla tras Champions reconciliando el registro y snapshot.
+
+## Cierre final desde el tag limpio · 18/10/2026
+
+La copia limpia del tag `champions-fase-1-rc1` (`92dae2a` al ejecutar) quedó instalada desde la caché npm offline (417 paquetes) y verificada sin depender de `.env.local` ni archivos de datos sin versionar. El runner de pruebas declara por sí mismo las banderas River/UFC; los recorridos generales de River y UFC siguen la interfaz administrativa vigente. No se relajaron ni omitieron aserciones.
+
+- `npm run typecheck`, `npm run lint` y `npm run build`: aprobados.
+- Migraciones: **38/38** aplicadas y hashes verificados en PostgreSQL local aislado. `permisos-check.sql` recorrió las **19 funciones de `public`**; `PUBLIC`, `anon` y `authenticated` tienen `false` en las 19 y el script terminó sin excepción.
+- Reglas/base: **25/25 archivos de prueba**, sin fallos ni omisiones. Rutas: **11/11 archivos**, sin fallos ni omisiones.
+- Navegador general: **111/111**. Deportes/River/UFC: **20/20**. Champions: **32/32**. Accesibilidad: **3/3**. Total de ejecuciones de navegador y accesibilidad: **166/166**, cero omitidas; incluye Chromium, Android, iPhone y WebKit donde está configurado.
+- El ensayo real de Jornada 3 se repitió desde esa copia limpia y está registrado en `2026-27-jornada-3-ensayo.json`: importación con token HTTP 200, 36 equipos y 18 partidos; segunda importación `changed:false` y sin cambios de dominio o auditoría; pares locales/visitantes UEFA correctos; Argentina 4 × 13:45 y 14 × 16:00, nueve partidos por día. Dos integrantes autenticados guardaron pronósticos. El administrador, que también era el integrante A, vio su propia elección pero no la de B; ambas respuestas y su lectura administrativa devolvieron `choices: []` para elecciones ajenas.
+- `SPORTS_CHAMPIONS_ENABLED` es `false` en `.env.example` y el runtime queda apagado cuando falta la variable; el único valor `true` versionado está en la configuración Playwright exclusiva de Champions para ejecutar sus pruebas.
+
+La revisión detallada de seguridad de 0027–0035, la resolución aditiva 0036 y el SQL completo están en `revision-migraciones.md`. El cambio UFC 0037 conserva únicamente el cierre ya publicado; los puntajes 5/3/1 siguen aislados en `codex/ufc-puntajes` hasta `6b0d547` para su integración posterior con reconciliación del journal y snapshot.
+
+**Bloqueante para publicar Jornada 3:** acciones manuales del runbook en producción: respaldo y restauración comprobados, aplicación/verificación de migraciones y permisos, despliegue protegido apagado, revalidación humana UEFA y `checkedAt` real el 19/10 por la mañana, importación y comprobación en el despliegue temporal, despliegue final, retiro comprobado de ese acceso y ejercicio de apagado. No se consultó ni modificó producción, ni se hizo merge o despliegue. Si todo no queda verificado antes del corte duro **19/10/2026 18:00 Argentina**, el estreno pasa a Jornada 4.
+
+**Puede llegar después de abrir pronósticos:** no queda código pendiente de Fase 1 ni de los Bloques 7/8. Antes del primer resultado real, cargar un resultado oficial verificado; UFC 5/3/1 se integra en una tarea posterior a Champions.
