@@ -1,0 +1,6 @@
+import type { ChampionsBundle } from "../../src/lib/sports/champions-rules.ts";
+export function championsBundle(now = new Date(), reference = "league-3"): ChampionsBundle {
+  const date = (offset: number) => new Date(now.getTime()+offset*86400000).toISOString().slice(0,10);
+  const from=date(1),through=date(2);
+  return {schemaVersion:1,sport:"champions",status:"curated",checkedAt:now.toISOString(),season:"2026/27",teams:["Alfa","Beta","Gamma","Delta"].map((name,i)=>({name:`Club ${name}`,externalIds:{uefa:`club-${i}`,espn:`team-${i}`}})),rounds:[{reference,name:reference==="league-3"?"Jornada 3":"Jornada 4",originalFrom:from,originalThrough:through,matches:[{externalIds:{uefa:`${reference}-a`,espn:reference==="league-3"?"88000301":"88000401"},homeTeam:"club-0",awayTeam:"club-1",eventDate:from,startsAt:`${from}T18:00:00Z`,status:"scheduled",venue:"Estadio de prueba",channel:null,neutralVenue:true,source:{uefaUrl:"https://www.uefa.com/uefachampionsleague/",kickoffConfirmed:true}},{externalIds:{uefa:`${reference}-b`},homeTeam:"club-2",awayTeam:"club-3",eventDate:through,startsAt:null,status:"scheduled",venue:null,channel:null,neutralVenue:false,source:{uefaUrl:"https://www.uefa.com/uefachampionsleague/",kickoffConfirmed:false}}]}]};
+}

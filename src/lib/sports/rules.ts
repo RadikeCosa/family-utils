@@ -154,6 +154,7 @@ export function sportsWeek(now = new Date()) {
 }
 
 type SelectableEvent = {
+  footballCategory?: "river" | "champions" | null;
   id: string; eventDate: string | null; startsAt: string | Date | null;
   status: string; hidden: boolean; firstParticipant?: string | null;
   secondParticipant?: string | null; mainCardStartsAt?: string | Date | null; sourceAbsentAt?: string | Date | null;
@@ -166,7 +167,7 @@ function eventOrder(a: SelectableEvent, b: SelectableEvent) {
 }
 export function selectRiverEvent<T extends SelectableEvent>(events: T[], now = new Date()): T | null {
   const today = sportsNowDay(now);
-  return events.filter(event => !event.hidden && !event.sourceAbsentAt && event.status !== "cancelled" &&
+  return events.filter(event => event.footballCategory !== "champions" && !event.hidden && !event.sourceAbsentAt && event.status !== "cancelled" &&
     isRiverMatch(event.firstParticipant, event.secondParticipant) &&
     (event.eventDate ? event.eventDate >= today : event.status !== "completed"))
     .sort(eventOrder)[0] ?? null;

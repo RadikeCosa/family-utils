@@ -1,0 +1,38 @@
+# Publicación Champions Jornada 3
+
+Procedimiento manual de una sola ejecución. Mantener Deportes activo y Champions apagado hasta el paso 12. Si algún control falla o no termina antes del **20/10/2026 13:45 (Argentina)**, no abrir el prode: dejarlo apagado y pasar el estreno a Jornada 4.
+
+## Pasos
+
+1. **manual — ensayo opcional en Neon.** En Neon, crear una rama temporal desde `production`; ejecutar allí `DATABASE_URL_UNPOOLED="$NEON_BRANCH_DIRECT_URL" npm run db:migrate`, `DATABASE_URL_UNPOOLED="$NEON_BRANCH_DIRECT_URL" npm run db:verify` y `psql "$NEON_BRANCH_DIRECT_URL" -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql`. Para `ensayo-restauracion.sh`, restaurar el respaldo en una copia local llamada `champions_test` y ejecutarlo allí; su guardia rechaza conexiones remotas. Comparar conteos y hashes con el respaldo, y borrar la rama Neon temporal al terminar. **NO SEGUIR SI** cualquiera difiere. Reversión: borrar solo la rama temporal; producción no cambia.
+
+2. **manual — respaldo.** Confirmar el destino Neon `green-meadow-92440811 / production / br-lucky-bird-b5jop51y`. Consultar la versión del servidor con `psql "$DATABASE_URL_UNPOOLED" -Atc 'SHOW server_version'`; usar `pg_dump` de versión igual o mayor: `pg_dump --version` y `pg_dump --format=custom --file="$BACKUP_FILE" "$DATABASE_URL_UNPOOLED"`; validar con `pg_restore --list "$BACKUP_FILE"`. **NO SEGUIR SI** el destino no coincide, el respaldo falla o `pg_dump` es más viejo que el servidor. Reversión: no se modificó producción; conservar el respaldo privado.
+
+3. **manual — control de historia aplicada.** Con `DATABASE_URL_UNPOOLED` apuntando a la conexión directa de producción, ejecutar:
+   ```sh
+   psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -c 'SELECT count(*) AS applied FROM drizzle.__drizzle_migrations'
+   psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -c 'SELECT created_at, hash FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 1'
+   ```
+   Debe haber **28** filas; la fila 28 debe tener `created_at = 1792046402706` y `hash = 4d508cf9c2e6acbe5ac2860cdc8b60b4c7ceee927a675b114727baa49966c96a` (0037 UFC). **NO SEGUIR SI no coincide** el conteo, fecha o hash. Reversión: ninguna; todavía no hubo cambios.
+
+4. **manual — migraciones.** Exportar `DATABASE_URL_UNPOOLED` con la URL directa de producción; no imprimirla ni pegarla en logs. Ejecutar `npm run db:migrate` y luego `npm run db:verify`. Esperar **38 migraciones verificadas**, conservando 0037 en su posición original y agregando 0038–0047. **NO SEGUIR SI** no se aplican las diez nuevas o cualquier hash difiere. Reversión: no ejecutar migraciones inversas; mantener Champions apagado y, si hace falta, volver al código anterior `dpl_FbQmLAJYdz8vSq4oiNU9UWuWpocY`.
+
+5. **manual — permisos.** Ejecutar `psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql`; revisar cada función pública y confirmar permisos efectivos `PUBLIC`, `anon` y `authenticated` en falso. El informe muestra si `anon` o `authenticated` no existen. Si falla, aplicar el `REVOKE` manual para cada firma indicada y repetir. **NO SEGUIR SI** queda un permiso inesperado. Reversión: no conceder permisos para continuar; mantener Champions apagado y resolver con el propietario de migraciones.
+
+6. **manual — Preview protegido temporal.** Crear un Preview con protección de Vercel Authentication o contraseña individual y acceso limitado al operador. Configurar `DATABASE_URL` y `DATABASE_URL_UNPOOLED` con la conexión directa de producción, y `SPORTS_ENABLED=true`, `SPORTS_AGENDA_ENABLED=true`, `SPORTS_RIVER_RESULTS_ENABLED=true`, `SPORTS_UFC_PREDICTIONS_ENABLED=true`, `SPORTS_CHAMPIONS_ENABLED=true`. La variable de producción permanece `SPORTS_CHAMPIONS_ENABLED=false`; no promover el Preview. **NO SEGUIR SI** la URL de base no es la directa de producción o el acceso temporal no exige autenticación. Reversión: cancelar el Preview y dejar la variable de producción en `false`.
+
+7. **manual — habilitar temporalmente la familia.** Desde ese Preview, iniciar sesión como administrador de la familia objetivo y encender el switch familiar de Champions. Confirmar `effective:true`; las demás familias siguen apagadas. **NO SEGUIR SI** la familia o el usuario no son los esperados. Reversión: apagar inmediatamente el switch familiar; no borrar filas.
+
+8. **manual — revalidar e importar Jornada 3.** Revalidar el calendario UEFA el día de la publicación; si se publica antes, repetir la revisión la mañana del 19/10/2026. Actualizar `checkedAt` con la hora real y cargar el archivo por la vista previa del Preview. Confirmar solo con HTTP 200, 18 partidos, 36 equipos y cero errores; después confirmar una vez. **NO SEGUIR SI** la vista previa difiere, hay errores o `checkedAt` no es real. Reversión: no confirmar; si ya se confirmó, apagar el switch familiar y conservar las filas para una corrección auditada.
+
+9. **manual — verificar y cerrar el acceso familiar temporal.** Comprobar IDs y pares UEFA, horarios argentinos 13:45/16:00, segunda confirmación idempotente sin cambios, pestaña, hilo y navegación. Luego apagar el switch familiar y confirmar `effective:false`. **NO SEGUIR SI** los datos no coinciden o el apagado no bloquea Champions. Reversión: mantener apagado; River/UFC deben seguir disponibles.
+
+10. **manual — desplegar producción habilitada por entorno.** Promover el mismo commit probado a producción con `SPORTS_CHAMPIONS_ENABLED=true` y las dependencias de Deportes activas; los switches familiares permanecen apagados. Confirmar que el dominio público sirve el nuevo despliegue, River/UFC funcionan y Champions no es visible hasta encender la familia. **NO SEGUIR SI** no está aplicada la migración, la agenda no está verificada o aparece Champions antes del switch. Reversión de código: restaurar `dpl_FbQmLAJYdz8vSq4oiNU9UWuWpocY`; **no borrar ese despliegue**, que es el rollback de código. Las migraciones permanecen aplicadas.
+
+11. **manual — retirar Preview y comprobar privacidad/apagado.** Borrar el Preview temporal, revocar su contraseña/allowlist y secretos exclusivos; confirmar en Vercel que no queda despliegue ni alias temporal y que su URL exige acceso o ya no responde. En producción, probar con dos integrantes: el segundo usuario administrador no debe ver la elección del primero antes del cierre. Apagar el switch familiar y comprobar que las rutas Champions quedan bloqueadas y que River/UFC siguen igual; los datos Champions deben permanecer almacenados. **NO SEGUIR SI** persiste acceso temporal, hay fuga de elecciones o River/UFC cambian. Reversión: dejar el switch apagado y volver al despliegue `dpl_FbQmLAJYdz8vSq4oiNU9UWuWpocY` si falla código.
+
+12. **manual — apertura final con aprobación del operador.** Solo con aprobación explícita del operador, encender el switch familiar. Registrar hora argentina, operador y despliegue. Confirmar que Jornada 3 y su hilo se ven y que el prode está abierto antes del **20/10/2026 13:45 (Argentina)**. **NO SEGUIR SI** falta aprobación, la verificación no termina a tiempo o la fecha límite ya pasó; dejar apagado y abrir en Jornada 4. Reversión: apagar el switch familiar; no borrar ni revertir datos.
+
+## Variables y rollback
+
+Los comandos de migración y verificación leen **`DATABASE_URL_UNPOOLED`**; la aplicación lee `DATABASE_URL`. Ambas apuntan a la base directa de producción solo en el Preview protegido y en producción. No escribir credenciales en archivos versionados, comandos persistentes ni logs. El despliegue `dpl_FbQmLAJYdz8vSq4oiNU9UWuWpocY` se conserva sin cambios y no se borra. Un rollback de código no revierte migraciones ni elimina los datos; apagar el switch familiar bloquea Champions de inmediato.

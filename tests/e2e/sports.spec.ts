@@ -11,15 +11,19 @@ function familyDay(value = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
 }
 function curatedBundle() {
-  const day = familyDay();
-  const throughDate = new Date(`${day}T12:00:00Z`); throughDate.setUTCDate(throughDate.getUTCDate() + 14);
+  // Keep the scheduled event safely in the future so this lifecycle regression
+  // remains deterministic even if the suite runs after its local kickoff time.
+  const eventDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const day = familyDay(eventDay);
+  const from = familyDay();
+  const throughDate = new Date(`${from}T12:00:00Z`); throughDate.setUTCDate(throughDate.getUTCDate() + 14);
   const through = familyDay(throughDate), checkedAt = new Date().toISOString();
   return {
     schemaVersion: 1,
     status: "curated",
     checkedAt,
     timezone: "America/Argentina/Buenos_Aires",
-    curation: { completeHorizon: { river: { from: day, through, complete: true }, ufc: { from: day, through, complete: true } } },
+    curation: { completeHorizon: { river: { from, through, complete: true }, ufc: { from, through, complete: true } } },
     events: [
       { kind: "football_match", sourceProvider: "espn", externalReference: "991234", title: "River Plate vs Boca Juniors", competition: "Liga Profesional", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate: day, startTime: "20:15", venue: "Monumental", channel: "ESPN Premium", status: "scheduled", source: { primary: "https://www.ligaprofesional.ar/", checkedAt } },
       { kind: "ufc_card", sourceProvider: "ufc_official", externalReference: "ufc-test-night", title: "UFC Fight Night: Alpha vs Beta", eventDate: day, preliminaryDate: day, preliminaryTime: "18:00", mainCardDate: day, mainCardTime: "21:00", fights: [{ firstFighter: "Alpha", secondFighter: "Beta", boutBlock: "main", isMainEvent: true }], source: { primary: "https://www.ufc.com/events", checkedAt, validation: { officialCardComplete: true, officialFightCount: 1, independentCrossCheck: "passed" } } },
@@ -43,7 +47,7 @@ test.afterEach(async () => {
   await api?.dispose();
   if (familyId) {
     await pool.query("DELETE FROM audit_events WHERE family_id=$1 AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import')", [familyId]);
-    for (const table of ["sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
+    for (const table of ["sports_football_event_sources", "sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
     await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
   }
   if (userId) await pool.query('DELETE FROM "user" WHERE id=$1', [userId]);
@@ -53,12 +57,14 @@ test.afterEach(async () => {
 test("Deportes ofrece importación curada y no intenta sincronizar fuentes", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
+  await page.getByText("Administrar", { exact: true }).click();
+  await expect(page.getByLabel("Contenido JSON").first()).toBeVisible();
   await expect(page.getByText("Automatización desactivada", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Actualizar", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cargar partido", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cargar cartelera", exact: true })).toHaveCount(0);
-  await page.getByText("Importar datos curados desde el chat").click();
-  await expect(page.getByLabel("Contenido JSON")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Actualizar agenda", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Validar y revisar", exact: true }).first()).toBeDisabled();
   const response = await page.request.post(`${baseURL}/api/sports/sync`, { headers: { Origin: baseURL } });
   expect(response.status()).toBe(200);
   expect((await response.json()).status).toBe("Automatización desactivada");
@@ -69,15 +75,15 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
+  await page.getByText("Administrar", { exact: true }).click();
   await page.getByRole("button", { name: "UFC", exact: true }).click();
-  await page.getByRole("button", { name: "Sin evento esta semana", exact: true }).click();
-  await expect(page.getByText("No hay evento esta semana", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Marcar semana actual sin UFC", exact: true }).click();
+  await expect(page.getByText("No hay UFC esta semana. Podés consultar las próximas carteleras.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
-  await page.getByText("Importar datos curados desde el chat").click();
   const bundle = curatedBundle();
-  await page.getByLabel("Contenido JSON").fill(JSON.stringify(bundle));
-  await page.getByRole("button", { name: "Validar JSON" }).click();
-  await expect(page.getByText("1 partido · 1 cartelera · 1 pelea")).toBeVisible().catch(async error => {
+  await page.getByLabel("Contenido JSON").first().fill(JSON.stringify(bundle));
+  await page.getByRole("button", { name: "Validar y revisar", exact: true }).first().click();
+  await expect(page.getByText("1 partidos · 1 carteleras · 1 peleas")).toBeVisible().catch(async error => {
     const message = await page.getByRole("alert").textContent().catch(() => "sin mensaje de validación");
     throw new Error(`${error.message}\nError de importación: ${message}`);
   });
@@ -85,7 +91,8 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await expect(page.getByRole("heading", { name: "River Plate vs Boca Juniors" })).toBeVisible();
   await page.getByRole("button", { name: "UFC", exact: true }).click();
   await expect(page.getByRole("heading", { name: "UFC Fight Night: Alpha vs Beta" })).toBeVisible();
-  await expect(page.getByText("Curado en chat", { exact: false }).first()).toBeVisible();
+  await page.getByText(/Datos revisados el/).click();
+  await expect(page.getByText("Información curada desde el chat · UFC oficial", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
   await page.getByLabel("Mi formación deseada").fill("4-3-3: once curado en familia");
   await page.getByRole("button", { name: "Guardar formación" }).click();
@@ -98,7 +105,7 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await page.request.patch(`${baseURL}/api/sports/events/${card.id}`, { headers: { Origin: baseURL }, data: { action: "hide" } });
 
   const moved = structuredClone(bundle);
-  const movedDate = new Date(`${familyDay()}T12:00:00Z`); movedDate.setUTCDate(movedDate.getUTCDate() + 1);
+  const movedDate = new Date(`${familyDay()}T12:00:00Z`); movedDate.setUTCDate(movedDate.getUTCDate() + 2);
   const newDate = familyDay(movedDate), checkedAt = new Date(Date.now() + 1_000).toISOString();
   moved.checkedAt = checkedAt;
   for (const event of moved.events) {

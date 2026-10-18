@@ -276,10 +276,66 @@ export const mealSelections = pgTable("meal_selections", {
   updatedAt: updatedAt(),
 });
 
+// Family-scoped identities keep curated imports independent from provider naming.
+export const sportsFootballSeasons = pgTable("sports_football_seasons", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  competition: varchar("competition", { length: 40 }).notNull(),
+  name: varchar("name", { length: 40 }).notNull(),
+}, (table) => [
+  uniqueIndex("sports_football_seasons_family_id_unique").on(table.familyId, table.id),
+  uniqueIndex("sports_football_seasons_name_unique").on(table.familyId, table.competition, table.name),
+]);
+
+export const sportsFootballRounds = pgTable("sports_football_rounds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  seasonId: uuid("season_id").notNull(),
+  reference: varchar("reference", { length: 80 }).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  originalFrom: date("original_from", { mode: "string" }).notNull(),
+  originalThrough: date("original_through", { mode: "string" }).notNull(),
+}, (table) => [
+  uniqueIndex("sports_football_rounds_family_id_unique").on(table.familyId, table.id),
+  uniqueIndex("sports_football_rounds_season_id_unique").on(table.familyId, table.seasonId, table.id),
+  uniqueIndex("sports_football_rounds_reference_unique").on(table.familyId, table.seasonId, table.reference),
+  foreignKey({ columns: [table.familyId, table.seasonId], foreignColumns: [sportsFootballSeasons.familyId, sportsFootballSeasons.id], name: "sports_rounds_family_season_fk" }),
+  check("sports_football_rounds_window", sql`${table.originalFrom} <= ${table.originalThrough}`),
+]);
+
+export const sportsFootballTeams = pgTable("sports_football_teams", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 120 }).notNull(),
+}, (table) => [
+  uniqueIndex("sports_football_teams_family_id_unique").on(table.familyId, table.id),
+  uniqueIndex("sports_football_teams_name_unique").on(table.familyId, table.name),
+]);
+
+export const sportsFootballTeamSources = pgTable("sports_football_team_sources", {
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  teamId: uuid("team_id").notNull(),
+  provider: varchar("provider", { length: 40 }).notNull(),
+  externalId: varchar("external_id", { length: 200 }).notNull(),
+}, (table) => [
+  uniqueIndex("sports_football_team_sources_reference_unique").on(table.familyId, table.provider, table.externalId),
+  uniqueIndex("sports_football_team_sources_provider_unique").on(table.familyId, table.teamId, table.provider),
+  foreignKey({ columns: [table.familyId, table.teamId], foreignColumns: [sportsFootballTeams.familyId, sportsFootballTeams.id], name: "sports_team_sources_family_team_fk" }),
+]);
+
 export const sportsEvents = pgTable("sports_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   kind: sportsEventKindEnum("kind").notNull(),
+  footballCategory: varchar("football_category", { length: 16 }).$type<"river" | "champions">().default("river"),
+  seasonId: uuid("season_id"),
+  roundId: uuid("round_id"),
+  firstTeamId: uuid("first_team_id"),
+  secondTeamId: uuid("second_team_id"),
+  // Reserved for Phase 3; no progression or qualification behavior yet.
+  tieReference: varchar("tie_reference", { length: 200 }),
+  nextRoundId: uuid("next_round_id"),
+  nextSlot: integer("next_slot"),
   title: varchar("title", { length: 160 }).notNull(),
   competition: varchar("competition", { length: 120 }),
   firstParticipant: varchar("first_participant", { length: 120 }),
@@ -316,16 +372,40 @@ export const sportsEvents = pgTable("sports_events", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (table) => [
+  uniqueIndex("sports_events_family_id_unique").on(table.familyId, table.id),
+  index("sports_events_family_category_date_idx").on(table.familyId, table.footballCategory, table.eventDate),
+  foreignKey({ columns: [table.familyId, table.seasonId], foreignColumns: [sportsFootballSeasons.familyId, sportsFootballSeasons.id], name: "sports_events_family_season_fk" }),
+  foreignKey({ columns: [table.familyId, table.roundId], foreignColumns: [sportsFootballRounds.familyId, sportsFootballRounds.id], name: "sports_events_family_round_fk" }),
+  foreignKey({ columns: [table.familyId, table.seasonId, table.roundId], foreignColumns: [sportsFootballRounds.familyId, sportsFootballRounds.seasonId, sportsFootballRounds.id], name: "sports_events_round_season_fk" }),
+  foreignKey({ columns: [table.familyId, table.firstTeamId], foreignColumns: [sportsFootballTeams.familyId, sportsFootballTeams.id], name: "sports_events_first_team_fk" }),
+  foreignKey({ columns: [table.familyId, table.secondTeamId], foreignColumns: [sportsFootballTeams.familyId, sportsFootballTeams.id], name: "sports_events_second_team_fk" }),
+  foreignKey({ columns: [table.familyId, table.nextRoundId], foreignColumns: [sportsFootballRounds.familyId, sportsFootballRounds.id], name: "sports_events_next_round_fk" }),
+  check("sports_events_football_category", sql`(${table.kind} = 'football_match' AND ${table.footballCategory} IS NOT NULL AND ${table.footballCategory} IN ('river','champions')) OR (${table.kind} = 'ufc_card' AND ${table.footballCategory} IS NULL)`),
+  check("sports_events_champions_shape", sql`${table.footballCategory} IS DISTINCT FROM 'champions' OR (${table.seasonId} IS NOT NULL AND ${table.roundId} IS NOT NULL AND ${table.firstTeamId} IS NOT NULL AND ${table.secondTeamId} IS NOT NULL)`),
+  check("sports_events_football_metadata", sql`${table.kind} = 'football_match' OR (${table.seasonId} IS NULL AND ${table.roundId} IS NULL AND ${table.firstTeamId} IS NULL AND ${table.secondTeamId} IS NULL AND ${table.tieReference} IS NULL AND ${table.nextRoundId} IS NULL AND ${table.nextSlot} IS NULL)`),
+  check("sports_events_distinct_teams", sql`${table.firstTeamId} IS NULL OR ${table.secondTeamId} IS NULL OR ${table.firstTeamId} <> ${table.secondTeamId}`),
+  check("sports_events_next_slot", sql`${table.nextSlot} IS NULL OR (${table.nextSlot} > 0 AND ${table.nextRoundId} IS NOT NULL)`),
   index("sports_events_family_date_idx").on(table.familyId, table.kind, table.eventDate),
   uniqueIndex("sports_events_source_reference_unique_idx").on(table.familyId, table.kind, table.sourceProvider, table.externalReference).where(sql`${table.externalReference} IS NOT NULL AND ${table.sourceProvider} IS NOT NULL`),
   check("sports_events_event_type", sql`${table.eventType} IS NULL OR (${table.kind} = 'ufc_card' AND ${table.eventType} IN ('numerado','fight_night','otro'))`),
   check("sports_events_ufc_date", sql`${table.kind} <> 'ufc_card' OR ${table.eventDate} IS NOT NULL`),
-  check("sports_events_status", sql`${table.status} IN ('scheduled', 'postponed', 'completed', 'cancelled')`),
+  check("sports_events_status", sql`${table.status} IN ('scheduled', 'postponed', 'completed', 'cancelled') OR (${table.footballCategory} IS NOT DISTINCT FROM 'champions' AND ${table.status} = 'suspended')`),
   check("sports_events_card_status", sql`${table.cardStatus} IS NULL OR ${table.cardStatus} IN ('upcoming', 'finalized')`),
   check("sports_events_prediction_close_mode", sql`${table.predictionCloseMode} IS NULL OR ${table.predictionCloseMode} IN ('event', 'block', 'fight')`),
   check("sports_events_kind_shape", sql`
     (${table.kind} = 'football_match' AND ${table.competition} IS NOT NULL AND ${table.firstParticipant} IS NOT NULL AND ${table.secondParticipant} IS NOT NULL AND ${table.isCurrent} = false AND ${table.cardStatus} IS NULL)
     OR (${table.kind} = 'ufc_card' AND ${table.competition} IS NULL AND ${table.firstParticipant} IS NULL AND ${table.secondParticipant} IS NULL)`),
+]);
+
+export const sportsFootballEventSources = pgTable("sports_football_event_sources", {
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").notNull(),
+  provider: varchar("provider", { length: 40 }).notNull(),
+  externalId: varchar("external_id", { length: 200 }).notNull(),
+}, (table) => [
+  uniqueIndex("sports_football_event_sources_reference_unique").on(table.familyId, table.provider, table.externalId),
+  uniqueIndex("sports_football_event_sources_provider_unique").on(table.familyId, table.eventId, table.provider),
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_event_sources_family_event_fk" }),
 ]);
 
 export const sportsFormations = pgTable("sports_formations", {
@@ -351,6 +431,14 @@ export const sportsWeeks = pgTable("sports_weeks", {
 export const sportsAutoSyncSettings = pgTable("sports_auto_sync_settings", {
   familyId: uuid("family_id").primaryKey().references(() => families.id, { onDelete: "cascade" }),
   enabled: boolean("enabled").notNull().default(false),
+  updatedAt: updatedAt(),
+});
+
+// Persisted per-family kill switch. A missing row is disabled.
+export const sportsChampionsSwitches = pgTable("sports_champions_switches", {
+  familyId: uuid("family_id").primaryKey().references(() => families.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  updatedByMemberId: uuid("updated_by_member_id").references(() => members.id),
   updatedAt: updatedAt(),
 });
 
@@ -388,7 +476,6 @@ export const sportsSyncItemState = pgTable("sports_sync_item_state", {
 ]);
 
 export const sportsFights = pgTable("sports_fights", {
-  prodeEligible: boolean("prode_eligible").notNull().default(true),
   predictionClosedAt: timestamp("prediction_closed_at", {withTimezone:true}),
   firstFighterId: uuid("first_fighter_id").notNull().defaultRandom(),
   secondFighterId: uuid("second_fighter_id").notNull().defaultRandom(),
@@ -401,6 +488,7 @@ export const sportsFights = pgTable("sports_fights", {
   secondFighter: varchar("second_fighter", { length: 120 }).notNull(),
   boutBlock: varchar("bout_block", { length: 32 }).notNull(),
   isMainEvent: boolean("is_main_event").notNull().default(false),
+  prodeEligible: boolean("prode_eligible").notNull().default(true),
   result: varchar("result", { length: 16 }),
   externalReference: varchar("external_reference", { length: 200 }),
   createdAt: createdAt(),
@@ -434,6 +522,26 @@ export const sportsComments = pgTable("sports_comments", {
     OR (${table.contextKind} = 'ufc_card' AND ${table.contextEventId} IS NOT NULL AND ${table.contextDate} IS NULL)`),
   check("sports_comments_body_length", sql`char_length(btrim(${table.body})) BETWEEN 1 AND 2000`),
   check("sports_comments_version", sql`${table.version} > 0`),
+]);
+
+// A Champions conversation belongs to the stable jornada, never to a match day.
+export const sportsFootballRoundComments = pgTable("sports_football_round_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  roundId: uuid("round_id").notNull(),
+  authorMemberId: uuid("author_member_id").notNull(),
+  body: varchar("body", { length: 2000 }).notNull(),
+  version: integer("version").notNull().default(1),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  retiredByMemberId: uuid("retired_by_member_id").references(() => members.id),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.roundId], foreignColumns: [sportsFootballRounds.familyId, sportsFootballRounds.id], name: "sports_round_comments_family_round_fk" }),
+  foreignKey({ columns: [table.familyId, table.authorMemberId], foreignColumns: [members.familyId, members.id], name: "sports_round_comments_family_author_fk" }),
+  index("sports_round_comments_thread_created_idx").on(table.familyId, table.roundId, table.createdAt, table.id),
+  check("sports_round_comments_body_length", sql`char_length(btrim(${table.body})) BETWEEN 1 AND 2000`),
+  check("sports_round_comments_version", sql`${table.version} > 0`),
 ]);
 
 // Additive storage: legacy groups, routines and distributions remain untouched.
@@ -674,6 +782,39 @@ export const sportsFootballResults = pgTable("sports_football_results", {
   updatedAt: updatedAt(),
 }, table => [check("sports_football_results_score", sql`${table.homeGoals} >= 0 AND ${table.awayGoals} >= 0`)]);
 
+export const sportsFootballResolutions = pgTable("sports_football_resolutions", {
+  eventId: uuid("event_id").primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  kind: varchar("kind", { length: 24 }).notNull().$type<"official_result" | "void_for_prode">(),
+  reason: varchar("reason", { length: 500 }),
+  source: varchar("source", { length: 1000 }),
+  actorMemberId: uuid("actor_member_id").notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_football_resolutions_event_fk" }),
+  foreignKey({ columns: [table.actorMemberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "sports_football_resolutions_actor_fk" }),
+  check("sports_football_resolutions_shape", sql`(${table.kind} = 'official_result' AND ${table.reason} IS NULL AND ${table.source} IS NOT NULL) OR (${table.kind} = 'void_for_prode' AND length(btrim(${table.reason})) > 0 AND ${table.source} IS NULL)`),
+]);
+
+export const sportsFootballResultCorrections = pgTable("sports_football_result_corrections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").notNull(),
+  previousHomeGoals: integer("previous_home_goals").notNull(),
+  previousAwayGoals: integer("previous_away_goals").notNull(),
+  newHomeGoals: integer("new_home_goals").notNull(),
+  newAwayGoals: integer("new_away_goals").notNull(),
+  previousSource: varchar("previous_source", { length: 1000 }).notNull(),
+  newSource: varchar("new_source", { length: 1000 }).notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  actorMemberId: uuid("actor_member_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_football_result_corrections_event_fk" }),
+  foreignKey({ columns: [table.actorMemberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "sports_football_result_corrections_actor_fk" }),
+  check("sports_football_result_corrections_score", sql`${table.previousHomeGoals} >= 0 AND ${table.previousAwayGoals} >= 0 AND ${table.newHomeGoals} >= 0 AND ${table.newAwayGoals} >= 0`),
+]);
+
 export const sportsBlockClosures = pgTable("sports_block_closures", {
   eventId: uuid("event_id").notNull().references(() => sportsEvents.id, {onDelete:"restrict"}),
   familyId: uuid("family_id").notNull().references(() => families.id, {onDelete:"cascade"}),
@@ -700,3 +841,24 @@ export const sportsFightResults = pgTable("sports_fight_results", {
   updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
   updatedAt: updatedAt(),
 }, table => [check("sports_fight_results_outcome",sql`(${table.outcome} = 'winner' AND ${table.winnerId} IS NOT NULL) OR (${table.outcome} IN ('draw','no_contest','cancelled') AND ${table.winnerId} IS NULL)`)]);
+
+// Champions football choices are accessed through session-validating SQL functions.
+export const sportsFootballClosures = pgTable("sports_football_closures", {
+  eventId: uuid("event_id").primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_football_closures_event_fk" }),
+]);
+export const sportsFootballPredictions = pgTable("sports_football_predictions", {
+  eventId: uuid("event_id").notNull(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull(),
+  choice: varchar("choice", { length: 4 }).notNull().$type<"home" | "draw" | "away">(),
+  updatedAt: updatedAt(),
+}, table => [
+  uniqueIndex("sports_football_predictions_member_event_unique").on(table.eventId, table.memberId),
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_football_predictions_event_fk" }),
+  foreignKey({ columns: [table.memberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "sports_football_predictions_member_fk" }),
+  check("sports_football_predictions_choice", sql`${table.choice} IN ('home','draw','away')`),
+]);

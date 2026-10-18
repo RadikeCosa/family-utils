@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import pg from "pg";
+import { championsFixture, championsCleanupTables, championsIdentityTables } from "./helpers/champions.ts";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATABASE_URL required");
@@ -54,18 +55,31 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
   }
   try {
     const familyId = await family(), owner = await identity(familyId), peer = await identity(familyId), admin = await identity(familyId, "administrator"), outsider = await identity(await family());
+    const champions = await championsFixture(pool, familyId, admin.id);
+    await t.test("Champions stays outside legacy reads and mutations", async () => {
+      const page = await ok(owner, `/api/sports?event=${champions.event}`);
+      assert.ok(!JSON.stringify(page).includes(champions.event));
+      assert.equal((await request(admin, `/api/sports/events/${champions.event}`, "PATCH", { action: "hide" })).status, 404);
+      assert.equal((await request(owner, `/api/sports/events/${champions.event}/formation`, "PUT", { body: "4-3-3" })).status, 404);
+      assert.equal((await request(owner, "/api/sports/comments", "POST", { contextKind: "river_match", contextEventId: champions.event, body: "Must not write" })).status, 404);
+      assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&eventId=${champions.event}`)).comments.length, 0);
+    });
     await t.test("curated JSON import is admin-only, idempotent and preserves event-linked family data", async () => {
       const importFamily = await family(), importer = await identity(importFamily, "administrator"), participant = await identity(importFamily);
+      const champions = await championsFixture(pool, importFamily, importer.id);
+      const championBefore = (await pool.query("SELECT to_jsonb(e) AS record FROM sports_events e WHERE id=$1", [champions.event])).rows[0].record;
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
       const throughDate = new Date(`${today}T12:00:00Z`); throughDate.setUTCDate(throughDate.getUTCDate() + 20);
       const through = throughDate.toISOString().slice(0, 10), checkedAt = new Date().toISOString();
-      const movedDate = new Date(`${today}T12:00:00Z`); movedDate.setUTCDate(movedDate.getUTCDate() + 1);
+      const eventDate = new Date(`${today}T12:00:00Z`); eventDate.setUTCDate(eventDate.getUTCDate() + 1);
+      const scheduled = eventDate.toISOString().slice(0, 10);
+      const movedDate = new Date(`${today}T12:00:00Z`); movedDate.setUTCDate(movedDate.getUTCDate() + 2);
       const bundle = {
         schemaVersion: 1, status: "curated", checkedAt, timezone: "America/Argentina/Buenos_Aires",
         curation: { completeHorizon: { river: { from: today, through, complete: true }, ufc: { from: today, through, complete: true } } },
         events: [
-          { kind: "football_match", sourceProvider: "espn", externalReference: "123456", title: "River Plate vs Boca Juniors", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate: today, startTime: "20:00", venue: "Monumental", status: "scheduled", source: { primary: "https://www.ligaprofesional.ar/", checkedAt } },
-          { kind: "ufc_card", sourceProvider: "ufc_official", externalReference: "ufc-test-card", title: "UFC Test: Alpha vs Beta", eventDate: today, preliminaryDate: today, preliminaryTime: "18:00", mainCardDate: today, mainCardTime: "21:00", fights: [{ firstFighter: "Alpha", secondFighter: "Beta", boutBlock: "main", isMainEvent: true }], source: { primary: "https://www.ufc.com/events", checkedAt, validation: { officialCardComplete: true, officialFightCount: 1, independentCrossCheck: "passed" } } },
+          { kind: "football_match", sourceProvider: "espn", externalReference: "123456", title: "River Plate vs Boca Juniors", competition: "Liga", firstParticipant: "River Plate", secondParticipant: "Boca Juniors", eventDate: scheduled, startTime: "20:00", venue: "Monumental", status: "scheduled", source: { primary: "https://www.ligaprofesional.ar/", checkedAt } },
+          { kind: "ufc_card", sourceProvider: "ufc_official", externalReference: "ufc-test-card", title: "UFC Test: Alpha vs Beta", eventDate: scheduled, preliminaryDate: scheduled, preliminaryTime: "18:00", mainCardDate: scheduled, mainCardTime: "21:00", fights: [{ firstFighter: "Alpha", secondFighter: "Beta", boutBlock: "main", isMainEvent: true }], source: { primary: "https://www.ufc.com/events", checkedAt, validation: { officialCardComplete: true, officialFightCount: 1, independentCrossCheck: "passed" } } },
         ],
       };
       assert.equal((await request(participant, "/api/sports/import", "POST", { mode: "preview", bundle })).status, 403);
@@ -98,6 +112,11 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(ufcAfter.hidden, true);
       assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_formations WHERE event_id=$1", [river.id])).rows[0].count, 1);
       assert.equal((await pool.query("SELECT count(*)::int AS count FROM sports_comments WHERE context_event_id=$1", [river.id])).rows[0].count, 1);
+      assert.deepEqual((await pool.query("SELECT to_jsonb(e) AS record FROM sports_events e WHERE id=$1", [champions.event])).rows[0].record, championBefore);
+      bundle.events[0].externalReference = "771234991";
+      const conflict = await request(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      assert.equal(conflict.status, 409);
+      assert.deepEqual((await pool.query("SELECT to_jsonb(e) AS record FROM sports_events e WHERE id=$1", [champions.event])).rows[0].record, championBefore);
     });
 
     await t.test("manual football agenda is private and members cannot edit it", async () => {
@@ -146,7 +165,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(page.football[0].venue, "Monumental");
       assert.equal(page.formations.length, 1);
       assert.equal((await ok(owner, `/api/sports/comments?contextKind=river_match&eventId=${match.id}`)).comments.length, 1);
-      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => error.message.includes("violates RESTRICT setting"));
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [match.id]), error => error.code === "23503" && ["sports_formations_event_id_sports_events_id_fk", "sports_comments_context_event_id_sports_events_id_fk", "sports_fights_event_id_sports_events_id_fk"].includes(error.constraint));
       await assert.rejects(pool.query("INSERT INTO sports_formations(family_id,event_id,member_id,body) VALUES($1,$2,$3,'duplicate')", [familyId,match.id,owner.id]), error => error.code === "23505");
       assert.equal((await request(peer, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" })).status, 403);
       await ok(admin, `/api/sports/events/${match.id}`, "PATCH", { action: "hide" });
@@ -168,7 +187,7 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.equal(page.card.id, card.id);
       assert.equal(page.fights.length, 1);
       await ok(owner, "/api/sports/comments", "POST", { contextKind: "ufc_card", contextEventId: card.id, body: "La estelar" });
-      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => error.message.includes("violates RESTRICT setting"));
+      await assert.rejects(pool.query("DELETE FROM sports_events WHERE id=$1", [card.id]), error => error.code === "23503" && ["sports_formations_event_id_sports_events_id_fk", "sports_comments_context_event_id_sports_events_id_fk", "sports_fights_event_id_sports_events_id_fk"].includes(error.constraint));
       // Multiple cards coexist; creating a future card does not remove this week's card/comments.
       const future = new Date(`${contextDate}T12:00:00Z`); future.setUTCDate(future.getUTCDate() + 14);
       await ok(admin, "/api/sports", "POST", { ...data, eventDate: future.toISOString().slice(0,10), title: "Otra semana" });
@@ -186,9 +205,10 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
     server.kill();
     if (families.length) {
       await pool.query("DELETE FROM audit_events WHERE family_id=ANY($1::uuid[]) AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week')", [families]);
-      for (const table of ["sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) {
+      for (const table of [...championsCleanupTables, "sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) {
         await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
       }
+      for (const table of championsIdentityTables) await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
       await pool.query("DELETE FROM families WHERE id=ANY($1::uuid[])", [families]);
     }
     if (users.length) await pool.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [users]);

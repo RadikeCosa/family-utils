@@ -18,7 +18,14 @@ export default defineConfig({
   },
   webServer: process.env.A11Y_BASE_URL ? undefined : {
     command: `npm run start -- -p ${port}`,
-    env: { ...process.env, LIBRARY_ENABLED: "true", BETTER_AUTH_URL: `http://localhost:${port}` },
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.FAMILY_UTILS_TEST_DATABASE_URL,
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "ci-only-better-auth-secret-not-used-outside-ci",
+      CODE_PEPPER: process.env.CODE_PEPPER ?? "ci-only-pepper-not-used-outside-ci",
+      LIBRARY_ENABLED: "true",
+      BETTER_AUTH_URL: `http://localhost:${port}`,
+    },
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
     timeout: 120_000,

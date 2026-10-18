@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { expect, request as playwrightRequest, test } from "@playwright/test";
 import pg from "pg";
+import { championsFixture, championsCleanupTables, championsIdentityTables } from "../helpers/champions";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 test.skip(!connectionString, "requires isolated PostgreSQL");
-const baseURL = "http://localhost:3318";
+const testPort = process.env.SPORTS_NEXT_TEST_PORT ?? "3318";
+const baseURL = `http://localhost:${testPort}`;
 let pool: pg.Pool,
   familyId: string,
   memberId: string,
   userId: string,
+  championsId: string,
   api: Awaited<ReturnType<typeof playwrightRequest.newContext>>;
 
 function familyDay(value = new Date()) {
@@ -110,6 +113,7 @@ test.beforeEach(async ({ page }) => {
     "INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)",
     [memberId, userId],
   );
+  championsId = (await championsFixture(pool, familyId, memberId)).event;
   await page.context().addCookies((await api.storageState()).cookies);
 });
 
@@ -129,6 +133,7 @@ test.afterEach(async () => {
       await cleanup.query("COMMIT");
     } finally { await cleanup.query("ROLLBACK"); cleanup.release(); }
     for (const table of [
+      ...championsCleanupTables,
       "sports_predictions",
       "sports_fight_results",
       "sports_block_closures",
@@ -140,6 +145,7 @@ test.afterEach(async () => {
       "sports_events",
     ])
       await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
+    for (const table of championsIdentityTables) await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
     await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
   }
   if (userId) await pool.query('DELETE FROM "user" WHERE id=$1', [userId]);
@@ -149,6 +155,16 @@ test.afterEach(async () => {
 test("agenda: all events, independent drafts, templates and mobile accessibility", async ({
   page,
 }) => {
+  const before = await (await api.get(`/api/sports?event=${championsId}`)).json();
+  expect(JSON.stringify(before)).not.toContain(championsId);
+  expect((await api.patch(`/api/sports/events/${championsId}`, { data: { action: "hide" } })).status()).toBe(404);
+  const hiddenResults = await (await api.get("/api/sports/templates?kind=results")).json();
+  expect(JSON.stringify(hiddenResults)).not.toContain(championsId);
+  const deniedResult = await api.post("/api/sports/results/import", { data: { mode: "preview", bundle: { version: 1, checkedAt: new Date().toISOString(), source: "Regression fixture", events: [{ eventId: championsId, result: { homeGoals: 1, awayGoals: 0 } }] } } });
+  expect(deniedResult.status()).toBe(200);
+  const deniedBody = await deniedResult.json();
+  expect(deniedBody.events).toEqual([]);
+  expect(deniedBody.errors).toHaveLength(1);
   const bundle = curatedBundle();
   const future = structuredClone(bundle.events[0]);
   future.externalReference = "991235";
@@ -164,6 +180,7 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
     ).status(),
   ).toBe(200);
   await page.goto("/deportes?sport=river");
+  await expect(page.getByText("Champions sentinel", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /Próximos \(2\)/ }),
   ).toBeVisible();
