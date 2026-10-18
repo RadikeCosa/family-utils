@@ -56,6 +56,10 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
   try {
     const familyId = await family(), owner = await identity(familyId), peer = await identity(familyId), admin = await identity(familyId, "administrator"), outsider = await identity(await family());
     const champions = await championsFixture(pool, familyId, admin.id);
+    await t.test("UFC dashboard can validate access inside a read-only transaction", async () => {
+      const dashboard = await ok(owner, "/api/sports/dashboard");
+      assert.deepEqual(dashboard.events, []);
+    });
     await t.test("Champions stays outside legacy reads and mutations", async () => {
       const page = await ok(owner, `/api/sports?event=${champions.event}`);
       assert.ok(!JSON.stringify(page).includes(champions.event));

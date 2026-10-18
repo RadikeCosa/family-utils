@@ -11,7 +11,7 @@ export async function loadUfcDashboard(request: Request) {
     const actor = await sportsActor(request);
     tx = await getPool().connect();
     await tx.query("BEGIN READ ONLY");
-    await activeSportsActor(tx, actor);
+    await activeSportsActor(tx, actor, false, false);
     const { rows: cards } = await tx.query(
       `SELECT id,title,event_date::text AS event_date
        FROM sports_events
