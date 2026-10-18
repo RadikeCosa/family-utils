@@ -32,9 +32,10 @@ export async function activeSportsActor(
   tx: PoolClient,
   actor: MemberContext,
   admin = false,
+  lockRows = true,
 ) {
   const { rows } = await tx.query(
-    "SELECT m.id FROM members m JOIN member_devices d ON d.member_id=m.id WHERE m.id=$1 AND m.family_id=$2 AND d.auth_user_id=$3 AND m.archived_at IS NULL AND d.revoked_at IS NULL AND ($4=false OR m.role='administrator') FOR SHARE OF m,d",
+    `SELECT m.id FROM members m JOIN member_devices d ON d.member_id=m.id WHERE m.id=$1 AND m.family_id=$2 AND d.auth_user_id=$3 AND m.archived_at IS NULL AND d.revoked_at IS NULL AND ($4=false OR m.role='administrator')${lockRows ? " FOR SHARE OF m,d" : ""}`,
     [actor.memberId, actor.familyId, actor.authUser.id, admin],
   );
   if (!rows.length) reject(403, "Tu acceso ya no está disponible.");

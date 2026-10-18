@@ -8,9 +8,9 @@ import { championsFixture, championsCleanupTables, championsIdentityTables } fro
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATABASE_URL required");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function start(port, enabled) {
+async function start(port, enabled, enableUfcDashboard = false) {
   const origin = `http://localhost:${port}`;
-  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, SPORTS_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "sports-test-only-secret-not-production", CODE_PEPPER: "sports-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, ...(enableUfcDashboard ? { SPORTS_AGENDA_ENABLED: "true", SPORTS_RIVER_RESULTS_ENABLED: "true", SPORTS_UFC_PREDICTIONS_ENABLED: "true" } : {}), NODE_ENV: "production", DATABASE_URL: connectionString, SPORTS_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "sports-test-only-secret-not-production", CODE_PEPPER: "sports-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
   for (let i = 0; ; i++) {
     if (server.exitCode !== null) throw new Error("Sports test server failed");
     try { if ((await fetch(origin)).ok) break; } catch { /* Wait for listening. */ }
@@ -35,8 +35,8 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
     const { rows: [row] } = await pool.query("INSERT INTO families(name) VALUES($1) RETURNING id", [`sports-${randomUUID()}`]);
     families.push(row.id); return row.id;
   }
-  async function identity(familyId, role = "member") {
-    const response = await fetch(`${origin}/api/access/prepare`, { method: "POST", headers: { Origin: origin, "x-forwarded-for": `192.0.2.${users.length + 80}` } });
+  async function identity(familyId, role = "member", base = origin) {
+    const response = await fetch(`${base}/api/access/prepare`, { method: "POST", headers: { Origin: base, "x-forwarded-for": `192.0.2.${users.length + 80}` } });
     assert.equal(response.status, 200);
     const cookie = response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
     const session = await fetch(`${origin}/api/auth/get-session`, { headers: { Cookie: cookie } }).then((value) => value.json());
@@ -45,17 +45,25 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
     await pool.query("INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)", [member.id, session.user.id]);
     return { cookie, id: member.id, userId: session.user.id };
   }
-  async function request(person, path, method = "GET", body) {
-    const response = await fetch(`${origin}${path}`, { method, headers: { Cookie: person?.cookie ?? "", Origin: origin, ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  async function request(person, path, method = "GET", body, base = origin) {
+    const response = await fetch(`${base}${path}`, { method, headers: { Cookie: person?.cookie ?? "", Origin: base, ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
   }
-  async function ok(person, path, method = "GET", body) {
-    const value = await request(person, path, method, body); assert.ok([200, 201].includes(value.status), JSON.stringify(value)); return value.body;
+  async function ok(person, path, method = "GET", body, base = origin) {
+    const value = await request(person, path, method, body, base); assert.ok([200, 201].includes(value.status), JSON.stringify(value)); return value.body;
   }
   try {
     const familyId = await family(), owner = await identity(familyId), peer = await identity(familyId), admin = await identity(familyId, "administrator"), outsider = await identity(await family());
     const champions = await championsFixture(pool, familyId, admin.id);
+    await t.test("UFC dashboard can validate access inside a read-only transaction", async () => {
+      const fixture = await start(3348, true, true);
+      try {
+        const dashboardOwner = await identity(familyId, "member", fixture.origin);
+        const dashboard = await ok(dashboardOwner, "/api/sports/dashboard", "GET", undefined, fixture.origin);
+        assert.deepEqual(dashboard.events, []);
+      } finally { fixture.server.kill(); }
+    });
     await t.test("Champions stays outside legacy reads and mutations", async () => {
       const page = await ok(owner, `/api/sports?event=${champions.event}`);
       assert.ok(!JSON.stringify(page).includes(champions.event));
