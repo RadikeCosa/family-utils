@@ -267,6 +267,13 @@
       "when": 1792271000000,
       "tag": "0047_champions_managed_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792357400000,
+      "tag": "0048_sports_ufc_odds",
+      "breakpoints": true
     }
   ]
 }

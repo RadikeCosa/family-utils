@@ -24,6 +24,7 @@
     "db:check": "node scripts/check-migrations.mjs",
     "db:verify": "node scripts/check-migrations.mjs --applied",
     "test:sports-next": "playwright test --config playwright.sports-next.config.ts",
+    "test:ufc-dashboard": "node --experimental-strip-types --test src/lib/sports/ufc-dashboard-rules.test.ts",
     "test:champions": "playwright test --config playwright.champions.config.ts"
   },
   "dependencies": {
