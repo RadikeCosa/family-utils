@@ -1,5 +1,7 @@
 # Matriz de verificaciones obligatorias — Champions Fase 1
 
+**Matriz histórica del cierre local.** Los pendientes operacionales de esta tabla corresponden a ese momento. La publicación posterior del 18/10/2026, sus comprobaciones y sus límites están documentados en el [reporte de publicación](2026-27-jornada-3-reporte.md).
+
 Estado al cierre local del Bloque 8. Los nombres de pruebas se citan literalmente; los ensayos de Jornada 3 usan el ensayo autorizado en `2026-27-jornada-3-ensayo.json`. “No aplica a automatización” significa que el paso requiere un operador/publicación y sigue siendo una condición de salida, no que pueda omitirse.
 
 | Bloque / requisito | Prueba que lo cubre | Estado / observación |
