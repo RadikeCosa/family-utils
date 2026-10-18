@@ -10,7 +10,7 @@ if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATA
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function start(port, enabled) {
   const origin = `http://localhost:${port}`;
-  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, SPORTS_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "sports-test-only-secret-not-production", CODE_PEPPER: "sports-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, SPORTS_ENABLED: enabled ? "true" : "false", SPORTS_UFC_PREDICTIONS_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "sports-test-only-secret-not-production", CODE_PEPPER: "sports-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
   for (let i = 0; ; i++) {
     if (server.exitCode !== null) throw new Error("Sports test server failed");
     try { if ((await fetch(origin)).ok) break; } catch { /* Wait for listening. */ }
