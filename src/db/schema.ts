@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -495,6 +496,7 @@ export const sportsFights = pgTable("sports_fights", {
   updatedAt: updatedAt(),
 }, (table) => [
   index("sports_fights_family_event_order_idx").on(table.familyId, table.eventId, table.boutOrder),
+  uniqueIndex("sports_fights_family_id_id_unique").on(table.familyId, table.id),
   uniqueIndex("sports_fights_one_main_event_idx").on(table.eventId).where(sql`${table.isMainEvent} = true`),
   check("sports_fights_bout_order", sql`${table.boutOrder} > 0`),
   check("sports_fights_bout_block", sql`${table.boutBlock} IN ('early_preliminaries', 'preliminaries', 'main')`),
@@ -841,6 +843,24 @@ export const sportsFightResults = pgTable("sports_fight_results", {
   updatedByMemberId: uuid("updated_by_member_id").notNull().references(() => members.id),
   updatedAt: updatedAt(),
 }, table => [check("sports_fight_results_outcome",sql`(${table.outcome} = 'winner' AND ${table.winnerId} IS NOT NULL) OR (${table.outcome} IN ('draw','no_contest','cancelled') AND ${table.winnerId} IS NULL)`)]);
+export const sportsUfcOdds = pgTable("sports_ufc_odds", {
+  familyId: uuid("family_id").notNull(),
+  eventId: uuid("event_id").notNull(),
+  fightId: uuid("fight_id").primaryKey().notNull(),
+  firstDecimalOdds: numeric("first_decimal_odds", { precision: 9, scale: 4 }).notNull(),
+  secondDecimalOdds: numeric("second_decimal_odds", { precision: 9, scale: 4 }).notNull(),
+  bookmaker: varchar("bookmaker", { length: 120 }).notNull(),
+  source: varchar("source", { length: 1000 }).notNull(),
+  referenceAt: timestamp("reference_at", { withTimezone: true }).notNull(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull(),
+  updatedAt: updatedAt(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.eventId], foreignColumns: [sportsEvents.familyId, sportsEvents.id], name: "sports_ufc_odds_event_family_fk" }),
+  foreignKey({ columns: [table.familyId, table.fightId], foreignColumns: [sportsFights.familyId, sportsFights.id], name: "sports_ufc_odds_fight_family_fk" }),
+  foreignKey({ columns: [table.updatedByMemberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "sports_ufc_odds_updated_by_family_fk" }),
+  index("sports_ufc_odds_family_event_idx").on(table.familyId, table.eventId),
+  check("sports_ufc_odds_decimal_check", sql`${table.firstDecimalOdds} > 1 AND ${table.secondDecimalOdds} > 1`),
+]);
 
 // Champions football choices are accessed through session-validating SQL functions.
 export const sportsFootballClosures = pgTable("sports_football_closures", {

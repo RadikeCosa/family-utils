@@ -299,6 +299,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
               <>
                 <a href="#predictions">Tus pronósticos</a>
                 <a href="#ranking">Ver tabla</a>
+                <a href={"/deportes/ufc-dashboard?event=" + encodeURIComponent(selected.id)}>Dashboard</a>
               </>
             )}
             <a href="#conversation">Ir a la conversación</a>
