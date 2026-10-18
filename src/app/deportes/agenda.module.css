@@ -396,3 +396,7 @@
 @media(max-width:600px) { .championsMatches { grid-template-columns: minmax(0,1fr); } }
 
 .championsThread time[datetime] { color: #526055; font-size: 12px; }
+
+.riverStats { width:100%; table-layout:fixed; border-collapse:collapse; font-size:14px; }
+.riverStats caption { text-align:left; margin-bottom:8px; }
+.riverStats th, .riverStats td { padding:10px 4px; border-bottom:1px solid var(--line, #d8d8d2); text-align:left; vertical-align:top; overflow-wrap:anywhere; }

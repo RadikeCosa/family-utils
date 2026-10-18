@@ -288,6 +288,13 @@
       "when": 1792361762198,
       "tag": "0050_sports_river_lineups",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792362536598,
+      "tag": "0051_sports_river_insights",
+      "breakpoints": true
     }
   ]
 }
