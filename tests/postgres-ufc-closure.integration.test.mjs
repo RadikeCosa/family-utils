@@ -12,9 +12,12 @@ if (process.env.CI && !connectionString) throw Error('Isolated PostgreSQL requir
 test('UFC closure migration, guards, boundaries and concurrency', { skip: !connectionString && 'requires isolated PostgreSQL', timeout: 60000 }, async t => {
  const admin = new pg.Pool({ connectionString }), name=`ufc_${randomUUID().replaceAll('-','')}`, folder=await mkdtemp(join(tmpdir(),'ufc-migration-'));
  let pool;
+ const clientEnds=[];
  try {
   await admin.query(`CREATE DATABASE "${name}"`);
   const url=new URL(connectionString);url.pathname=`/${name}`;pool=new pg.Pool({connectionString:url.toString()});
+  // Pool.end resolves before every socket has emitted end; wait before dropping the database.
+  pool.on('connect',client=>clientEnds.push(new Promise(resolve=>client.once('end',resolve))));
   const journal=JSON.parse(await readFile('drizzle/meta/_journal.json','utf8')),entries=journal.entries.slice(0,journal.entries.findIndex(e=>e.tag==='0037_ufc_card_closure'));
   await mkdir(join(folder,'meta'));await writeFile(join(folder,'meta/_journal.json'),JSON.stringify({...journal,entries}));
   for(const e of entries)await writeFile(join(folder,`${e.tag}.sql`),await readFile(`drizzle/${e.tag}.sql`));
@@ -83,5 +86,5 @@ test('UFC closure migration, guards, boundaries and concurrency', { skip: !conne
    const c=await card();await fight(c.id);const before=await state(c.id);await pool.query('SELECT public.sports_ufc_refresh_close($1,$2)',[randomUUID(),c.id]);assert.deepEqual(await state(c.id),before);
    assert.equal((await pool.query("SELECT to_char('2026-10-17 21:00:00+00'::timestamptz AT TIME ZONE 'America/Argentina/Buenos_Aires','YYYY-MM-DD HH24:MI') value")).rows[0].value,'2026-10-17 18:00');
   });
- }finally{await pool?.end();await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);await admin.end();await rm(folder,{recursive:true,force:true});}
+ }finally{await pool?.end();await Promise.all(clientEnds);await admin.query(`DROP DATABASE IF EXISTS "${name}"`);await admin.end();await rm(folder,{recursive:true,force:true});}
 });
