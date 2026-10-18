@@ -29,13 +29,9 @@ export type UfcEventRow = {
   early_preliminaries_starts_at: Date | null;
   updated_at: Date;
   card_status: string | null;
-  ufc_prediction_closes_at: Date | null;
-  ufc_prediction_closed_at: Date | null;
-  ufc_prediction_transition_at: Date | null;
 };
 export type UfcFightRow = {
   is_main_event: boolean;
-  prode_eligible: boolean;
   prediction_closed_at: Date | null;
   id: string;
   first_fighter: string;
@@ -75,24 +71,19 @@ export function blockDeadline(event: UfcEventRow, block: string) {
         ? event.early_preliminaries_starts_at
         : null;
 }
-export function deadline(snapshot: UfcSnapshot) {
-  return snapshot.event.ufc_prediction_closed_at ?? snapshot.event.ufc_prediction_closes_at;
-}
-export function fightDeadline(snapshot: UfcSnapshot) {
-  return deadline(snapshot);
-}
-export async function refreshUfcClose(tx: PoolClient, familyId: string, eventId: string) {
-  await tx.query("SELECT public.sports_ufc_refresh_close($1,$2)", [familyId, eventId]);
-  const { rows: [event] } = await tx.query<UfcEventRow>(
-    "SELECT * FROM sports_events WHERE id=$1 AND family_id=$2 AND kind='ufc_card'", [eventId, familyId],
+export function deadline(snapshot: UfcSnapshot, block: string) {
+  return (
+    snapshot.closures.find((row) => row.block === block)?.closed_at ??
+    blockDeadline(snapshot.event, block)
   );
-  return event;
+}
+export function fightDeadline(snapshot: UfcSnapshot, fight: UfcFightRow) {
+  return fight.prediction_closed_at ?? deadline(snapshot, fight.bout_block);
 }
 export async function ufcSnapshot(
   tx: PoolClient,
   familyId: string,
   event: UfcEventRow,
-  memberId: string | null,
 ): Promise<UfcSnapshot> {
   // A transaction uses one connection; keep its queries sequential.
   const fights = await tx.query(
@@ -104,11 +95,8 @@ export async function ufcSnapshot(
     [familyId, event.id],
   );
   const votes = await tx.query(
-    `SELECT member_id,fight_id,winner_id FROM sports_predictions
-     WHERE family_id=$1 AND event_id=$2 AND
-       ($3::uuid IS NULL OR member_id=$3 OR $4::timestamptz<=clock_timestamp())
-     ORDER BY member_id,fight_id`,
-    [familyId, event.id, memberId, event.ufc_prediction_closed_at ?? event.ufc_prediction_closes_at],
+    "SELECT member_id,fight_id,winner_id FROM sports_predictions WHERE family_id=$1 AND event_id=$2 ORDER BY member_id,fight_id",
+    [familyId, event.id],
   );
   const members = await tx.query(
     "SELECT id,name FROM members WHERE family_id=$1 ORDER BY name,id",
@@ -139,8 +127,7 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
       snapshot.event.status !== "cancelled" &&
       fight &&
       !fight.removed_at &&
-      fight.prode_eligible &&
-      closedAt(fightDeadline(snapshot), snapshot.now) &&
+      closedAt(fightDeadline(snapshot, fight), snapshot.now) &&
       result?.outcome === "winner" &&
       result.winner_id === vote.winner_id
     )
@@ -156,7 +143,7 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
 }
 export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
   const fights = snapshot.fights.map((fight) => {
-    const close = fightDeadline(snapshot);
+    const close = fightDeadline(snapshot, fight);
     const closed = closedAt(close, snapshot.now);
     const result = snapshot.results.find((r) => r.fight_id === fight.id);
     return {
@@ -167,8 +154,6 @@ export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
       firstFighterId: fight.first_fighter_id,
       secondFighterId: fight.second_fighter_id,
       block: fight.bout_block,
-      startsAt: blockDeadline(snapshot.event, fight.bout_block)?.toISOString() ?? null,
-      prodeEligible: fight.prode_eligible,
       removed:
         !!fight.removed_at ||
         !!snapshot.event.source_absent_at ||
@@ -198,26 +183,20 @@ export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
   });
   return {
     fights,
-    closesAt: deadline(snapshot)?.toISOString() ?? null,
-    closed: closedAt(deadline(snapshot), snapshot.now),
-    transition: !!snapshot.event.ufc_prediction_transition_at && closedAt(deadline(snapshot), snapshot.event.ufc_prediction_transition_at),
     ranking: ufcRanking(snapshot),
-    final: fights.length > 0 && fights.every((f) => f.removed || !f.prodeEligible || !!f.result),
-    chosen: fights.filter((f) => !f.removed && f.prodeEligible && !f.cancelled && f.ownWinnerId)
+    final: fights.length > 0 && fights.every((f) => f.removed || !!f.result),
+    chosen: fights.filter((f) => !f.removed && !f.cancelled && f.ownWinnerId)
       .length,
-    total: fights.filter((f) => !f.removed && f.prodeEligible && !f.cancelled).length,
+    total: fights.filter((f) => !f.removed && !f.cancelled).length,
   };
 }
 export async function sportsPredictions(request: Request, eventId: string) {
   if (!sportsFeatures().ufc)
     return Response.json({ error: "No encontrado." }, { status: 404 });
   let tx: PoolClient | undefined;
-  let predictionFamilyId: string | undefined;
-  let hasSavepoint = false;
   try {
     if (!SPORTS_UUID.test(eventId)) reject(400, "Evento inválido.");
     const actor = await sportsActor(request);
-    predictionFamilyId = actor.familyId;
     const body = request.method === "GET" ? null : await sportsBody(request);
     tx = await getPool().connect();
     await tx.query("BEGIN");
@@ -225,17 +204,11 @@ export async function sportsPredictions(request: Request, eventId: string) {
     const {
       rows: [event],
     } = await tx.query(
-      `SELECT * FROM sports_events WHERE id=$1 AND family_id=$2 AND kind='ufc_card' AND hidden=false FOR UPDATE`,
+      `SELECT * FROM sports_events WHERE id=$1 AND family_id=$2 AND kind='ufc_card' AND hidden=false ${request.method === "GET" ? "FOR SHARE" : "FOR UPDATE"}`,
       [eventId, actor.familyId],
     );
     if (!event) reject(404, "No encontramos la cartelera.");
-    // All readers and writers share the event lock, including pre-deployment writers
-    // protected by the database trigger. Refresh BEFORE the savepoint so rejection
-    // can roll back a vote without rolling back the permanent closure.
-    const current = await refreshUfcClose(tx, actor.familyId, eventId);
-    const snapshot = await ufcSnapshot(tx, actor.familyId, current, actor.memberId);
-    await tx.query("SAVEPOINT prediction_write");
-    hasSavepoint = true;
+    const snapshot = await ufcSnapshot(tx, actor.familyId, event);
     if (body) {
       if (event.source_absent_at || event.status === "cancelled")
         reject(
@@ -248,29 +221,30 @@ export async function sportsPredictions(request: Request, eventId: string) {
       if (
         !fight ||
         fight.removed_at ||
-        !fight.prode_eligible ||
         snapshot.results.some((r) => r.fight_id === fight.id)
       )
         reject(409, "Esta pelea ya no admite elecciones.");
-      const close = fightDeadline(snapshot);
-      if (!close) reject(409, "El primer bloque todavía no tiene horario confirmado.");
+      const close = fightDeadline(snapshot, fight);
+      if (!close) reject(409, "El bloque todavía no tiene horario confirmado.");
       if (closedAt(close, snapshot.now))
-        reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
+        reject(409, "El bloque cerró. Tu elección no se guardó.");
       if (request.method === "DELETE") {
         const {
           rows: [clock],
         } = await tx.query("SELECT clock_timestamp() AS now");
         if (closedAt(close, clock.now))
-          reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
+          reject(409, "El bloque cerró. Tu elección no se retiró.");
         const removed = await tx.query(
           "DELETE FROM sports_predictions WHERE family_id=$1 AND fight_id=$2 AND member_id=$3 AND $4::timestamptz>clock_timestamp()",
           [actor.familyId, fight.id, actor.memberId, close],
         );
-        if (!removed.rowCount) {
-          const { rows: [afterDelete] } = await tx.query("SELECT clock_timestamp() AS now");
-          if (closedAt(close, afterDelete.now))
-            reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
-        }
+        if (
+          !removed.rowCount &&
+          snapshot.votes.some(
+            (v) => v.member_id === actor.memberId && v.fight_id === fight.id,
+          )
+        )
+          reject(409, "El bloque cerró. Tu elección no se retiró.");
       } else {
         if (
           body.winnerId !== fight.first_fighter_id &&
@@ -289,25 +263,17 @@ export async function sportsPredictions(request: Request, eventId: string) {
           ],
         );
         if (!saved.rowCount)
-          reject(409, "La cartelera ya cerró. Tu cambio no se guardó.");
+          reject(409, "El bloque cerró. Tu elección no se guardó.");
       }
     }
     const view = ufcView(
-      body ? await ufcSnapshot(tx, actor.familyId, current, actor.memberId) : snapshot,
+      body ? await ufcSnapshot(tx, actor.familyId, event) : snapshot,
       actor.memberId,
     );
     await tx.query("COMMIT");
     return Response.json(view, { headers: privateHeaders });
   } catch (error) {
-    if (tx) {
-      if (hasSavepoint && predictionFamilyId && error instanceof Error && "status" in error && error.status === 409) {
-        await tx.query("ROLLBACK TO SAVEPOINT prediction_write");
-        // An exact-boundary write may have been suppressed by the DB trigger.
-        // Re-evaluate after rollback, then commit only the closure.
-        await refreshUfcClose(tx, predictionFamilyId, eventId);
-        await tx.query("COMMIT");
-      } else await tx.query("ROLLBACK");
-    }
+    if (tx) await tx.query("ROLLBACK");
     return sportsResponseError(error);
   } finally {
     tx?.release();
@@ -318,5 +284,22 @@ export async function freezeClosedBlocks(
   familyId: string,
   event: UfcEventRow,
 ) {
-  await refreshUfcClose(tx, familyId, event.id);
+  for (const block of ["main", "preliminaries", "early_preliminaries"]) {
+    const {
+      rows: [stored],
+    } = await tx.query(
+      "SELECT closed_at FROM sports_block_closures WHERE family_id=$1 AND event_id=$2 AND block=$3",
+      [familyId, event.id, block],
+    );
+    const at = stored?.closed_at ?? blockDeadline(event, block);
+    if (!at) continue;
+    await tx.query(
+      "INSERT INTO sports_block_closures(event_id,family_id,block,closed_at) SELECT $1,$2,$3,$4 WHERE $4::timestamptz<=clock_timestamp() ON CONFLICT(event_id,block) DO NOTHING",
+      [event.id, familyId, block, at],
+    );
+    await tx.query(
+      "UPDATE sports_fights SET prediction_closed_at=$4 WHERE event_id=$1 AND family_id=$2 AND bout_block=$3 AND prediction_closed_at IS NULL AND $4::timestamptz<=clock_timestamp()",
+      [event.id, familyId, block, at],
+    );
+  }
 }

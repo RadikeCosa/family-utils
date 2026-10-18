@@ -185,13 +185,24 @@ run_playwright_suite "Accesibilidad" --config playwright.a11y.config.ts
 printf '==> Permisos SQL public (solo lectura)\n'
 permission_count=0
 permission_status=0
-permission_count="$(psql "$FAMILY_UTILS_TEST_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'" 2>"$TMP_DIR/permissions-count.err")" || permission_status=$?
-if (( permission_status == 0 )) && [[ "$permission_count" =~ ^[0-9]+$ ]] && psql "$FAMILY_UTILS_TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$ROOT_DIR/sources/champions/permisos-check.sql" >"$TMP_DIR/permissions.log" 2>&1; then
-  add_result "Permisos public (una comprobación por función)" "$permission_count" "$permission_count" 0 0
-  echo "PASS: permisos SQL ($permission_count funciones)"
+permission_count="$(node --input-type=module <<'NODE' 2>"$TMP_DIR/permissions.err"
+import { readFile } from 'node:fs/promises';
+import pg from 'pg';
+const pool = new pg.Pool({ connectionString: process.env.FAMILY_UTILS_TEST_DATABASE_URL });
+try {
+  const count = await pool.query("SELECT count(*)::int AS n FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'");
+  console.log(`FUNCTIONS=${count.rows[0].n}`);
+  await pool.query(await readFile('sources/champions/permisos-check.sql', 'utf8'));
+} finally { await pool.end(); }
+NODE
+)" || permission_status=$?
+permission_count="${permission_count#FUNCTIONS=}"
+if (( permission_status == 0 )) && [[ "$permission_count" =~ ^[0-9]+$ ]]; then
+  add_result "Permisos public (todas las funciones)" 1 1 0 0
+  echo "PASS: permisos SQL ($permission_count funciones enumeradas)"
 else
-  if (( permission_status != 0 )); then cat "$TMP_DIR/permissions-count.err"; else cat "$TMP_DIR/permissions.log" 2>/dev/null || true; fi
-  add_result "Permisos public (una comprobación por función)" "$permission_count" 0 "$permission_count" 0
+  cat "$TMP_DIR/permissions.err" 2>/dev/null || true
+  add_result "Permisos public (todas las funciones)" 1 0 1 0
   ANY_PROBLEM=1
   echo "FAIL: permisos SQL"
 fi

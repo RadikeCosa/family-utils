@@ -1,6 +1,6 @@
 # Revisión de seguridad de migraciones Champions
 
-Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreSQL aislado. **no verificado: main no contiene 0037 y no se consultó la base de producción**. Esta revisión del repositorio incluye 0037 en la secuencia local, inmediatamente después de `0026`; eso no prueba si se aplicó en producción. La copia de SQL completa al final permite revisión externa. No contiene credenciales ni datos de familias.
+Revisión de `0027`–`0035` y de la corrección aditiva `0036`, contra PostgreSQL aislado. **no verificado: main no contiene 0037 y no se consultó la base de producción**. Esta revisión documenta `champions-fase-1`, cuyo journal local ubica 0037 después de `0026`; la rama alternativa `champions-sin-ufc` excluye 0037, su snapshot y su entrada de journal. Ninguna de esas secuencias prueba si 0037 se aplicó en producción. La copia de SQL completa al final permite revisión externa. No contiene credenciales ni datos de familias.
 
 ## Hallazgos por migración
 

@@ -24,7 +24,6 @@ function winnerName(fight: UfcFightView, id: string | null) {
       : "";
 }
 function outcomeLabel(fight: UfcFightView) {
-  if (!fight.prodeEligible) return "Agregada después del cierre · no puntúa";
   if (fight.removed || fight.cancelled) return "Pelea anulada · no puntúa";
   if (!fight.result) return "Resultado pendiente";
   return fight.result.outcome === "winner"
@@ -86,15 +85,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
         },
       );
       const value = await response.json();
-      if (!response.ok) {
-        if (response.status === 409) {
-          setPending(null);
-          const refreshed = await fetch(`/api/sports/events/${eventId}/predictions`, { cache: "no-store" });
-          if (refreshed.ok) { setData(await refreshed.json()); setLoadError(""); }
-          else setLoadError("No se pudo actualizar la cartelera. Recargá la página.");
-        }
-        throw new Error(value.error);
-      }
+      if (!response.ok) throw new Error(value.error);
       setData(value);
       setMessage(winnerId ? "Pronóstico guardado." : "Pronóstico retirado.");
       setPending(null);
@@ -128,11 +119,8 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
           Elegiste {data.chosen} de {data.total} peleas. Un punto por acierto.
         </p>
         <p>
-          Los pronósticos de toda la cartelera cierran al comenzar el primer bloque de peleas, incluidas las preliminares.
-          Esto incluye la cartelera principal. Las elecciones de la familia se revelan todas juntas.
+          Las elecciones de la familia se revelan cuando cierra cada bloque.
         </p>
-        <p>{data.closesAt ? `${data.closed ? "La cartelera cerró" : "Toda la cartelera cierra"} ${time(data.closesAt)} · Argentina` : "Horario del primer bloque a confirmar · pronósticos no habilitados"}</p>
-        {data.transition && <p role="status">Actualizamos la regla: se cerraron todos los pronósticos y se revelaron también las elecciones de la cartelera principal. Conservamos las elecciones ya guardadas.</p>}
         {loadError && <p role="alert">{loadError}</p>}
         {message && <p role="status">{message}</p>}
         {error && (
@@ -158,9 +146,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
           <section className={styles.block} key={block.key}>
             <h3>{block.label}</h3>
             <p>
-              {fights[0].startsAt
-                ? `Inicio del bloque: ${time(fights[0].startsAt)} · Argentina`
-                : "Horario del bloque a confirmar"}
+              {fights[0].closesAt
+                ? `${fights[0].closed ? "Cerró" : "Cierra"} ${time(fights[0].closesAt)} · Argentina`
+                : "Horario a confirmar · elecciones no habilitadas"}
             </p>
             <ol className={styles.fights}>
               {fights.map((fight) => (
@@ -184,7 +172,6 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                         disabled={
                           busy ||
                           fight.closed ||
-                          !fight.prodeEligible ||
                           !fight.closesAt ||
                           fight.cancelled ||
                           !!fight.result
@@ -200,7 +187,6 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   </div>
                   {fight.ownWinnerId &&
                     !fight.closed &&
-                    fight.prodeEligible &&
                     !fight.cancelled &&
                     !fight.result && (
                       <button

@@ -133,7 +133,15 @@ echo "OK: contenido protegido existente sin cambios."
 cat <<'EXPECTED'
 --- Cambios esperados por esta rama ---
 0027: sports_events.football_category se normaliza a NULL en filas UFC; se agregan referencias existentes de proveedor de eventos de fútbol a sports_football_event_sources. River mantiene su categoría histórica/default.
+EXPECTED
+if [[ -f "$ROOT_DIR/drizzle/0037_ufc_card_closure.sql" ]]; then
+  cat <<'EXPECTED'
 0037: se agregan columnas derivadas de cierre a sports_events y prode_eligible a sports_fights; los cierres se derivan de horarios/estados previos. No se esperan cambios en pronósticos, resultados ni contenido previo de peleas al comparar sin la columna nueva.
+EXPECTED
+else
+  echo "0037: esta rama no incluye la migración ni los campos de cierre UFC; no se espera ningún cambio UFC por cierre único."
+fi
+cat <<'EXPECTED'
 Las tablas que deben permanecer idénticas son las enumeradas arriba. Cualquier discrepancia dispara la alerta y detiene el script.
 EXPECTED
 

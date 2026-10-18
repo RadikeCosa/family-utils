@@ -4,6 +4,8 @@
 
 La última publicación de Vercel con vínculo Git que pude identificar apunta a `main` en `884c3134ff450cb7f1edd68576caf254f6c94f91` (`Document sports production rollout and recovery procedure (#41)`). La implementación actual de producción también muestra una publicación desde CLI sin SHA ni rama en sus metadatos; por eso no se puede afirmar que ese `main` sea el código actualmente activo. La rama fuente activa de producción queda **no verificada**. La base de producción no se consultó.
 
+La matriz describe la comparación del candidato `champions-fase-1`. La rama alternativa `champions-sin-ufc` excluye 0037 y los cambios de código UFC que dependían de ella; allí esta matriz funciona como registro del candidato original, no como inventario de archivos de esa rama.
+
 **no verificado: main no contiene 0037 y no se consultó la base de producción**. Por lo tanto, tampoco se verificó en producción el cierre único UFC ni los puntajes UFC 5/3/1. En el `main` identificado arriba no está el archivo de migración `0037_ufc_card_closure.sql` ni su entrada de journal: no está en esa revisión Git.
 
 El cierre UFC de evento único lo implementa 0037 mediante `sports_events.ufc_prediction_closes_at`, `ufc_prediction_closed_at` y `ufc_prediction_transition_at`, además de los guardas de votos/peleas. Si está activo en producción, proviene de esa migración o de una aplicación equivalente; la identidad exacta del SQL desplegado no se verificó directamente.

@@ -49,8 +49,7 @@ test("Champions migration preserves legacy data, defaults and family-scoped iden
     const tables = ["sports_fights", "sports_predictions", "sports_formations", "sports_comments"];
     const before = {};
     for (const table of tables) {
-      const projection = table === "sports_fights" ? "to_jsonb(t)-'prode_eligible'" : "to_jsonb(t)";
-      before[table] = (await pool.query(`SELECT ${projection} AS record FROM ${table} t`)).rows;
+      before[table] = (await pool.query(`SELECT to_jsonb(t) AS record FROM ${table} t`)).rows;
     }
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
     const executableFunctions = await pool.query(`
@@ -79,10 +78,9 @@ test("Champions migration preserves legacy data, defaults and family-scoped iden
       assert.equal(updated.football_category, row.record.kind === "football_match" ? "river" : null);
     }
     for (const table of tables) {
-      const expression = table === "sports_fights" ? "to_jsonb(t)-'prode_eligible'" : "to_jsonb(t)";
-      assert.deepEqual((await pool.query(`SELECT ${expression} AS record FROM ${table} t`)).rows, before[table], table);
+      assert.deepEqual((await pool.query(`SELECT to_jsonb(t) AS record FROM ${table} t`)).rows, before[table], table);
     }
-    assert.equal((await pool.query("SELECT prode_eligible FROM sports_fights WHERE id=$1", [fight.id])).rows[0].prode_eligible, true);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM sports_fights WHERE id=$1", [fight.id])).rows[0].n, 1);
     assert.equal((await pool.query(footballSql, [family, member, "12346"])).rowCount, 1);
     const newUfc = (await pool.query(ufcSql, [family, member])).rows[0].id;
     assert.equal((await pool.query("SELECT football_category FROM sports_events WHERE id=$1", [newUfc])).rows[0].football_category, null);
