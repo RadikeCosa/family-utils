@@ -36,6 +36,12 @@ export default function UfcDashboard({ initialEvent, isAdmin }: { initialEvent: 
   const view = useMemo(() => data && buildUfcDashboard(selectedEvents, data.members), [data, selectedEvents]);
   const selectedFights = (view?.fights ?? []).filter((fight) => memberId === "all" || fight.choices.some((pick) => pick.memberId === memberId));
   const financeComplete = !!view && view.ranking.filter((row) => row.picks > 0).every((row) => row.financialComplete);
+  async function refreshDashboard() {
+    const response = await fetch("/api/sports/dashboard", { cache: "no-store" });
+    const value = await response.json();
+    if (!response.ok) throw new Error(value.error ?? "No se pudieron actualizar las cuotas.");
+    setData(value);
+  }
   function changePeriod(next: "event" | "all") {
     setPeriod(next);
     const query = next === "all" ? "all" : eventId;
@@ -69,7 +75,7 @@ export default function UfcDashboard({ initialEvent, isAdmin }: { initialEvent: 
         <div className={styles.fights}>{selectedFights.map((fight) => <article key={fight.id} className={fight.mainEvent ? styles.mainFight : ""}><div><p className={styles.eyebrow}>{fight.eventTitle} · {date(fight.eventDate)}{fight.mainEvent ? " · ESTELAR" : ""}</p><h3>{fight.firstFighter} <small>vs</small> {fight.secondFighter}</h3><p>Resultado: <strong>{fight.result === "winner" ? fighterName(fight, fight.winnerId) : fight.result === "draw" ? "Empate" : fight.result === "cancelled" ? "Cancelada" : "Sin resultado válido"}</strong></p></div>
           <div className={styles.choices}>{fight.choices.filter((pick) => memberId === "all" || pick.memberId === memberId).map((pick) => <span key={pick.memberId} className={pick.winnerId === fight.winnerId && fight.result === "winner" ? styles.hit : styles.miss}>{pick.name}: {fighterName(fight, pick.winnerId)} · {pick.winnerId === fight.winnerId && fight.result === "winner" ? "acertó" : fight.result === "winner" ? "no acertó" : "sin puntaje"}</span>)}{fight.firstOdds !== null && fight.secondOdds !== null ? <small>Cuotas {fight.firstFighter} {fight.firstOdds.toFixed(2)} · {fight.secondFighter} {fight.secondOdds.toFixed(2)} · {fight.bookmaker} · <a href={fight.source ?? "#"} target="_blank" rel="noreferrer">fuente</a></small> : <small>Sin cuota verificada</small>}</div></article>)}</div>
       </section>
-      {isAdmin && <OddsImporter />}
+      {isAdmin && <OddsImporter onImported={refreshDashboard} />}
     </>}
   </main>;
 }
@@ -78,7 +84,7 @@ function Upset({ title, data, fighterName }: { title: string; data: Data["histor
     {data.winners.length ? <div className={styles.upsets}>{data.winners.map(({ fight, odds, correct }) => <article key={fight.id}><p className={styles.eyebrow}>{fight.eventTitle} · {date(fight.eventDate)}</p><h3>{fighterName(fight, fight.winnerId)} venció a {fighterName(fight, fight.winnerId === fight.firstFighterId ? fight.secondFighterId : fight.firstFighterId)}</h3><p>Cuota decimal {odds.toFixed(2)} · {fight.bookmaker}</p><p>Lo acertaron: {correct.map((person) => person.name).join(", ")}</p><a href={"/deportes/ufc-dashboard?event=" + encodeURIComponent(fight.eventId)}>Ver esta velada</a></article>)}</div> : <p className={styles.note}>{data.missingOdds ? "No hay batacazo acertado entre las cuotas verificadas. Faltan cuotas para evaluar todas las peleas con ganador." : "Todavía no hubo un batacazo acertado con cuotas verificadas."}</p>}
   </section>;
 }
-function OddsImporter() {
+function OddsImporter({ onImported }: { onImported: () => Promise<void> }) {
   const [raw, setRaw] = useState(""); const [token, setToken] = useState(""); const [status, setStatus] = useState(""); const [busy, setBusy] = useState(false);
   async function send(mode: "template" | "preview" | "import") {
     setBusy(true); setStatus("");
@@ -87,7 +93,7 @@ function OddsImporter() {
       const value = await response.json(); if (!response.ok) throw new Error(value.error ?? "No se pudo completar la operación.");
       if (mode === "template") setRaw(JSON.stringify(value, null, 2));
       if (mode === "preview") { setToken(value.token); setStatus(value.events.length + " cartelera(s) validadas. Revisá antes de guardar."); }
-      if (mode === "import") { setToken(""); setStatus(value.imported + " cartelera(s) con cuotas guardadas."); }
+      if (mode === "import") { await onImported(); setToken(""); setStatus(value.imported + " cartelera(s) con cuotas guardadas."); }
     } catch (reason) { setStatus(reason instanceof Error ? reason.message : "No se pudo procesar el archivo."); }
     finally { setBusy(false); }
   }
