@@ -57,12 +57,13 @@ test.afterEach(async () => {
 test("Deportes ofrece importación curada y no intenta sincronizar fuentes", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
+  await page.getByText("Administrar", { exact: true }).click();
   await expect(page.getByText("Automatización desactivada", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Actualizar", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cargar partido", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cargar cartelera", exact: true })).toHaveCount(0);
-  await page.getByText("Importar datos curados desde el chat").click();
-  await expect(page.getByLabel("Contenido JSON")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Actualizar agenda", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Validar y revisar", exact: true }).first()).toBeDisabled();
   const response = await page.request.post(`${baseURL}/api/sports/sync`, { headers: { Origin: baseURL } });
   expect(response.status()).toBe(200);
   expect((await response.json()).status).toBe("Automatización desactivada");
@@ -73,15 +74,15 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
+  await page.getByText("Administrar", { exact: true }).click();
   await page.getByRole("button", { name: "UFC", exact: true }).click();
-  await page.getByRole("button", { name: "Sin evento esta semana", exact: true }).click();
-  await expect(page.getByText("No hay evento esta semana", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Marcar semana actual sin UFC", exact: true }).click();
+  await expect(page.getByText("No hay UFC esta semana. Podés consultar las próximas carteleras.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
-  await page.getByText("Importar datos curados desde el chat").click();
   const bundle = curatedBundle();
-  await page.getByLabel("Contenido JSON").fill(JSON.stringify(bundle));
-  await page.getByRole("button", { name: "Validar JSON" }).click();
-  await expect(page.getByText("1 partido · 1 cartelera · 1 pelea")).toBeVisible().catch(async error => {
+  await page.getByLabel("Contenido JSON").first().fill(JSON.stringify(bundle));
+  await page.getByRole("button", { name: "Validar y revisar", exact: true }).first().click();
+  await expect(page.getByText("1 partidos · 1 carteleras · 1 peleas")).toBeVisible().catch(async error => {
     const message = await page.getByRole("alert").textContent().catch(() => "sin mensaje de validación");
     throw new Error(`${error.message}\nError de importación: ${message}`);
   });
@@ -89,7 +90,8 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await expect(page.getByRole("heading", { name: "River Plate vs Boca Juniors" })).toBeVisible();
   await page.getByRole("button", { name: "UFC", exact: true }).click();
   await expect(page.getByRole("heading", { name: "UFC Fight Night: Alpha vs Beta" })).toBeVisible();
-  await expect(page.getByText("Curado en chat", { exact: false }).first()).toBeVisible();
+  await page.getByText(/Datos revisados el/).click();
+  await expect(page.getByText("Información curada desde el chat · UFC oficial", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
   await page.getByLabel("Mi formación deseada").fill("4-3-3: once curado en familia");
   await page.getByRole("button", { name: "Guardar formación" }).click();
