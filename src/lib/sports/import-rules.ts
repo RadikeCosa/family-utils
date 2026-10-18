@@ -76,6 +76,7 @@ export function parseSportsCuratedBundle(value: unknown, now = new Date()): { ok
 
     if (!record(raw.source) || !safeSourceUrl(raw.source.primary) || !validInstant(raw.source.checkedAt, now)) return invalid();
     if (raw.kind === "football_match") {
+      if (raw.footballCategory != null && raw.footballCategory !== "river") return invalid();
       if (raw.sourceProvider !== "espn" || !/^\d{1,40}$/.test(externalReference)) return invalid();
       const payload = footballEventInput(raw);
       if (!payload || payload.eventDate === null || payload.status !== "scheduled") return invalid();

@@ -5,3 +5,7 @@ export function sportsFeatures() {
   const results = agenda && process.env.SPORTS_RIVER_RESULTS_ENABLED === "true";
   return { agenda, results, ufc: results && process.env.SPORTS_UFC_PREDICTIONS_ENABLED === "true" };
 }
+
+export function championsEnabled() {
+  return sportsFeatures().agenda && process.env.SPORTS_CHAMPIONS_ENABLED === "true";
+}

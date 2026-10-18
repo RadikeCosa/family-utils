@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { SportsEvent, SportsPageData } from "@/lib/sports/types";
@@ -7,6 +7,8 @@ import { sportsNowDay, isRiverMatch } from "@/lib/sports/rules";
 import UfcPredictions from "./UfcPredictions";
 import Comments from "./Comments";
 import CuratedImporter from "./CuratedImporter";
+import ChampionsAgenda, { type ChampionsThreadDraft } from "./ChampionsAgenda";
+import ChampionsSwitch from "./ChampionsSwitch";
 import styles from "./agenda.module.css";
 const dateLabel = (value: string | null) =>
   value
@@ -38,7 +40,7 @@ const blocks = [
 export default function AgendaApp({ initial }: { initial: SportsPageData }) {
   const router = useRouter();
   const params = useSearchParams();
-  const sport = params.get("sport") === "ufc" ? "ufc" : "river";
+  const sport = initial.championsEnabled && params.get("sport") === "champions" ? "champions" : params.get("sport") === "ufc" ? "ufc" : "river";
   const [history, setHistory] = useState(() => {
     const event = initial.agenda?.find(
       (item) => item.id === initial.selectedEventId,
@@ -52,6 +54,17 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
     );
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const championsRoundFocusRef=useRef(false);
+  const [championsDrafts,setChampionsDrafts]=useState<Record<string,ChampionsThreadDraft>>({});
+  function updateChampionsDraft(key:string,patch:Partial<ChampionsThreadDraft>,expected?:Partial<ChampionsThreadDraft>){
+    setChampionsDrafts(previous=>{
+      const current=previous[key]??{body:"",edit:null};
+      // A response from a previous view must not clear newer text typed after navigating back.
+      if(expected?.body!==undefined&&expected.body!==current.body)return previous;
+      if(expected?.edit&&(!current.edit||expected.edit.id!==current.edit.id||expected.edit.version!==current.edit.version||expected.edit.body!==current.edit.body))return previous;
+      return {...previous,[key]:{...current,...patch}};
+    });
+  }
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const events = (initial.agenda ?? [])
@@ -184,7 +197,10 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         <button aria-pressed={sport === "ufc"} onClick={() => navigate("ufc")}>
           UFC
         </button>
+        {initial.championsEnabled && <button aria-pressed={sport === "champions"} onClick={() => navigate("champions")}>Champions</button>}
       </nav>
+      {initial.role === "administrator" && initial.championsEnvironmentEnabled && <ChampionsSwitch />}
+      {sport === "champions" && initial.champions ? <ChampionsAgenda key={initial.champions.revision} initial={initial.champions} admin={initial.role === "administrator"} familyId={initial.familyId} currentMemberId={initial.currentMemberId} members={initial.members} drafts={championsDrafts} onDraftChange={updateChampionsDraft} navigationFocusRef={championsRoundFocusRef}/> : <>
       {sport === "ufc" && initial.noUfcEvent && (
         <p>No hay UFC esta semana. Podés consultar las próximas carteleras.</p>
       )}
@@ -430,6 +446,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
           )}
         </details>
       )}
+      </>}
       <footer className={styles.footer}>
         Todos los horarios son de Argentina · Datos curados.
       </footer>

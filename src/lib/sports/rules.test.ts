@@ -81,3 +81,11 @@ test("formations require 1–500 Unicode characters after trimming", () => {
   assert.equal(formationInput("⚽".repeat(500))?.length, 500);
   assert.equal(formationInput({ body: "once" }), null);
 });
+
+test("Champions cannot become River's selected event even with River in its name", () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+  const champions = { ...event("champions", "2026-10-20"), footballCategory: "champions" as const };
+  const river = { ...event("river", "2026-10-21"), footballCategory: "river" as const };
+  assert.equal(selectRiverEvent([champions, river], now)?.id, "river");
+  assert.equal(selectRiverEvent([champions], now), null);
+});

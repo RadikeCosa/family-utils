@@ -71,6 +71,7 @@ export async function loadSportsData(
         and(
           eq(sportsEvents.familyId, actor.familyId),
           eq(sportsEvents.hidden, false),
+          or(eq(sportsEvents.kind, "ufc_card"), eq(sportsEvents.footballCategory, "river")),
           ...(features.agenda ? [] : [isNull(sportsEvents.sourceAbsentAt)]),
           ...(features.agenda
             ? []
@@ -229,6 +230,7 @@ export async function createSportsEvent(request: Request) {
     tx = await getPool().connect(); await tx.query("BEGIN");
     const member = await activeActor(tx, actor); requireAdmin(member);
     if (body.kind === "football_match") {
+      if (body.footballCategory != null && body.footballCategory !== "river") fail(400,"INVALID","Esta ruta solo admite partidos de River.");
       const input = footballEventInput(body);
       if (!input) fail(400, "INVALID", "Completá los equipos y el torneo. La fecha, hora y cancha pueden quedar a confirmar.");
       const { rows: [event] } = await tx.query("INSERT INTO sports_events(family_id,kind,title,competition,first_participant,second_participant,event_date,starts_at,channel,status,result,manually_edited,created_by_member_id,updated_by_member_id) VALUES($1,'football_match',$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$11) RETURNING id", [actor.familyId,input.title,input.competition,input.firstParticipant,input.secondParticipant,input.eventDate,input.startsAt,input.channel,input.status,input.result,actor.memberId]);
@@ -261,7 +263,7 @@ export async function updateSportsEvent(request: Request, eventId: string) {
     tx = await getPool().connect(); await tx.query("BEGIN");
     const member = await activeActor(tx,actor); requireAdmin(member);
     const { rows: [current] } = await tx.query("SELECT * FROM sports_events WHERE id=$1 AND family_id=$2 FOR UPDATE", [eventId,actor.familyId]);
-    if (!current) fail(404,"NOT_FOUND","No encontramos este evento.");
+    if (!current || current.football_category === "champions") fail(404,"NOT_FOUND","No encontramos este evento.");
     if (body.action === "reset_field") {
       const fieldMap:Record<string,{column:string;key:string}>={title:{column:"title",key:"title"},competition:{column:"competition",key:"competition"},firstParticipant:{column:"first_participant",key:"firstParticipant"},secondParticipant:{column:"second_participant",key:"secondParticipant"},eventDate:{column:"event_date",key:"eventDate"},startsAt:{column:"starts_at",key:"startsAt"},venue:{column:"venue",key:"venue"},channel:{column:"channel",key:"channel"},status:{column:"status",key:"status"},result:{column:"result",key:"result"},earlyPreliminariesStartsAt:{column:"early_preliminaries_starts_at",key:"earlyPreliminariesStartsAt"},preliminaryStartsAt:{column:"preliminary_starts_at",key:"preliminaryStartsAt"},mainCardStartsAt:{column:"main_card_starts_at",key:"mainCardStartsAt"}};
       const field=typeof body.field==="string"?fieldMap[body.field]:undefined;const automatic=current.automatic_data??{};if(!field||automatic[field.key]===undefined)fail(400,"INVALID","No se puede recuperar el dato automático.");
@@ -342,6 +344,10 @@ export async function readSportsComments(request: Request) {
     const contextKind = url.searchParams.get("contextKind");
     const contextDate = url.searchParams.get("contextDate");
     const eventId = url.searchParams.get("eventId");
+    if (contextKind === "river_match" && eventId && SPORTS_UUID.test(eventId)) {
+      const allowed = await getDb().select({ id: sportsEvents.id }).from(sportsEvents).where(and(eq(sportsEvents.id, eventId), eq(sportsEvents.familyId, actor.familyId), eq(sportsEvents.footballCategory, "river")));
+      if (!allowed.length) return NextResponse.json({ comments: [], priorDates: [] }, { headers: { "Cache-Control": "no-store", Vary: "Cookie" } });
+    }
     if (!isSportsContext(contextKind) || (contextKind === "football_day" && !isSportsDate(contextDate)) || (contextKind === "river_match" && ((contextDate !== null && !isSportsDate(contextDate)) || !eventId || !SPORTS_UUID.test(eventId))) || (contextKind === "ufc_card" && (!eventId || !SPORTS_UUID.test(eventId)))) fail(400,"INVALID","Conversación inválida.");
     const base = [eq(sportsComments.familyId,actor.familyId),eq(sportsComments.contextKind,contextKind),isNull(sportsComments.retiredAt)];
     if (contextDate) base.push(eq(sportsComments.contextDate,contextDate));
@@ -374,7 +380,7 @@ export async function mutateSportsComment(request: Request, commentId?: string) 
       if (contextKind === "river_match" && ((contextDate !== null && !isSportsDate(contextDate)) || !contextEventId || !SPORTS_UUID.test(contextEventId))) fail(400,"INVALID","Conversación inválida.");
       if (contextKind === "ufc_card" && (contextDate !== null || !contextEventId || !SPORTS_UUID.test(contextEventId))) fail(400,"INVALID","Conversación inválida.");
       if (contextKind !== "football_day") {
-        const { rows:[event] } = await tx.query("SELECT id,first_participant,second_participant FROM sports_events WHERE id=$1 AND family_id=$2 AND kind=$3" , [contextEventId,actor.familyId,contextKind === "ufc_card" ? "ufc_card" : "football_match"]);
+        const { rows:[event] } = await tx.query("SELECT id,first_participant,second_participant FROM sports_events WHERE id=$1 AND family_id=$2 AND kind=$3 AND (kind='ufc_card' OR football_category='river')" , [contextEventId,actor.familyId,contextKind === "ufc_card" ? "ufc_card" : "football_match"]);
         if (!event) fail(404,"NOT_FOUND","No encontramos este evento.");
         if (contextKind === "river_match" && !isRiverMatch(event.first_participant,event.second_participant)) fail(400,"INVALID","La conversación por partido es solo para River.");
         if (contextKind === "river_match" && !contextDate) contextDate = sportsNowDay();
@@ -385,6 +391,10 @@ export async function mutateSportsComment(request: Request, commentId?: string) 
     }
     const { rows:[previous] } = await tx.query("SELECT * FROM sports_comments WHERE id=$1 AND family_id=$2 AND retired_at IS NULL FOR UPDATE",[commentId,actor.familyId]);
     if (!previous) fail(404,"NOT_FOUND","No encontramos este comentario.");
+    if (previous.context_event_id) {
+      const { rows: [event] } = await tx.query("SELECT football_category FROM sports_events WHERE id=$1 AND family_id=$2", [previous.context_event_id, actor.familyId]);
+      if (!event || event.football_category === "champions") fail(404,"NOT_FOUND","No encontramos este comentario.");
+    }
     const action = body.action;
     if (action === "retire") {
       if (previous.author_member_id !== actor.memberId && member.role !== "administrator") fail(403,"NO_ACCESS","Solo el autor o un administrador puede retirar este comentario.");
@@ -416,7 +426,7 @@ export async function saveSportsFormation(request: Request, eventId: string) {
     if (request.method !== "DELETE" && !body) fail(400,"INVALID","Escribí una formación de hasta 500 caracteres.");
     tx = await getPool().connect(); await tx.query("BEGIN");
     await activeActor(tx, actor);
-    const { rows: [event] } = await tx.query("SELECT first_participant,second_participant FROM sports_events WHERE family_id=$1 AND id=$2 AND kind='football_match' FOR UPDATE", [actor.familyId,eventId]);
+    const { rows: [event] } = await tx.query("SELECT first_participant,second_participant FROM sports_events WHERE family_id=$1 AND id=$2 AND kind='football_match' AND football_category='river' FOR UPDATE", [actor.familyId,eventId]);
     if (!event || !isRiverMatch(event.first_participant,event.second_participant)) fail(404,"NOT_FOUND","No encontramos este partido de River.");
     if (request.method === "DELETE") {
       await tx.query("DELETE FROM sports_formations WHERE family_id=$1 AND event_id=$2 AND member_id=$3", [actor.familyId,eventId,actor.memberId]);

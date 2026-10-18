@@ -54,6 +54,17 @@
 .tabs button {
   flex: 1;
 }
+.championsSwitch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 0;
+}
+.championsSwitch span {
+  color: #526055;
+  font-size: 13px;
+}
 .page button,
 .shortcuts a {
   min-height: 44px;
@@ -376,3 +387,14 @@
   margin: 3px 0;
   line-height: 1.5;
 }
+
+.championsMatches { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.championsMatches .panel { margin: 0 0 16px; min-width: 0; }
+.championsMatches h4 { font: 800 20px/1.4 Manrope,sans-serif; overflow-wrap: anywhere; margin: 8px 0; }
+.championsMatches p { line-height: 1.5; }
+.championsPicks { border: 0; padding: 0; margin: 16px 0; display: grid; gap: 8px; min-width: 0; }
+.championsPicks legend { font-weight: 700; margin-bottom: 10px; }
+.championsPicks button { width: 100%; overflow-wrap: anywhere; }
+@media(max-width:600px) { .championsMatches { grid-template-columns: minmax(0,1fr); } }
+
+.championsThread time[datetime] { color: #526055; font-size: 12px; }

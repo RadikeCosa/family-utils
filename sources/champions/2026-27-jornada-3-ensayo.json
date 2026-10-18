@@ -1,0 +1,48 @@
+{
+  "testedAt": "2026-10-18T04:17:44.613Z",
+  "environment": "Copia limpia champions-fase-1-rc1 (92dae2a); PostgreSQL local aislado 127.0.0.1:55439/champions_tag_20261017; producción no consultada",
+  "actions": [
+    "Importación de Jornada 3 confirmada con token de vista previa",
+    "Mismo archivo vuelto a previsualizar y confirmar",
+    "Pronósticos privados guardados por dos integrantes autenticados; lectura adicional como administrador"
+  ],
+  "import": {
+    "httpStatus": 200,
+    "changed": true,
+    "teams": 36,
+    "matches": 18,
+    "teamReferences": 36,
+    "matchReferences": 18,
+    "errors": [],
+    "reimportHttpStatus": 200,
+    "reimportChanged": false,
+    "noDomainOrAuditChangesOnReimport": true
+  },
+  "schedule": {
+    "all18PairsMatchSuppliedUEFAIds": true,
+    "verifiedArgentinaTimes": {
+      "13:45": 4,
+      "16:00": 14
+    },
+    "perDay": 9,
+    "all18Passed": true
+  },
+  "privacy": {
+    "memberA": {
+      "ownChoice": "home",
+      "otherChoices": []
+    },
+    "memberB": {
+      "ownChoice": "away",
+      "otherChoices": []
+    },
+    "administrator": {
+      "ownChoice": "home",
+      "otherChoices": []
+    },
+    "noForeignChoicesReturned": true
+  },
+  "codeCommit": "92dae2a",
+  "appliedMigrations": 38,
+  "sourceRevalidation": "Pendiente revalidación humana el 19/10/2026 por la mañana (Argentina); checkedAt del borrador sigue provisional."
+}
