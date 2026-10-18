@@ -54,6 +54,20 @@ test.afterEach(async () => {
   await pool?.end();
 });
 
+test("Champions disabled by environment hides the tab and administrator switch without a request", async ({ page }) => {
+  const switchRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/sports/champions/switch")) switchRequests.push(request.url());
+  });
+  await page.goto("/deportes");
+  await expect(page.getByRole("button", { name: "Champions", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Champions: (encendido|apagado)|Leyendo Champions/ })).toHaveCount(0);
+  await page.waitForTimeout(250);
+  expect(switchRequests).toEqual([]);
+  await expect(page.getByRole("button", { name: "River", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "UFC", exact: true })).toBeVisible();
+});
+
 test("Deportes ofrece importación curada y no intenta sincronizar fuentes", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();

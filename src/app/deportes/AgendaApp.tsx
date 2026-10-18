@@ -199,7 +199,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         </button>
         {initial.championsEnabled && <button aria-pressed={sport === "champions"} onClick={() => navigate("champions")}>Champions</button>}
       </nav>
-      {initial.role === "administrator" && <ChampionsSwitch />}
+      {initial.role === "administrator" && initial.championsEnvironmentEnabled && <ChampionsSwitch />}
       {sport === "champions" && initial.champions ? <ChampionsAgenda key={initial.champions.revision} initial={initial.champions} admin={initial.role === "administrator"} familyId={initial.familyId} currentMemberId={initial.currentMemberId} members={initial.members} drafts={championsDrafts} onDraftChange={updateChampionsDraft} navigationFocusRef={championsRoundFocusRef}/> : <>
       {sport === "ufc" && initial.noUfcEvent && (
         <p>No hay UFC esta semana. Podés consultar las próximas carteleras.</p>

@@ -28,5 +28,5 @@ export default async function SportsPage({ searchParams }: { searchParams: Promi
   const enabled = environmentEnabled && storedEnabled;
   const loadedChampions = enabled && session ? await loadChampionsData(actor,session.session.token,params.round??null) : undefined;
   const champions = loadedChampions ?? undefined;
-  return sportsFeatures().agenda ? <AgendaApp key={`${initial.familyId}:${initial.currentMemberId}`} initial={{...initial,championsEnabled:enabled,champions}} /> : <SportsApp initial={initial} />;
+  return sportsFeatures().agenda ? <AgendaApp key={`${initial.familyId}:${initial.currentMemberId}`} initial={{...initial,championsEnvironmentEnabled:environmentEnabled,championsEnabled:enabled,champions}} /> : <SportsApp initial={initial} />;
 }
