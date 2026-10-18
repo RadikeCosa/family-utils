@@ -88,6 +88,40 @@ SQL
 }
 
 echo "Destino seguro: base '$DATABASE_NAME' en host $DATABASE_HOST y servidor local/bridge Docker ($SERVER_ADDR)."
+echo "--- ACL original restaurada con --no-acl: inspección y restricción local ---"
+psql "$DB_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+SELECT pg_catalog.pg_get_userbyid(a.grantee) AS grantee,
+       a.privilege_type,
+       a.is_grantable
+FROM pg_catalog.pg_proc AS p
+CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(p.proacl, pg_catalog.acldefault('f', p.proowner))) AS a
+WHERE p.oid = pg_catalog.to_regprocedure('public.show_db_tree()')
+ORDER BY grantee, privilege_type;
+
+DO $restrict_local_copy$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.show_db_tree()') IS NULL THEN
+    RAISE EXCEPTION 'No se encontró public.show_db_tree() en la copia; revisar la restauración.';
+  END IF;
+  EXECUTE 'REVOKE EXECUTE ON FUNCTION public.show_db_tree() FROM PUBLIC';
+  IF pg_catalog.to_regrole('anon') IS NOT NULL THEN
+    EXECUTE 'REVOKE EXECUTE ON FUNCTION public.show_db_tree() FROM anon';
+  END IF;
+  IF pg_catalog.to_regrole('authenticated') IS NOT NULL THEN
+    EXECUTE 'REVOKE EXECUTE ON FUNCTION public.show_db_tree() FROM authenticated';
+  END IF;
+END
+$restrict_local_copy$;
+
+SELECT pg_catalog.pg_get_userbyid(p.proowner) AS owner,
+       pg_catalog.has_function_privilege(p.proowner, p.oid, 'EXECUTE') AS owner_can_execute,
+       EXISTS (
+         SELECT 1 FROM pg_catalog.aclexplode(COALESCE(p.proacl, pg_catalog.acldefault('f', p.proowner))) AS a
+         WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'
+       ) AS public_can_execute
+FROM pg_catalog.pg_proc AS p
+WHERE p.oid = pg_catalog.to_regprocedure('public.show_db_tree()');
+SQL
 echo "Tablas deportivas: filas y MD5 de contenido completo."
 echo "Tablas protegidas con MD5 para invariancia: sports_predictions, sports_fight_results, sports_football_predictions, sports_football_results, sports_comments, sports_football_round_comments y sports_fights (proyección estable sin prode_eligible)."
 

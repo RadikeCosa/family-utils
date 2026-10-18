@@ -36,7 +36,12 @@ jobs:
           node-version: 24.13.1
           cache: npm
       - run: npm ci
+      - run: npm ls --depth=0
+      - run: npm run db:check
+      - run: npx drizzle-kit check
       - run: npm run db:migrate
+      - run: npm run db:verify
+      - run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
