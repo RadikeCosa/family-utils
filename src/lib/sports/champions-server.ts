@@ -3,7 +3,6 @@ import { getPool } from "@/db";
 import type { MemberContext } from "@/lib/auth/context";
 import { createAuth } from "@/lib/auth/server";
 import { championsEnabled } from "./config";
-import { familyChampionsEnabled } from "./champions-switch";
 import { selectChampionsRound, type ChampionsBundle, type ChampionsMatchInput } from "./champions-rules";
 import type { FootballPredictionView } from "./football-predictions-server";
 import { activeSportsActor, privateHeaders, reject, sportsActor, sportsResponseError } from "./request";
@@ -20,7 +19,6 @@ export async function loadChampionsData(actor: MemberContext, sessionToken: stri
     await c.query("BEGIN");
     const active = (await c.query<{ family_id: string }>("SELECT * FROM public.sports_football_session_actor($1)",[sessionToken])).rows[0];
     if (!active || active.family_id !== actor.familyId) reject(403,"Ingresá a tu familia.");
-    if (!(await familyChampionsEnabled(c, actor.familyId))) { await c.query("COMMIT"); return null; }
     const rounds = (await c.query<ChampionsRoundView>(`SELECT r.id,r.name,s.name AS season,r.original_from::text AS "originalFrom",r.original_through::text AS "originalThrough",
       EXISTS(SELECT 1 FROM sports_events e WHERE e.family_id=r.family_id AND e.round_id=r.id AND e.hidden=false AND e.status NOT IN ('completed','cancelled') AND NOT EXISTS(SELECT 1 FROM sports_football_resolutions x WHERE x.event_id=e.id AND x.family_id=e.family_id AND x.kind='void_for_prode')) AS partial
       FROM sports_football_rounds r JOIN sports_football_seasons s ON s.id=r.season_id AND s.family_id=r.family_id
@@ -74,7 +72,6 @@ export async function championsTemplate(request: Request) {
     const actor = await sportsActor(request, true), url = new URL(request.url), roundId = url.searchParams.get("round");
     await c.query("BEGIN");
     await activeSportsActor(c, actor, true);
-    if (!(await familyChampionsEnabled(c, actor.familyId))) { await c.query("ROLLBACK"); return Response.json({ error: "No encontrado." }, { status: 404, headers: privateHeaders }); }
     if (url.searchParams.get("example") === "true" || !roundId) { await c.query("COMMIT"); return Response.json(championsExample(), { headers: privateHeaders }); }
     if (!SPORTS_UUID.test(roundId)) reject(400, "Jornada inválida.");
     const round = (await c.query<{ reference: string; name: string; original_from: string; original_through: string; season: string }>("SELECT r.reference,r.name,r.original_from::text,r.original_through::text,s.name AS season FROM sports_football_rounds r JOIN sports_football_seasons s ON s.id=r.season_id AND s.family_id=r.family_id WHERE r.id=$1 AND r.family_id=$2 AND s.competition='champions'", [roundId, actor.familyId])).rows[0];

@@ -2,7 +2,6 @@ import { createHash,createHmac,timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
 import { championsEnabled } from "./config";
-import { familyChampionsEnabled } from "./champions-switch";
 import { parseChampionsResults } from "./champions-results-rules";
 import { activeSportsActor,privateHeaders,reject,sportsActor,sportsBody,sportsResponseError } from "./request";
 import { SPORTS_UUID } from "./rules";
@@ -34,7 +33,6 @@ export async function importChampionsResults(request:Request){
  try{
   const actor=await sportsActor(request,true);
   await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ');await activeSportsActor(c,actor,true);
-  if(!(await familyChampionsEnabled(c,actor.familyId)))reject(404,"No encontrado.");
   const body=await sportsBody(request);
   if(body.mode!=='preview'&&body.mode!=='import')reject(400,"Elegí vista previa o confirmación.");
   const parsed=parseChampionsResults(body.bundle);
@@ -83,7 +81,6 @@ export async function championsResultsTemplate(request:Request){
   const actor=await sportsActor(request,true),round=new URL(request.url).searchParams.get('round');
   if(!round||!SPORTS_UUID.test(round))reject(400,"Elegí una jornada.");
   await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ');await activeSportsActor(c,actor,true);
-  if(!(await familyChampionsEnabled(c,actor.familyId)))reject(404,"No encontrado.");
   const data=await state(c,actor.familyId,round,false);await c.query('COMMIT');
   return Response.json({schemaVersion:1,sport:'champions',type:'results',period:'90_minutes',roundId:round,checkedAt:new Date().toISOString(),results:data.matches.filter(m=>m.status!=='cancelled'&&m.resolution_kind!=='void_for_prode').map(m=>({eventId:m.id,title:m.title,homeGoals:m.home_goals,awayGoals:m.away_goals,source:m.source??'https://www.uefa.com/uefachampionsleague/'}))},{headers:privateHeaders});
  }catch(error){await c.query('ROLLBACK');const response=sportsResponseError(error);for(const[k,v]of Object.entries(privateHeaders))response.headers.set(k,v);return response;}finally{c.release();}

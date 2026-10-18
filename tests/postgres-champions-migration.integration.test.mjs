@@ -12,14 +12,15 @@ import { championsFixture } from "./helpers/champions.ts";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("Isolated PostgreSQL required");
-test("journal preserves production 0037 and orders all ten Champions migrations after it", async () => {
+test("journal preserves production migrations and orders the Champions toggle removal", async () => {
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.length, 39);
+  assert.equal(journal.entries.length, 40);
   assert.deepEqual(
     journal.entries.slice(27, 38).map(entry => entry.tag),
     ["0037_ufc_card_closure", "0038_sports_champions_identity", "0039_sports_football_predictions", "0040_sports_football_function_access", "0041_sports_function_defaults", "0042_sports_champions_results", "0043_sports_champions_round_comments", "0044_sports_champions_switch", "0045_champions_suspended_resolution", "0046_champions_result_corrections", "0047_champions_managed_grants"],
   );
   assert.equal(journal.entries[38].tag, "0048_sports_ufc_odds");
+  assert.equal(journal.entries[39].tag, "0049_champions_always_available");
   assert.equal(journal.entries[27].when, 1792046402706);
   assert.ok(journal.entries.slice(28).every(entry => entry.when > 1792046402706));
   for (let i = 0; i < journal.entries.length; i++) {

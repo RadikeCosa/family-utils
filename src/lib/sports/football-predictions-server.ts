@@ -16,7 +16,7 @@ export type FootballPredictionView = {
 
 // This adapter does not read predictions or decide deadlines/privacy in JavaScript.
 export async function footballPredictions(request: Request, eventId: string) {
-  if (!sportsFeatures().agenda || process.env.SPORTS_CHAMPIONS_ENABLED !== "true")
+  if (!sportsFeatures().agenda)
     return Response.json({ error: "No encontrado." }, { status: 404, headers: privateHeaders });
   try {
     await sportsActor(request);

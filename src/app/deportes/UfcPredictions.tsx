@@ -124,9 +124,6 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
     <section id="predictions" aria-label="Pronósticos UFC">
       <div className={styles.panel}>
         <h3>Tus pronósticos</h3>
-        <nav className={styles.shortcuts} aria-label="Resultados UFC">
-          <a href={"/deportes/ufc-dashboard?event=" + encodeURIComponent(eventId)}>Ver dashboard de esta velada</a>
-        </nav>
         <p>
           Elegiste {data.chosen} de {data.total} peleas. Un punto por acierto.
         </p>
@@ -274,6 +271,11 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
             ))}
           </tbody>
         </table>
+        {data.final && (
+          <nav className={styles.shortcuts} aria-label="Estadísticas de la velada">
+            <a href={"/deportes/ufc-dashboard?event=" + encodeURIComponent(eventId)}>Ver resultados de esta velada</a>
+          </nav>
+        )}
       </section>
     </section>
   );

@@ -2,7 +2,6 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
 import { championsEnabled } from "./config";
-import { familyChampionsEnabled } from "./champions-switch";
 import { activeSportsActor, privateHeaders, reject, sportsActor, sportsBody, sportsResponseError } from "./request";
 import { parseChampionsBundle, type AgendaIssue, type ChampionsBundle, type ChampionsMatchInput, type ProviderIds } from "./champions-rules";
 
@@ -88,7 +87,6 @@ export async function importChampionsAgenda(request: Request) {
     const actor = await sportsActor(request, true);
     await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
     await activeSportsActor(c, actor, true);
-    if (!(await familyChampionsEnabled(c, actor.familyId))) reject(404, "No encontrado.");
     const body = await sportsBody(request);
     if (body.mode !== "preview" && body.mode !== "import") reject(400, "Elegí vista previa o confirmación.");
     const parsed = parseChampionsBundle(body.bundle);

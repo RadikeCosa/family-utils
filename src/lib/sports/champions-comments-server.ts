@@ -1,6 +1,5 @@
 import { getPool } from "@/db";
 import { championsEnabled } from "./config";
-import { familyChampionsEnabled } from "./champions-switch";
 import { commentInput, SPORTS_UUID } from "./rules";
 import { activeSportsActor, privateHeaders, reject, sportsActor, sportsBody, sportsResponseError } from "./request";
 
@@ -12,7 +11,6 @@ export async function championsComments(request: Request, roundId: string, comme
     const actor = await sportsActor(request);
     await c.query("BEGIN");
     await activeSportsActor(c, actor);
-    if (!(await familyChampionsEnabled(c, actor.familyId))) reject(404, "No encontrado.");
     if (!SPORTS_UUID.test(roundId) || (commentId && !SPORTS_UUID.test(commentId))) reject(400, "Conversación inválida.");
     const body = request.method === "GET" ? null : await sportsBody(request);
     if (body && (Object.hasOwn(body, "familyId") || Object.hasOwn(body, "memberId") || Object.hasOwn(body, "roundId") || body.contextDate || body.contextEventId)) reject(400, "La conversación pertenece a la jornada indicada.");

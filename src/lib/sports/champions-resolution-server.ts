@@ -1,7 +1,6 @@
 import { getPool } from "@/db";
 import { activeSportsActor, privateHeaders, reject, sportsActor, sportsBody, sportsResponseError } from "./request";
 import { championsEnabled } from "./config";
-import { familyChampionsEnabled } from "./champions-switch";
 import { SPORTS_UUID } from "./rules";
 
 const officialSource = (value: unknown): value is string => {
@@ -20,7 +19,6 @@ export async function resolveChampionsSuspension(request: Request, eventId: stri
     const actor = await sportsActor(request, true);
     await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
     await activeSportsActor(c, actor, true);
-    if (!(await familyChampionsEnabled(c, actor.familyId))) reject(404, "No encontrado.");
     const body = await sportsBody(request);
     const event = (await c.query<{ id:string; round_id:string|null; status:string; title:string; starts_at:Date|null }>(
       "SELECT id,round_id,status,title,starts_at FROM sports_events WHERE id=$1 AND family_id=$2 AND football_category='champions' AND kind='football_match' FOR UPDATE",

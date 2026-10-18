@@ -54,13 +54,16 @@ test.afterEach(async () => {
   await pool?.end();
 });
 
-test("Champions disabled by environment hides the tab and administrator switch without a request", async ({ page }) => {
+test("Champions remains available without a family or environment switch", async ({ page }) => {
   const switchRequests: string[] = [];
   page.on("request", (request) => {
     if (request.url().includes("/api/sports/champions/switch")) switchRequests.push(request.url());
   });
   await page.goto("/deportes");
-  await expect(page.getByRole("button", { name: "Champions", exact: true })).toHaveCount(0);
+  const champions = page.getByRole("button", { name: "Champions", exact: true });
+  await expect(champions).toBeVisible();
+  await champions.click();
+  await expect(champions).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: /Champions: (encendido|apagado)|Leyendo Champions/ })).toHaveCount(0);
   await page.waitForTimeout(250);
   expect(switchRequests).toEqual([]);

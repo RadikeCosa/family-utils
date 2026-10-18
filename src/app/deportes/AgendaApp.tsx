@@ -8,7 +8,6 @@ import UfcPredictions from "./UfcPredictions";
 import Comments from "./Comments";
 import CuratedImporter from "./CuratedImporter";
 import ChampionsAgenda, { type ChampionsThreadDraft } from "./ChampionsAgenda";
-import ChampionsSwitch from "./ChampionsSwitch";
 import styles from "./agenda.module.css";
 const dateLabel = (value: string | null) =>
   value
@@ -197,9 +196,13 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         <button aria-pressed={sport === "ufc"} onClick={() => navigate("ufc")}>
           UFC
         </button>
-        {initial.championsEnabled && <button aria-pressed={sport === "champions"} onClick={() => navigate("champions")}>Champions</button>}
+        <button aria-pressed={sport === "champions"} onClick={() => navigate("champions")}>Champions</button>
       </nav>
-      {initial.role === "administrator" && initial.championsEnvironmentEnabled && <ChampionsSwitch />}
+      {sport === "ufc" && initial.features?.ufc && (
+        <nav className={styles.dashboardEntry} aria-label="Estadísticas UFC">
+          <a href="/deportes/ufc-dashboard"><span className={styles.dashboardMark} aria-hidden="true">UFC</span><span><strong>Ranking y estadísticas</strong><small>Resultados de la familia · última velada e histórico</small></span><b aria-hidden="true">↗</b></a>
+        </nav>
+      )}
       {sport === "champions" && initial.champions ? <ChampionsAgenda key={initial.champions.revision} initial={initial.champions} admin={initial.role === "administrator"} familyId={initial.familyId} currentMemberId={initial.currentMemberId} members={initial.members} drafts={championsDrafts} onDraftChange={updateChampionsDraft} navigationFocusRef={championsRoundFocusRef}/> : <>
       {sport === "ufc" && initial.noUfcEvent && (
         <p>No hay UFC esta semana. Podés consultar las próximas carteleras.</p>
@@ -299,7 +302,6 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
               <>
                 <a href="#predictions">Tus pronósticos</a>
                 <a href="#ranking">Ver tabla</a>
-                <a href={"/deportes/ufc-dashboard?event=" + encodeURIComponent(selected.id)}>Dashboard</a>
               </>
             )}
             <a href="#conversation">Ir a la conversación</a>

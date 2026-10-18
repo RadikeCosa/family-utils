@@ -24,7 +24,7 @@ test("server flags default off and enforce delivery dependencies", () => {
     process.env.SPORTS_AGENDA_ENABLED = "true";
     assert.equal(sportsFeatures().results, false);
     process.env.SPORTS_RIVER_RESULTS_ENABLED = "true";
-    process.env.SPORTS_CHAMPIONS_ENABLED = "true";
+    process.env.SPORTS_CHAMPIONS_ENABLED = "false";
     assert.deepEqual(sportsFeatures(), {
       agenda: true,
       results: true,

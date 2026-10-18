@@ -7,5 +7,5 @@ export function sportsFeatures() {
 }
 
 export function championsEnabled() {
-  return sportsFeatures().agenda && process.env.SPORTS_CHAMPIONS_ENABLED === "true";
+  return sportsFeatures().agenda;
 }

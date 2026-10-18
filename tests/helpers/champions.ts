@@ -2,7 +2,6 @@ import type { Pool } from "pg";
 
 // Deliberately uses River's name: category, not participant text, must isolate it.
 export async function championsFixture(pool: Pool, familyId: string, memberId: string) {
-  await pool.query("INSERT INTO sports_champions_switches(family_id,enabled) VALUES($1,true) ON CONFLICT(family_id) DO UPDATE SET enabled=true", [familyId]);
   const season = (await pool.query("INSERT INTO sports_football_seasons(family_id,competition,name) VALUES($1,'champions','2026/27') RETURNING id", [familyId])).rows[0].id as string;
   const round = (await pool.query("INSERT INTO sports_football_rounds(family_id,season_id,reference,name,original_from,original_through) VALUES($1,$2,'league-3','Jornada 3','2026-10-20','2026-10-21') RETURNING id", [familyId, season])).rows[0].id as string;
   const teams: string[] = [];

@@ -9,7 +9,6 @@ import SportsApp from "./SportsApp";
 import { championsEnabled } from "@/lib/sports/config";
 import { loadChampionsData } from "@/lib/sports/champions-server";
 import { createAuth } from "@/lib/auth/server";
-import { storedChampionsEnabled } from "@/lib/sports/champions-switch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,14 +18,11 @@ export default async function SportsPage({ searchParams }: { searchParams: Promi
   const actor = await getMemberContext(await headers());
   if (!actor) redirect("/acceso");
   const params = await searchParams;
-  const environmentEnabled = championsEnabled();
-  const [initial,session,storedEnabled] = await Promise.all([
+  const [initial,session] = await Promise.all([
     loadSportsData(actor,params.event??null),
-    environmentEnabled && params.sport === "champions" ? createAuth().api.getSession({headers:await headers()}) : Promise.resolve(null),
-    environmentEnabled ? storedChampionsEnabled(actor.familyId) : Promise.resolve(false),
+    params.sport === "champions" ? createAuth().api.getSession({headers:await headers()}) : Promise.resolve(null),
   ]);
-  const enabled = environmentEnabled && storedEnabled;
-  const loadedChampions = enabled && session ? await loadChampionsData(actor,session.session.token,params.round??null) : undefined;
+  const loadedChampions = session ? await loadChampionsData(actor,session.session.token,params.round??null) : undefined;
   const champions = loadedChampions ?? undefined;
-  return sportsFeatures().agenda ? <AgendaApp key={`${initial.familyId}:${initial.currentMemberId}`} initial={{...initial,championsEnvironmentEnabled:environmentEnabled,championsEnabled:enabled,champions}} /> : <SportsApp initial={initial} />;
+  return sportsFeatures().agenda ? <AgendaApp key={`${initial.familyId}:${initial.currentMemberId}`} initial={{...initial,championsEnabled:championsEnabled(),champions}} /> : <SportsApp initial={initial} />;
 }
