@@ -1,88 +1,58 @@
-# Diferencias de `champions-sobre-produccion` frente a producción
+# Diff de usuario: b2051b7 → champions-fase-1-rc5
 
-La base operativa confirmada para este candidato es 0000–0026 más 0037, cuyo hash SHA-256 es `4d508cf9c2e6acbe5ac2860cdc8b60b4c7ceee927a675b114727baa49966c96a` y `when=1792046402706`. El usuario informó que el código del despliegue CLI `dpl_FbQmLAJYdz8vSq4oiNU9UWuWpocY` otorga 1 punto por acierto; la fuente inspeccionada en Vercel muestra `ufcRanking` sumando `+1`. No se obtuvo un SHA de Git del despliegue, por lo que `b2051b7d235320d6034d277df99afc3b5f2fe9a4` se usa como base provisional.
-
-## Diff estadístico de archivos compartidos/no-Champions
-
-Se excluyen artefactos de migración, rutas/componentes/lógica exclusivos de Champions, pruebas y documentación. El resumen se obtuvo con este filtro:
+El bloque siguiente corresponde a este comando exacto (los patrones adicionales también son archivos o runners de pruebas):
 
 ```sh
-git diff --stat b2051b7 champions-sobre-produccion -- . \
-  ':(exclude)drizzle/**' ':(exclude)tests/**' ':(exclude)**/*.test.*' \
-  ':(exclude)sources/**' ':(exclude)src/lib/sports/champions*' \
-  ':(exclude)src/lib/sports/football-predictions-server.ts' \
-  ':(exclude)src/app/api/sports/champions/**' \
-  ':(exclude)src/app/deportes/Champions*' \
-  ':(exclude)playwright.champions.config.ts'
+git diff --stat b2051b7 champions-fase-1-rc5 -- . \
+  ':!src/lib/sports/champions*' \
+  ':!src/app/api/sports/champions*' \
+  ':!src/app/deportes/Champions*' \
+  ':!src/lib/sports/football-predictions-server.ts' \
+  ':!**/*.test.*' ':!tests' ':!sources' ':!drizzle' \
+  ':!playwright*.ts' ':!scripts/verificar-todo.sh'
 ```
 
-Salida:
+Se excluyen los módulos exclusivos de Champions, pruebas y documentación bajo `sources` y `drizzle`. Las configuraciones de Playwright y el runner de verificación de suites también se excluyen porque solo ejecutan pruebas.
 
 ```text
  .env.example                       |   1 +
  .github/workflows/ci.yml           |   1 +
  package.json                       |   7 +-
- playwright.a11y.config.ts          |   9 +-
- playwright.config.ts               |  16 ++-
- playwright.sports-next.config.ts   |   5 +-
- scripts/verificar-todo.sh          | 226 +++++++++++++++++++++++++++++++++++++
+ scripts/preflight-publicacion.sh   | 231 +++++++++++++++++++++++++++++++++++++
  src/app/deportes/AgendaApp.tsx     |  21 +++-
  src/app/deportes/Comments.tsx      |  43 ++++---
  src/app/deportes/agenda.module.css |  22 ++++
- src/app/deportes/page.tsx          |  19 +++-
- src/db/schema.ts                   | 166 ++++++++++++++++++++++++++-
+ src/app/deportes/page.tsx          |  19 ++-
+ src/db/schema.ts                   | 166 +++++++++++++++++++++++++-
  src/lib/sports/config.ts           |   4 +
  src/lib/sports/import-rules.ts     |   1 +
- src/lib/sports/import-server.ts    |  14 ++-
+ src/lib/sports/import-server.ts    |  10 +-
  src/lib/sports/results-server.ts   |   6 +-
  src/lib/sports/rules.ts            |   3 +-
  src/lib/sports/server.ts           |  16 ++-
  src/lib/sports/sync.ts             |   6 +-
  src/lib/sports/types.ts            |  13 ++-
- 20 files changed, 552 insertions(+), 47 deletions(-)
+ 17 files changed, 530 insertions(+), 40 deletions(-)
 ```
 
-| Archivo | Efecto visible o funcional para River/UFC |
-|---|---|
-| `.env.example` | Documenta Champions apagado por defecto; los valores de Deportes siguen apagados por separado. |
-| `.github/workflows/ci.yml` | Agrega validaciones automatizadas; no cambia pantallas ni datos. |
-| `package.json` | Registra suites/scripts adicionales; no cambia el cálculo ni cierre UFC. |
-| `playwright.a11y.config.ts` | Aísla el servidor de accesibilidad contra la base de test; solo afecta las pruebas. |
-| `playwright.config.ts` | Separa recorridos generales de Deportes/Champions; solo afecta las pruebas. |
-| `playwright.sports-next.config.ts` | Hace configurable el puerto de la suite de Deportes; no cambia la aplicación. |
-| `scripts/verificar-todo.sh` | Ejecuta las verificaciones completas contra `champions_test`; no es código de runtime. |
-| `src/app/deportes/AgendaApp.tsx` | Añade Champions como pestaña condicional; los controles River y UFC existentes permanecen disponibles. |
-| `src/app/deportes/Comments.tsx` | Permite usar el hilo de jornada Champions conservando las rutas y borradores River/UFC. |
-| `src/app/deportes/agenda.module.css` | Añade presentación de jornadas y pestañas; River/UFC mantienen sus estilos y contenido. |
-| `src/app/deportes/page.tsx` | Carga el panel Champions solo con sus dos habilitaciones; River/UFC conservan su selección. |
-| `src/db/schema.ts` | Describe columnas/tablas deportivas Champions y el esquema UFC 0037 ya existente; no agrega puntajes UFC. |
-| `src/lib/sports/config.ts` | Calcula Champions con entorno y switch; no altera las banderas de River/UFC. |
-| `src/lib/sports/import-rules.ts` | Conserva el contrato legacy River/UFC y agrega reglas tipadas de fútbol por categoría. |
-| `src/lib/sports/import-server.ts` | Aísla importación por categoría; las escrituras Champions no entran a River/UFC. |
-| `src/lib/sports/results-server.ts` | Mantiene el importador de resultados legacy acotado a River; UFC sigue en su servidor específico. |
-| `src/lib/sports/rules.ts` | Distingue River y Champions en la selección de fútbol; no modifica reglas UFC. |
-| `src/lib/sports/server.ts` | Excluye Champions de endpoints genéricos y preserva datos River/UFC. |
-| `src/lib/sports/sync.ts` | Limita sincronización legacy de fútbol a River; el flujo UFC permanece separado. |
-| `src/lib/sports/types.ts` | Añade tipos para identidad y datos de fútbol; no cambia el contrato de peleas UFC. |
+## Efecto por archivo compartido
 
-No tienen diff frente a `b2051b7`: `src/lib/sports/prediction-rules.ts`, `src/lib/sports/predictions-server.ts`, `src/lib/sports/results-ufc-server.ts`, `src/app/deportes/UfcPredictions.tsx` y el SQL/snapshot/journal de 0037 salvo que el journal ahora incluye 0038–0047 después de aquella fila.
+- `.env.example` — agrega `SPORTS_CHAMPIONS_ENABLED=false`; sin efecto visible mientras siga apagada.
+- `.github/workflows/ci.yml` — amplía verificaciones automáticas; no cambia el comportamiento durante el uso.
+- `package.json` — registra suites Champions y serializa pruebas de rutas; no cambia reglas ni puntos de River/UFC.
+- `scripts/preflight-publicacion.sh` — comprobaciones de herramientas y estado local para el operador; sin efecto en usuarios.
+- `src/app/deportes/AGENDAAPP.TSX` — agrega pestaña/vista Champions; la selección `sport=ufc` sigue usando `UfcPredictions` y River conserva su vista.
+- `src/app/deportes/COMMENTS.TSX` — generaliza el componente de comentarios y añade contexto Champions; River/UFC conservan sus rutas API predeterminadas y sus tipos de hilo.
+- `src/app/deportes/agenda.module.css` — estilos de la agenda compartida; las reglas nuevas se aplican a los elementos Champions, sin cambios visuales buscados en UFC/River.
+- `src/app/deportes/PAGE.TSX` — carga Champions solo cuando están activos el flag de entorno y el switch familiar; la carga River/UFC sigue por `loadSportsData`.
+- `src/db/SCHEMA.TS` — agrega temporada/equipos/llaves/resultados de fútbol; migración 0038 normaliza `football_category` de las filas UFC a `NULL` y conserva los datos deportivos; no cambia sus puntos ni cierres.
+- `src/lib/sports/CONFIG.TS` — agrega el gate de Champions dependiendo de Deportes/agenda; el gate UFC permanece idéntico.
+- `src/lib/sports/IMPORT-RULES.TS` — rechaza una categoría Champions enviada por el importador genérico de River; el importador de carteleras UFC conserva su validación.
+- `src/lib/sports/IMPORT-SERVER.TS` — evita que el importador River reclame referencias Champions; las consultas de UFC siguen incluyendo `kind='ufc_card'`, por lo que sus equivalencias, cierres y detección de ausencias conservan el comportamiento de b2051b7.
+- `src/lib/sports/RESULTS-SERVER.TS` — restringe el importador de resultados de fútbol a categoría River; UFC sigue manejado por su ruta separada y la plantilla conserva la condición `SPORTS_UFC_PREDICTIONS_ENABLED`.
+- `src/lib/sports/RULES.TS` — excluye partidos Champions del selector River; `selectUfcEvent` no cambia.
+- `src/lib/sports/SERVER.TS` — separa la lectura/edición de eventos Champions del CRUD genérico; los eventos UFC siguen admitidos por `kind='ufc_card'`.
+- `src/lib/sports/SYNC.TS` — filtra por categoría solo la sincronización River; el estado, elegibilidad, reintentos y escritura UFC quedan intactos.
+- `src/lib/sports/TYPES.TS` — amplía tipos para fútbol Champions y autores de comentarios; no altera los campos ni valores de resultados UFC.
 
-## Cambios de datos por migración
-
-La migración 0037 es byte a byte la de producción y conserva `when=1792046402706`; esta release no modifica su SQL ni el puntaje UFC. La simulación aislada recorrió 0000–0026 y 0037 antes de aplicar las diez migraciones nuevas.
-
-| Migración | Cambios sobre datos existentes en producción |
-|---|---|
-| 0037 UFC | Ya aplicada; se preserva. Agrega columnas de cierre/elegibilidad y dispara el cierre correspondiente de las filas UFC según su SQL original; no se vuelve a ejecutar si la fila 28 ya está aplicada. |
-| 0038 Champions identity | **Puede actualizar filas existentes:** `sports_events.football_category` queda `river` para fútbol existente y `NULL` para `ufc_card`; copia referencias externas existentes de eventos de fútbol a `sports_football_event_sources`. No altera votos, resultados, peleas, formaciones ni comentarios. Agrega las tablas/columnas de identidad de temporada, jornada/equipos y referencias de llave. |
-| 0039 fútbol pronósticos | Solo crea tablas, índices, restricciones y funciones vacías; no backfill de pronósticos. |
-| 0040 acceso de funciones | Reemplaza funciones y privilegios; no modifica filas de negocio. |
-| 0041 privilegios por defecto | Cambia ACL/default ACL de funciones; no modifica filas de negocio. |
-| 0042 resultados y tabla Champions | Crea función/estructura de resultados; no rellena filas históricas. |
-| 0043 comentarios por jornada | Crea tabla e índices vacíos; no migra comentarios existentes. |
-| 0044 switch familiar | **Inserta una fila apagada por familia existente** en `sports_champions_switches`; no modifica `families` ni datos River/UFC. |
-| 0045 resolución de suspendidos | Crea tabla vacía para resoluciones auditadas; no cambia estados ni resultados existentes. |
-| 0046 correcciones | Crea tabla vacía de auditoría/correcciones; no cambia resultados existentes. |
-| 0047 grants gestionados | Ajusta ACLs de funciones/tablas deportivas; no modifica filas de negocio. |
-
-Al apagar Champions se conservan switches, identidades, elecciones, resultados, comentarios y auditoría. River/UFC no dependen del switch Champions.
+Se marcaron en mayúsculas los módulos compartidos que también contienen tipos o rutas UFC. No se editaron durante este endurecimiento. Ninguna migración nueva se agregó: la función `sports_football_choice_view(sports_events, uuid)` ya fue retirada por 0040 y no existe en la base con 38 migraciones; por eso no se generó 0048.

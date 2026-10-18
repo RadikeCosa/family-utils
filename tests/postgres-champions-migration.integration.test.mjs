@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -23,6 +24,28 @@ test("journal preserves production 0037 and orders all ten Champions migrations 
   for (let i = 0; i < journal.entries.length; i++) {
     assert.equal(journal.entries[i].idx, i);
     if (i) assert.ok(journal.entries[i].when > journal.entries[i - 1].when);
+  }
+});
+test("permissions check reports pg_trgm separately and rejects an exposed application function", { skip: !connectionString && "requires isolated PostgreSQL", timeout: 30_000 }, async () => {
+  const pool = new pg.Pool({ connectionString });
+  const extensionWasInstalled = Boolean((await pool.query("SELECT 1 FROM pg_extension WHERE extname='pg_trgm'")).rowCount);
+  const runCheck = () => spawnSync("psql", [connectionString, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-f", "sources/champions/permisos-check.sql"], { encoding: "utf8" });
+  try {
+    await pool.query("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public");
+    const extensionCheck = runCheck();
+    assert.equal(extensionCheck.status, 0, extensionCheck.stderr);
+    assert.match(extensionCheck.stdout, /extension\|pg_trgm\|[^|]+\|public\.similarity\(/, "extension functions must be reported with their owner");
+    assert.match(extensionCheck.stdout, /informational; excluded from application permission failure/);
+
+    await pool.query("CREATE OR REPLACE FUNCTION public.champions_permission_failure_probe() RETURNS integer LANGUAGE sql AS 'SELECT 1'");
+    await pool.query("GRANT EXECUTE ON FUNCTION public.champions_permission_failure_probe() TO PUBLIC");
+    const failingCheck = runCheck();
+    assert.notEqual(failingCheck.status, 0, "an exposed non-extension function must fail the script");
+    assert.match(`${failingCheck.stdout}\n${failingCheck.stderr}`, /Permiso EXECUTE inesperado en función no perteneciente a extensión public\.champions_permission_failure_probe\(\)/);
+  } finally {
+    await pool.query("DROP FUNCTION IF EXISTS public.champions_permission_failure_probe()");
+    if (!extensionWasInstalled) await pool.query("DROP EXTENSION IF EXISTS pg_trgm CASCADE");
+    await pool.end();
   }
 });
 test("Champions migration preserves legacy data, defaults and family-scoped identities", { skip: !connectionString && "requires isolated PostgreSQL" }, async () => {

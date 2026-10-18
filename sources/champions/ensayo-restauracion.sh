@@ -12,22 +12,29 @@ if [[ -z "$DB_URL" ]]; then
   exit 2
 fi
 command -v psql >/dev/null || { echo "ERROR: se requiere psql." >&2; exit 2; }
+command -v pg_dump >/dev/null || { echo "ERROR: falta pg_dump (instalá postgresql-client de versión igual o mayor al servidor, o usá la imagen postgres:<versión>)." >&2; exit 2; }
 command -v npm >/dev/null || { echo "ERROR: se requiere npm." >&2; exit 2; }
 
-# Verifica el destino conectado (incluye túneles/proxies): acepta socket Unix o
-# loopback IPv4/IPv6, y exige un nombre explícito de ensayo/test.
+# Verifica primero el nombre de base y la dirección solicitada (solo localhost/
+# loopback); después acepta la IP interna del bridge Docker usado por el
+# PostgreSQL local además de sockets Unix y loopback nativo.
 IFS='|' read -r SERVER_ADDR DATABASE_NAME < <(
   psql "$DB_URL" -X -A -t -v ON_ERROR_STOP=1 -F '|' \
     -c "SELECT COALESCE(inet_server_addr()::text,'local-socket'), current_database()"
 )
-case "$SERVER_ADDR" in
-  local-socket|127.*|::1) ;;
-  *) echo "ERROR: servidor no local ($SERVER_ADDR); se cancela sin migrar." >&2; exit 3 ;;
-esac
 if [[ ! "$DATABASE_NAME" =~ (ensayo|test) ]]; then
   echo "ERROR: el nombre de base '$DATABASE_NAME' no contiene ensayo ni test; se cancela." >&2
   exit 3
 fi
+DATABASE_HOST="$(node --input-type=module -e 'const u=new URL(process.argv[1]);process.stdout.write(u.hostname.replace(/^\[|\]$/g,"").toLowerCase())' "$DB_URL")"
+case "$DATABASE_HOST" in
+  ""|localhost|127.*|::1) ;;
+  *) echo "ERROR: la URL de destino no apunta a localhost/loopback (host=$DATABASE_HOST); se cancela." >&2; exit 3 ;;
+esac
+case "$SERVER_ADDR" in
+  local-socket|127.*|::1|172.1[6-9].*|172.2[0-9].*|172.3[01].*) ;;
+  *) echo "ERROR: dirección del servidor fuera de loopback o bridge local de Docker ($SERVER_ADDR); se cancela sin migrar." >&2; exit 3 ;;
+esac
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -58,7 +65,7 @@ WITH protected(table_name, projection) AS (VALUES
  ('sports_football_results', 'to_jsonb(t)'),
  ('sports_comments', 'to_jsonb(t)'),
  ('sports_football_round_comments', 'to_jsonb(t)'),
- ('sports_fights', 'to_jsonb(t) - ''prode_eligible''::text)
+ ('sports_fights', 'to_jsonb(t) - ''prode_eligible''::text')
 ), present AS (
  SELECT p.table_name,p.projection
  FROM protected p JOIN pg_catalog.pg_tables t
@@ -80,7 +87,7 @@ SQL
   sort -o "$dest" "$dest"
 }
 
-echo "Destino seguro: base '$DATABASE_NAME' en servidor local ($SERVER_ADDR)."
+echo "Destino seguro: base '$DATABASE_NAME' en host $DATABASE_HOST y servidor local/bridge Docker ($SERVER_ADDR)."
 echo "Tablas deportivas: filas y MD5 de contenido completo."
 echo "Tablas protegidas con MD5 para invariancia: sports_predictions, sports_fight_results, sports_football_predictions, sports_football_results, sports_comments, sports_football_round_comments y sports_fights (proyección estable sin prode_eligible)."
 
@@ -92,7 +99,7 @@ cat "$TMP_DIR/sports-before.txt"
 echo "--- Aplicando migraciones pendientes sobre la copia ---"
 (
   cd "$ROOT_DIR"
-  DATABASE_URL_UNPOOLED="$DB_URL" npm run db:migrate
+  env -u DATABASE_URL DATABASE_URL_UNPOOLED="$DB_URL" npm run db:migrate
 )
 
 snapshot_sports "$TMP_DIR/sports-after.txt"
@@ -133,7 +140,8 @@ echo "OK: contenido protegido existente sin cambios."
 cat <<'EXPECTED'
 --- Cambios esperados por esta rama ---
 0038: sports_events.football_category se normaliza a NULL en filas UFC; se agregan referencias existentes de proveedor de eventos de fútbol a sports_football_event_sources. River mantiene su categoría histórica/default.
-0037: se agregan columnas derivadas de cierre a sports_events y prode_eligible a sports_fights; los cierres se derivan de horarios/estados previos. No se esperan cambios en pronósticos, resultados ni contenido previo de peleas al comparar sin la columna nueva.
+0037: ya está aplicada en la producción de referencia (fila 28) y no pertenece a esta rama ni se espera que esté pendiente en este ensayo. Si el respaldo afirma tener 28 migraciones y db:migrate intenta aplicar 0037, detenerse y revisar la restauración, el historial y los hashes antes de continuar.
+0038–0047: cambios de esta rama detallados arriba; no deben reescribir el contenido protegido existente.
 Las tablas que deben permanecer idénticas son las enumeradas arriba. Cualquier discrepancia dispara la alerta y detiene el script.
 EXPECTED
 

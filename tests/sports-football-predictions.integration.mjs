@@ -19,7 +19,7 @@ test("football predictions: PostgreSQL authority with real member and administra
   const password = randomUUID();
   const families = [], users = [];
   let limited, server;
-  let createdAnon = false;
+  let createdAnon = false, createdAuthenticated = false;
   const serverLogs = [];
   async function family() {
     const id = (await setup.query("INSERT INTO families(name) VALUES($1) RETURNING id", [`football-${randomUUID()}`])).rows[0].id;
@@ -57,6 +57,9 @@ test("football predictions: PostgreSQL authority with real member and administra
     if (!(await setup.query("SELECT 1 FROM pg_roles WHERE rolname='anon'")).rowCount) {
       await setup.query("CREATE ROLE anon NOLOGIN NOSUPERUSER NOBYPASSRLS"); createdAnon = true;
     }
+    if (!(await setup.query("SELECT 1 FROM pg_roles WHERE rolname='authenticated'")).rowCount) {
+      await setup.query("CREATE ROLE authenticated NOLOGIN NOSUPERUSER NOBYPASSRLS"); createdAuthenticated = true;
+    }
     const url = new URL(connectionString); url.username = role; url.password = password;
     limited = new pg.Pool({ connectionString: url.toString() });
     server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", "3348"], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, SPORTS_ENABLED: "true", SPORTS_AGENDA_ENABLED: "true", SPORTS_CHAMPIONS_ENABLED: "true", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "football-only-test-secret-at-least-32-characters", CODE_PEPPER: "football-only-test-pepper-at-least-32-characters", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: ["ignore", "pipe", "pipe"] });
@@ -87,20 +90,43 @@ test("football predictions: PostgreSQL authority with real member and administra
       assert.equal((await http(admin, base.event)).status, 200);
     });
 
-    await t.test("definers pin search_path, accept no user ID and deny PUBLIC and anon", async () => {
+    await t.test("definers pin search_path, match the explicit argument allowlist and deny public roles", async () => {
       await setup.query("CREATE OR REPLACE FUNCTION public.champions_default_acl_probe() RETURNS integer LANGUAGE sql AS 'SELECT 1'");
-      const functions = (await setup.query(`SELECT p.proname,p.proargnames,p.proconfig,p.prosecdef,
+      const functions = (await setup.query(`SELECT p.oid::regprocedure::text AS signature,
+        p.proname,p.proargnames,p.proargmodes,p.proconfig,p.prosecdef,
         EXISTS(SELECT 1 FROM aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute,
-        has_function_privilege('anon',p.oid,'EXECUTE') AS anon_execute
+        has_function_privilege('anon',p.oid,'EXECUTE') AS anon_execute,
+        has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated_execute
         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-        WHERE n.nspname='public'`)).rows;
-      assert.ok(functions.length >= 5);
+        WHERE n.nspname='public' AND p.prosecdef ORDER BY 1`)).rows;
+      const allowedInputNames = new Map([
+        ["sports_football_materialize_close(uuid,uuid,timestamp with time zone,text)", ["p_family", "p_event", "p_start", "p_status"]],
+        ["sports_football_preserve_close()", []],
+        ["sports_football_session_actor(text)", ["p_token"]],
+        ["sports_football_predictions_api(text,uuid,text,text)", ["p_token", "p_event", "p_action", "p_choice"]],
+        ["sports_football_choice_view(sports_events,text)", ["p_event", "p_token"]],
+        ["sports_football_round_table(text,uuid)", ["p_token", "p_round"]],
+        ["sports_champions_family_created()", []],
+        ["sports_champions_enabled(uuid,boolean)", ["p_family", "p_lock"]],
+        ["sports_champions_set_enabled(text,boolean)", ["p_token", "p_enabled"]],
+      ]);
+      assert.deepEqual(functions.map(fn => fn.signature), [...allowedInputNames.keys()].sort());
       for (const fn of functions) {
-        if (fn.prosecdef) assert.ok(fn.proconfig.includes('search_path=pg_catalog, public'), fn.proname);
+        assert.ok(fn.proconfig?.includes('search_path=pg_catalog, public'), fn.signature);
         assert.equal(fn.public_execute, false, fn.proname);
         assert.equal(fn.anon_execute, false, fn.proname);
-        if (fn.prosecdef) assert.ok(!(fn.proargnames ?? []).some(name => /^(p_member|p_user|p_actor)/.test(name)), fn.proname);
+        assert.equal(fn.authenticated_execute, false, fn.proname);
+        const names = fn.proargnames ?? [];
+        const rawModes = fn.proargmodes;
+        const modes = rawModes == null
+          ? names.map(() => "i")
+          : Array.isArray(rawModes) ? rawModes : String(rawModes).replace(/[{}]/g, "").split(",");
+        const inputNames = names.filter((_, index) => modes[index] === "i" || modes[index] === "b");
+        assert.deepEqual(inputNames, allowedInputNames.get(fn.signature), fn.signature);
+        assert.ok(!inputNames.some(name => /(?:^|_)(?:member|user|actor)(?:_?id)?(?:$|_)/i.test(name)), fn.signature);
       }
+      const uuidView = await setup.query("SELECT to_regprocedure('public.sports_football_choice_view(public.sports_events,uuid)') AS function");
+      assert.equal(uuidView.rows[0].function, null, "no SECURITY DEFINER helper may accept an arbitrary member UUID");
       await setup.query("DROP FUNCTION public.champions_default_acl_probe()");
       const client = await setup.connect();
       try {
@@ -288,6 +314,7 @@ test("football predictions: PostgreSQL authority with real member and administra
     await setup.query(`DROP OWNED BY "${role}"`);
     await setup.query(`DROP ROLE "${role}"`);
     if (createdAnon) await setup.query("DROP ROLE anon");
+    if (createdAuthenticated) await setup.query("DROP ROLE authenticated");
     await setup.end();
   }
 });
