@@ -76,7 +76,7 @@ parse_tap() {
   node - "$file" <<'NODE'
 const fs = require('node:fs');
 const text = fs.readFileSync(process.argv[2], 'utf8');
-const last = (name) => [...text.matchAll(new RegExp(`^# ${name}\\s+(\\d+)\\s*$`, 'gm'))].at(-1)?.[1];
+const last = (name) => [...text.matchAll(new RegExp(`^(?:#|ℹ) ${name}\\s+(\\d+)\\s*$`, 'gm'))].at(-1)?.[1];
 const tests = Number(last('tests'));
 const passed = Number(last('pass') ?? 0);
 const failed = Number(last('fail') ?? 0) + Number(last('cancelled') ?? 0);
