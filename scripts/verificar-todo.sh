@@ -144,7 +144,11 @@ run_playwright_suite() {
   local stderr="$TMP_DIR/${#SUITE_NAMES[@]}.stderr"
   printf '==> %s\n' "$name"
   local status=0
-  npm --silent run test:e2e -- "$@" --reporter=json >"$report" 2>"$stderr" || status=$?
+  if [[ "$name" == "Champions" ]]; then
+    SPORTS_CHAMPIONS_ENABLED=true npm --silent run test:e2e -- "$@" --reporter=json >"$report" 2>"$stderr" || status=$?
+  else
+    npm --silent run test:e2e -- "$@" --reporter=json >"$report" 2>"$stderr" || status=$?
+  fi
   local parsed=""
   parsed="$(parse_playwright_json "$report" 2>/dev/null)" || true
   if [[ -z "$parsed" ]]; then
