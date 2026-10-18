@@ -1,11 +1,12 @@
 "use client";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { SportsEvent, SportsPageData } from "@/lib/sports/types";
 import { sportsNowDay, isRiverMatch } from "@/lib/sports/rules";
 import UfcPredictions from "./UfcPredictions";
 import Comments from "./Comments";
+import { RiverLineup, RiverLineupImporter } from "./RiverLineup";
 import CuratedImporter from "./CuratedImporter";
 import ChampionsAgenda, { type ChampionsThreadDraft } from "./ChampionsAgenda";
 import styles from "./agenda.module.css";
@@ -39,19 +40,22 @@ const blocks = [
 export default function AgendaApp({ initial }: { initial: SportsPageData }) {
   const router = useRouter();
   const params = useSearchParams();
+  const [refreshing, startRefresh] = useTransition();
+  const refresh = useCallback(() => startRefresh(() => router.refresh()), [router]);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.removeEventListener("focus", onVisible); document.removeEventListener("visibilitychange", onVisible); };
+  }, [refresh]);
   const sport = initial.championsEnabled && params.get("sport") === "champions" ? "champions" : params.get("sport") === "ufc" ? "ufc" : "river";
-  const [history, setHistory] = useState(() => {
-    const event = initial.agenda?.find(
-      (item) => item.id === initial.selectedEventId,
-    );
-    return (
-      !!event &&
-      (!!event.sourceAbsentAt ||
-        event.status === "completed" ||
-        event.status === "cancelled" ||
-        (!!event.eventDate && event.eventDate < initial.day))
-    );
-  });
+  const selectedSnapshot = initial.agenda?.find(item => item.id === initial.selectedEventId);
+  const historyKey = `${initial.selectedEventId}:${selectedSnapshot?.status}:${selectedSnapshot?.eventDate}:${selectedSnapshot?.sourceAbsentAt}:${initial.day}`;
+  const [historyChoice, setHistoryChoice] = useState<{key:string;value:boolean} | null>(null);
+  const history = historyChoice?.key === historyKey ? historyChoice.value : !!selectedSnapshot && (
+    !!selectedSnapshot.sourceAbsentAt || selectedSnapshot.status === "completed" || selectedSnapshot.status === "cancelled" || (!!selectedSnapshot.eventDate && selectedSnapshot.eventDate < initial.day)
+  );
+  const setHistory = (value: boolean) => setHistoryChoice({key:historyKey,value});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const championsRoundFocusRef=useRef(false);
   const [championsDrafts,setChampionsDrafts]=useState<Record<string,ChampionsThreadDraft>>({});
@@ -237,6 +241,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
           <p>No hay eventos en esta sección.</p>
         )}
       </section>
+      <button type="button" disabled={refreshing} onClick={refresh}>{refreshing ? "Actualizando…" : "Actualizar"}</button>
       {selected ? (
         <>
           <article
@@ -347,6 +352,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
               })}
             </section>
           )}
+          {sport === "river" && <RiverLineup lineup={initial.officialLineup?.eventId === selected.id ? initial.officialLineup : null} />}
           {sport === "river" && (
             <section id="formations" className={styles.panel}>
               <h3>El once que queremos</h3>
@@ -431,6 +437,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
       {initial.role === "administrator" && (
         <details className={styles.admin}>
           <summary>Administrar</summary>
+          {sport === "river" && selected && <RiverLineupImporter key={selected.id} eventId={selected.id} />}
           <CuratedImporter />
           <button type="button" disabled={busy} onClick={() => void markWeek()}>
             {initial.noUfcEvent

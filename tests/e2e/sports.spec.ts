@@ -75,9 +75,9 @@ test("Deportes ofrece importación curada y no intenta sincronizar fuentes", asy
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
   await page.getByText("Administrar", { exact: true }).click();
-  await expect(page.getByLabel("Contenido JSON").first()).toBeVisible();
+  await expect(page.getByLabel("Contenido JSON", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Automatización desactivada", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Actualizar", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Actualizar", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cargar partido", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cargar cartelera", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Actualizar agenda", exact: true })).toBeVisible();
@@ -98,7 +98,7 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await expect(page.getByText("No hay UFC esta semana. Podés consultar las próximas carteleras.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
   const bundle = curatedBundle();
-  await page.getByLabel("Contenido JSON").first().fill(JSON.stringify(bundle));
+  await page.getByLabel("Contenido JSON", { exact: true }).first().fill(JSON.stringify(bundle));
   await page.getByRole("button", { name: "Validar y revisar", exact: true }).first().click();
   await expect(page.getByText("1 partidos · 1 carteleras · 1 peleas")).toBeVisible().catch(async error => {
     const message = await page.getByRole("alert").textContent().catch(() => "sin mensaje de validación");
