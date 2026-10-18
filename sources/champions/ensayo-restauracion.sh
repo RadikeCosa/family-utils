@@ -139,9 +139,16 @@ echo "OK: contenido protegido existente sin cambios."
 
 cat <<'EXPECTED'
 --- Cambios esperados por esta rama ---
-0038: sports_events.football_category se normaliza a NULL en filas UFC; se agregan referencias existentes de proveedor de eventos de fútbol a sports_football_event_sources. River mantiene su categoría histórica/default.
-0037: ya está aplicada en la producción de referencia (fila 28) y no pertenece a esta rama ni se espera que esté pendiente en este ensayo. Si el respaldo afirma tener 28 migraciones y db:migrate intenta aplicar 0037, detenerse y revisar la restauración, el historial y los hashes antes de continuar.
-0038–0047: cambios de esta rama detallados arriba; no deben reescribir el contenido protegido existente.
+0038: sports_events.football_category se normaliza a NULL en filas UFC; se crean referencias deportivas de proveedor para los eventos existentes de fútbol. River conserva su categoría histórica/default.
+0039: se crean vacías las tablas de cierres y pronósticos de fútbol y se ajusta la restricción de estados; no cambia el contenido protegido existente.
+0040–0041: funciones, permisos y privilegios por defecto; no cambian filas de negocio.
+0042: función de tabla de Champions; no inserta resultados.
+0043: se crea vacía la tabla de comentarios de jornada.
+0044: se agrega una fila de switch apagado por familia existente.
+0045: se crea vacía la tabla de resoluciones administrativas.
+0046: se crea vacía la tabla de auditoría de correcciones.
+0047: permisos y privilegios por defecto; no cambia filas de negocio.
+0037: ya está aplicada en la producción de referencia (fila 28), conserva su hash original y no pertenece a las migraciones pendientes de esta rama. Si el respaldo indica 28 migraciones y db:migrate intenta aplicar 0037, detenerse y revisar restauración, historial y hashes.
 Las tablas que deben permanecer idénticas son las enumeradas arriba. Cualquier discrepancia dispara la alerta y detiene el script.
 EXPECTED
 
