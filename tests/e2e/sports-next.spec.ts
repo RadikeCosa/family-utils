@@ -692,7 +692,20 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   await expect(page.getByRole("link", { name: "Tabla familiar" })).toHaveAttribute("href", "#ranking");
   for (const width of [360, 390, 430, 1365]) {
     await page.setViewportSize({ width, height: 900 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const dashboardOverflow = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: innerWidth,
+      elements: [...document.querySelectorAll("body *")]
+        .filter((element) => element.getBoundingClientRect().right > innerWidth + 1)
+        .slice(0, 8)
+        .map((element) => ({
+          tag: element.tagName,
+          className: typeof element.className === "string" ? element.className : "",
+          right: Math.round(element.getBoundingClientRect().right),
+          width: Math.round(element.getBoundingClientRect().width),
+        })),
+    }));
+    expect(dashboardOverflow.documentWidth <= dashboardOverflow.viewportWidth, JSON.stringify(dashboardOverflow)).toBe(true);
     if (width === 1365) await page.screenshot({ path: `test-results/ufc-dashboard-desktop-${test.info().project.name.replaceAll(" ", "-")}.png`, fullPage: true });
   }
   await page.setViewportSize({ width: 390, height: 844 });
