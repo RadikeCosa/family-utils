@@ -7,6 +7,7 @@ import { sportsNowDay, isRiverMatch } from "@/lib/sports/rules";
 import UfcPredictions from "./UfcPredictions";
 import Comments from "./Comments";
 import { RiverLineup, RiverLineupImporter } from "./RiverLineup";
+import { RiverInsights, RiverInsightsImporter } from "./RiverInsights";
 import CuratedImporter from "./CuratedImporter";
 import ChampionsAgenda, { type ChampionsThreadDraft } from "./ChampionsAgenda";
 import styles from "./agenda.module.css";
@@ -409,6 +410,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
               </form>
             </section>
           )}
+          {sport === "river" && <RiverInsights insights={initial.riverInsights?.eventId===selected.id?initial.riverInsights:null} homeTeam={selected.firstParticipant??"Local"} awayTeam={selected.secondParticipant??"Visitante"}/>}
           <div id="conversation">
             <Comments
               key={selected.id}
@@ -437,7 +439,8 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
       {initial.role === "administrator" && (
         <details className={styles.admin}>
           <summary>Administrar</summary>
-          {sport === "river" && selected && <RiverLineupImporter key={selected.id} eventId={selected.id} />}
+          {sport === "river" && selected && <RiverLineupImporter key={`lineup:${selected.id}`} eventId={selected.id} />}
+          {sport === "river" && selected && <RiverInsightsImporter key={`insights:${selected.id}`} eventId={selected.id}/>}
           <CuratedImporter />
           <button type="button" disabled={busy} onClick={() => void markWeek()}>
             {initial.noUfcEvent

@@ -121,7 +121,7 @@ test.afterEach(async () => {
   await api?.dispose();
   if (familyId) {
     await pool.query(
-      "DELETE FROM audit_events WHERE family_id=$1 AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import','sports_result','sports_river_lineup')",
+      "DELETE FROM audit_events WHERE family_id=$1 AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import','sports_result','sports_river_lineup','sports_river_insights')",
       [familyId],
     );
     // Test-only cleanup: production triggers intentionally prevent late vote deletion.
@@ -138,6 +138,7 @@ test.afterEach(async () => {
       "sports_fight_results",
       "sports_block_closures",
       "sports_football_results",
+      "sports_river_insights",
       "sports_river_lineups",
       "sports_formations",
       "sports_comments",
@@ -808,4 +809,32 @@ test("River official lineup: protected publication, conflicts, corrections and r
   await page.reload();await expect(page.getByRole('region',{name:'Formación oficial',exact:true})).toContainText("Actualizada al volver");
   await expect(page.getByText('Administrar',{exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test("River insights: independent sections, missing values, corrections and family permissions",async({page})=>{
+ await api.post('/api/sports/import',{data:{mode:'import',bundle:curatedBundle()}});
+ const event=(await pool.query("SELECT id FROM sports_events WHERE family_id=$1 AND football_category='river'",[familyId])).rows[0].id;
+ const path='/api/sports/river/insights/import',meta={source:'https://www.cariverplate.com.ar/',checkedAt:new Date().toISOString()};
+ const bundle:{version:number;eventId:string;statistics?:{source:string;checkedAt:string;items:Array<{label:string;homeValue:number|null;awayValue:number|null}>};curiosities?:{source:string;checkedAt:string;items:string[]}}={version:1,eventId:event,statistics:{...meta,items:[{label:'Remates',homeValue:0,awayValue:null}]},curiosities:{...meta,items:['Primer dato confirmado de prueba']}};
+ const post=(mode:string,b=bundle,token?:string)=>api.post(path,{data:{mode,bundle:b,token}});
+ expect((await api.get('/api/sports/river/insights/templates?event='+event)).status()).toBe(200);
+ expect((await post('preview',{...bundle,eventId:championsId})).status()).toBe(404);
+ const p=await(await post('preview')).json();
+ expect((await pool.query('SELECT count(*)::int n FROM sports_river_insights WHERE event_id=$1',[event])).rows[0].n).toBe(0);
+ await pool.query("UPDATE members SET role='member' WHERE id=$1",[memberId]);expect((await post('import',bundle,p.token)).status()).toBe(403);await pool.query("UPDATE members SET role='administrator' WHERE id=$1",[memberId]);
+ expect((await post('import',bundle,'invalid')).status()).toBe(409);
+ const simultaneous=await Promise.all([post('import',bundle,p.token),post('import',bundle,p.token)]);expect(simultaneous.map(r=>r.status()).sort()).toEqual([200,409]);
+ const same=await(await post('preview')).json();expect(same.changed).toBe(false);await post('import',bundle,same.token);
+ expect((await pool.query("SELECT count(*)::int n FROM audit_events WHERE family_id=$1 AND entity_type='sports_river_insights'",[familyId])).rows[0].n).toBe(1);
+ await page.goto('/deportes?sport=river&event='+event);const section=page.getByRole('region',{name:'Datos del partido',exact:true});
+ await expect(section.getByRole('cell',{name:'0',exact:true})).toBeVisible();await expect(section.getByRole('cell',{name:'Sin dato',exact:true})).toBeVisible();await expect(section).toContainText('Primer dato confirmado de prueba');
+ const onlyFacts={version:1,eventId:event,curiosities:{...meta,items:['Curiosidad corregida']}};
+ const correction=await(await post('preview',onlyFacts)).json();expect(correction.before.curiosities.items).toEqual(['Primer dato confirmado de prueba']);
+ await page.getByText('Administrar',{exact:true}).click();await page.getByLabel('Contenido JSON de datos del partido').fill(JSON.stringify(onlyFacts));await page.getByRole('button',{name:'Validar datos del partido',exact:true}).click();await page.getByRole('button',{name:'Confirmar datos del partido',exact:true}).click();
+ await expect(section).toContainText('Curiosidad corregida');await expect(section.getByRole('cell',{name:'0',exact:true})).toBeVisible();
+ expect((await post('import',onlyFacts,correction.token)).status()).toBe(409);
+ const clear={...onlyFacts,curiosities:{...meta,items:[]}};const cp=await(await post('preview',clear)).json();await post('import',clear,cp.token);await page.getByRole('button',{name:'Actualizar',exact:true}).click();await expect(section).toContainText('Todavía no se publicaron curiosidades');await expect(section.getByRole('cell',{name:'Sin dato',exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/river-insights-'+test.info().project.name.replaceAll(' ','-')+'.png',fullPage:true});
+ await pool.query("UPDATE members SET role='member' WHERE id=$1",[memberId]);await page.reload();await expect(section.getByRole('cell',{name:'0',exact:true})).toBeVisible();expect((await post('preview')).status()).toBe(403);await expect(page.getByText('Administrar',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });

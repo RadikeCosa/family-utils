@@ -3,7 +3,7 @@ import { and, eq, gte, isNull, or, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getDb, getPool } from "@/db";
-import { members, sportsComments, sportsEvents, sportsFights, sportsFormations, sportsRiverLineups, sportsWeeks } from "@/db/schema";
+import { members, sportsComments, sportsEvents, sportsFights, sportsFormations, sportsRiverInsights, sportsRiverLineups, sportsWeeks } from "@/db/schema";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
 import { sportsEnabled, sportsNowDay, sportsWeek, selectRiverEvent, selectUfcEvent, formationInput, footballEventInput, ufcCardInput, commentInput, isSportsContext, isSportsDate, SPORTS_UUID, isRiverMatch } from "./rules";
 
@@ -150,7 +150,8 @@ export async function loadSportsData(
               events.filter((event) => event.kind === "ufc_card"),
               now,
             );
-  const [officialLineups, fights, formations] = await Promise.all([
+  const [insights, officialLineups, fights, formations] = await Promise.all([
+    river && features.agenda ? db.select({eventId:sportsRiverInsights.eventId,statistics:sportsRiverInsights.statistics,curiosities:sportsRiverInsights.curiosities}).from(sportsRiverInsights).where(and(eq(sportsRiverInsights.familyId,actor.familyId),eq(sportsRiverInsights.eventId,river.id))) : [],
     river && features.agenda ? db.select({eventId:sportsRiverLineups.eventId,body:sportsRiverLineups.body,source:sportsRiverLineups.source,checkedAt:sportsRiverLineups.checkedAt,updatedAt:sportsRiverLineups.updatedAt,authorName:members.name}).from(sportsRiverLineups).innerJoin(members,and(eq(members.id,sportsRiverLineups.updatedByMemberId),eq(members.familyId,sportsRiverLineups.familyId))).where(and(eq(sportsRiverLineups.familyId,actor.familyId),eq(sportsRiverLineups.eventId,river.id))) : [],
     card
       ? db
@@ -206,6 +207,7 @@ export async function loadSportsData(
     card,
     fights,
     formations,
+    riverInsights: insights[0] ?? null,
     officialLineup: officialLineups[0] ?? null,
     members: familyMembers,
     riverThreadDates: {},

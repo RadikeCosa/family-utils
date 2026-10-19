@@ -27,3 +27,13 @@ Ante una incidencia, publicar el código anterior o retirar la sección mediante
 El 18/10/2026, antes de implementar: producción READY sobre `adfe79b`, 40 migraciones con hashes coincidentes y Belgrano–River presente para esa fecha. Agenda y resultados activos; sincronización automática apagada. CI de ese commit fallaba por una prueba de Champions que buscaba el interruptor retirado: se actualiza la prueba para verificar disponibilidad permanente y conservación de la jornada.
 
 Las estadísticas y curiosidades se incorporarán en una segunda PR independiente.
+
+## Estadísticas y curiosidades
+
+En **Administrar → Publicar datos del partido**, descargar la plantilla y completarla en el chat. Cada sección incluye `source` HTTPS y `checkedAt` ISO. Omitir `statistics` o `curiosities` conserva la sección anterior; una sección explícita con `items:[]` la retira, conservando su auditoría. La plantilla vacía requiere completar las fuentes o quitar las secciones desconocidas antes de validar.
+
+`statistics.items` contiene hasta 30 filas con `label`, `homeValue`, `awayValue` y `unit` opcional. Los valores son números no negativos; `null` expresa un dato desconocido y se muestra como “Sin dato”. Un cero explícito se conserva como cero. No incluir filas sin ningún valor conocido. Las etiquetas son únicas dentro de la sección. `curiosities.items` admite hasta 20 textos de 500 caracteres. Los textos se muestran sin interpretar HTML.
+
+`GET /api/sports/river/insights/templates?event=<uuid>` y `POST /api/sports/river/insights/import` usan los mismos permisos y fases de validación/confirmación que la formación oficial, con un token independiente. La vista previa muestra el contenido final combinado, incluidas las secciones conservadas; una corrección registra antes y después. Solo se aceptan partidos River de la familia. Los datos permanecen al cargar el resultado final y volver al historial.
+
+La segunda entrega usa `codex/river-match-insights` y la migración aditiva `0051_sports_river_insights`. Se ensaya y publica después de la primera; no modifica los contratos de formación ni resultados.

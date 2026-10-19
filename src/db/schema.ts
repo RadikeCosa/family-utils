@@ -898,3 +898,15 @@ export const sportsRiverLineups = pgTable("sports_river_lineups", {
   check("sports_river_lineups_body", sql`char_length(btrim(${table.body})) BETWEEN 1 AND 4000`),
   check("sports_river_lineups_source", sql`${table.source} ~ '^https://'`),
 ]);
+
+export const sportsRiverInsights = pgTable("sports_river_insights", {
+  eventId: uuid("event_id").primaryKey(),
+  familyId: uuid("family_id").notNull(),
+  statistics: jsonb("statistics").$type<import("@/lib/sports/river-insights-rules").RiverStatistics>(),
+  curiosities: jsonb("curiosities").$type<import("@/lib/sports/river-insights-rules").RiverCuriosities>(),
+  updatedByMemberId: uuid("updated_by_member_id").notNull(),
+  updatedAt: updatedAt(),
+}, table => [
+  foreignKey({columns:[table.familyId,table.eventId],foreignColumns:[sportsEvents.familyId,sportsEvents.id],name:"sports_river_insights_event_family_fk"}).onDelete("restrict"),
+  foreignKey({columns:[table.updatedByMemberId,table.familyId],foreignColumns:[members.id,members.familyId],name:"sports_river_insights_author_family_fk"}).onDelete("restrict"),
+]);
