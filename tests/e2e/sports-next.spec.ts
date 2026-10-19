@@ -135,6 +135,7 @@ test.afterEach(async () => {
     for (const table of [
       ...championsCleanupTables,
       "sports_predictions",
+      "sports_ufc_odds",
       "sports_fight_results",
       "sports_block_closures",
       "sports_football_results",
@@ -181,7 +182,15 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
       await api.post("/api/sports/import", { data: { mode: "import", bundle } })
     ).status(),
   ).toBe(200);
+  const seededComment = await pool.query(
+    `INSERT INTO sports_comments(family_id,author_member_id,context_kind,context_event_id,context_date,body)
+     SELECT $1,$2,'river_match',id,event_date,'Comentario publicado para revisar la fecha'
+     FROM sports_events WHERE family_id=$1 AND external_reference='991234'`,
+    [familyId, memberId],
+  );
+  expect(seededComment.rowCount).toBe(1);
   await page.goto("/deportes?sport=river");
+  await expect(page.getByText("Comentario publicado para revisar la fecha", { exact: true })).toBeVisible();
   await expect(page.getByText("Champions sentinel", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /Próximos \(2\)/ }),
@@ -686,10 +695,19 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   expect(overflow.documentWidth <= overflow.viewportWidth, JSON.stringify(overflow)).toBe(true);
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await pool.query(
+    `INSERT INTO sports_ufc_odds(family_id,event_id,fight_id,first_decimal_odds,second_decimal_odds,bookmaker,source,reference_at,updated_by_member_id)
+     SELECT f.family_id,f.event_id,f.id,1.75,2.10,'Referencia de prueba','https://example.com/cuotas',
+       COALESCE(e.early_preliminaries_starts_at,e.preliminary_starts_at,e.main_card_starts_at)-interval '1 day',$2
+     FROM sports_fights f JOIN sports_events e ON e.id=f.event_id
+     WHERE f.event_id=$1 AND f.removed_at IS NULL`,
+    [event.id, memberId],
+  );
   await expect(page.getByRole("link", { name: /Ranking y estadísticas/ })).toBeVisible();
   await page.getByRole("link", { name: /Ranking y estadísticas/ }).click();
   await expect(page.getByRole("heading", { name: "Ranking y estadísticas", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Tabla familiar" })).toHaveAttribute("href", "#ranking");
+  await expect(page.getByRole("link", { name: "fuente", exact: true }).first()).toBeVisible();
   for (const width of [360, 390, 430, 1365]) {
     await page.setViewportSize({ width, height: 900 });
     const dashboardOverflow = await page.evaluate(() => ({
