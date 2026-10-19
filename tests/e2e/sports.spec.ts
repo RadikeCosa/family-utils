@@ -98,6 +98,9 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await page.getByRole("button", { name: "UFC", exact: true }).click();
   await page.getByText("Semana y visibilidad", { exact: true }).click();
   await page.getByRole("button", { name: "Marcar semana actual sin UFC", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Quitar marca de semana sin evento", exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "UFC", exact: true }).click();
   await expect(page.getByText("No hay UFC esta semana. Podés consultar las próximas carteleras.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
   const bundle = curatedBundle();
