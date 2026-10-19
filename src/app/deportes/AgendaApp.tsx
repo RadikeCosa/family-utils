@@ -211,6 +211,11 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         </nav>
       )}
       {sport === "champions" && initial.champions ? <ChampionsAgenda key={initial.champions.revision} initial={initial.champions} admin={initial.role === "administrator"} familyId={initial.familyId} currentMemberId={initial.currentMemberId} members={initial.members} drafts={championsDrafts} onDraftChange={updateChampionsDraft} navigationFocusRef={championsRoundFocusRef}/> : <>
+      {sport === "ufc" && initial.noUfcEvent && (
+        <p className={styles.notice}>
+          No hay UFC esta semana. Podés consultar las próximas carteleras.
+        </p>
+      )}
       {selected ? (
         <>
           <article
@@ -268,11 +273,6 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
               </details>
             )}
           </article>
-          {sport === "ufc" && initial.noUfcEvent && (
-            <p className={styles.notice}>
-              No hay UFC esta semana. Podés consultar las próximas carteleras.
-            </p>
-          )}
           <section className={styles.agenda} aria-label="Agenda deportiva">
             <div className={styles.agendaHeading}>
               <div>
