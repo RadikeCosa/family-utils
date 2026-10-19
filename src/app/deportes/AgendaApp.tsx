@@ -112,7 +112,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
     );
     const query = new URLSearchParams({ sport: nextSport });
     if (event) query.set("event", event.id);
-    router.replace(`/deportes?${query}`, { scroll: false });
+    router.push(`/deportes?${query}`, { scroll: false });
     setMessage("");
   }
   async function adminAction(event: SportsEvent) {
@@ -181,12 +181,14 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
     }
   }
   return (
+    <>
+    <a className={styles.skipLink} href="#sports-intro">Saltar al contenido</a>
     <main className={styles.page}>
       <header className={styles.header}>
         <Link href="/">‹ Inicio</Link>
         <span>Family Utils / Deportes</span>
       </header>
-      <div className={styles.intro}>
+      <div id="sports-intro" className={styles.intro}>
         <p>EN EQUIPO</p>
         <h1>Deportes</h1>
         <span>El partido, la cartelera y la charla de casa.</span>
@@ -209,44 +211,10 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         </nav>
       )}
       {sport === "champions" && initial.champions ? <ChampionsAgenda key={initial.champions.revision} initial={initial.champions} admin={initial.role === "administrator"} familyId={initial.familyId} currentMemberId={initial.currentMemberId} members={initial.members} drafts={championsDrafts} onDraftChange={updateChampionsDraft} navigationFocusRef={championsRoundFocusRef}/> : <>
-      {sport === "ufc" && initial.noUfcEvent && (
-        <p>No hay UFC esta semana. Podés consultar las próximas carteleras.</p>
-      )}
-      <section className={styles.agenda} aria-label="Agenda deportiva">
-        <div className={styles.actions}>
-          <button aria-pressed={!history} onClick={() => setHistory(false)}>
-            Próximos ({upcoming.length})
-          </button>
-          <button aria-pressed={history} onClick={() => setHistory(true)}>
-            Anteriores ({past.length})
-          </button>
-        </div>
-        <div className={styles.eventSelector}>
-          {(history ? past : upcoming).map((event) => (
-            <button
-              key={event.id}
-              aria-pressed={selected?.id === event.id}
-              onClick={() => navigate(sport, event)}
-            >
-              <strong>{dateLabel(event.eventDate)}</strong>
-              <span>{event.title}</span>
-              {event.city && (
-                <small>
-                  {[event.city, event.country].filter(Boolean).join(", ")}
-                </small>
-              )}
-            </button>
-          ))}
-        </div>
-        {(history ? past : upcoming).length === 0 && (
-          <p>No hay eventos en esta sección.</p>
-        )}
-      </section>
-      <button type="button" disabled={refreshing} onClick={refresh}>{refreshing ? "Actualizando…" : "Actualizar"}</button>
       {selected ? (
         <>
           <article
-            className={`${styles.hero} ${sport === "river" ? styles.river : ""}`}
+            className={`${styles.hero} ${sport === "river" ? styles.river : styles.ufc}`}
           >
             <p className={styles.eyebrow}>
               {sport === "river"
@@ -272,7 +240,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
                 .join(" · ") || "Lugar a confirmar"}
             </p>
             {selected.channel && <p>Dónde verlo: {selected.channel}</p>}
-            <p>
+            <p className={styles.eventStatus}>
               {selected.sourceAbsentAt
                 ? "Retirado de la agenda"
                 : selected.status === "completed"
@@ -300,6 +268,50 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
               </details>
             )}
           </article>
+          {sport === "ufc" && initial.noUfcEvent && (
+            <p className={styles.notice}>
+              No hay UFC esta semana. Podés consultar las próximas carteleras.
+            </p>
+          )}
+          <section className={styles.agenda} aria-label="Agenda deportiva">
+            <div className={styles.agendaHeading}>
+              <div>
+                <p className={styles.eyebrow}>AGENDA</p>
+                <h3>{sport === "river" ? "Partidos de River" : "Carteleras UFC"}</h3>
+              </div>
+              <button type="button" disabled={refreshing} onClick={refresh}>
+                {refreshing ? "Actualizando…" : "Actualizar"}
+              </button>
+            </div>
+            <div className={styles.actions} aria-label="Período de eventos">
+              <button aria-pressed={!history} onClick={() => setHistory(false)}>
+                Próximos ({upcoming.length})
+              </button>
+              <button aria-pressed={history} onClick={() => setHistory(true)}>
+                Anteriores ({past.length})
+              </button>
+            </div>
+            <div className={styles.eventSelector}>
+              {(history ? past : upcoming).map((event) => (
+                <button
+                  key={event.id}
+                  aria-pressed={selected?.id === event.id}
+                  onClick={() => navigate(sport, event)}
+                >
+                  <strong>{dateLabel(event.eventDate)}</strong>
+                  <span>{event.title}</span>
+                  {event.city && (
+                    <small>
+                      {[event.city, event.country].filter(Boolean).join(", ")}
+                    </small>
+                  )}
+                </button>
+              ))}
+            </div>
+            {(history ? past : upcoming).length === 0 && (
+              <p>No hay eventos en esta sección.</p>
+            )}
+          </section>
           <nav className={styles.shortcuts} aria-label="Participar">
             {sport === "river" && (
               <a href="#formations">El once que queremos</a>
@@ -430,33 +442,61 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
           </div>
         </>
       ) : (
-        <div className={styles.panel}>
-          <h2>No hay eventos cargados</h2>
-          <p>La próxima carga aparecerá acá.</p>
-        </div>
+        <>
+          <section className={styles.agenda} aria-label="Agenda deportiva">
+            <div className={styles.agendaHeading}>
+              <h3>{sport === "river" ? "Partidos de River" : "Carteleras UFC"}</h3>
+              <button type="button" disabled={refreshing} onClick={refresh}>
+                {refreshing ? "Actualizando…" : "Actualizar"}
+              </button>
+            </div>
+            <div className={styles.actions} aria-label="Período de eventos">
+              <button aria-pressed={!history} onClick={() => setHistory(false)}>
+                Próximos ({upcoming.length})
+              </button>
+              <button aria-pressed={history} onClick={() => setHistory(true)}>
+                Anteriores ({past.length})
+              </button>
+            </div>
+            <p>No hay eventos en esta sección. La próxima carga aparecerá acá.</p>
+          </section>
+        </>
       )}
       {message && <p role="status">{message}</p>}
       {initial.role === "administrator" && (
         <details className={styles.admin}>
           <summary>Administrar</summary>
-          {sport === "river" && selected && <RiverLineupImporter key={`lineup:${selected.id}`} eventId={selected.id} />}
-          {sport === "river" && selected && <RiverInsightsImporter key={`insights:${selected.id}`} eventId={selected.id}/>}
-          <CuratedImporter />
-          <button type="button" disabled={busy} onClick={() => void markWeek()}>
-            {initial.noUfcEvent
-              ? "Quitar marca de semana sin evento"
-              : "Marcar semana actual sin UFC"}
-          </button>
-          {initial.features?.results && <CuratedImporter kind="results" />}
-          {selected && (
-            <button
-              type="button"
-              className={styles.danger}
-              onClick={() => void adminAction(selected)}
-            >
-              Ocultar {sport === "river" ? "partido" : "cartelera"}
-            </button>
-          )}
+          <div className={styles.adminGroups}>
+            {sport === "river" && selected && (
+              <details className={styles.adminGroup}>
+                <summary>River · formaciones y análisis</summary>
+                <RiverLineupImporter key={`lineup:${selected.id}`} eventId={selected.id} />
+                <RiverInsightsImporter key={`insights:${selected.id}`} eventId={selected.id}/>
+              </details>
+            )}
+            <details className={styles.adminGroup}>
+              <summary>Agenda · cargas y resultados</summary>
+              <CuratedImporter />
+              {initial.features?.results && <CuratedImporter kind="results" />}
+            </details>
+            <details className={styles.adminGroup}>
+              <summary>Semana y visibilidad</summary>
+              <button type="button" disabled={busy} onClick={() => void markWeek()}>
+                {initial.noUfcEvent
+                  ? "Quitar marca de semana sin evento"
+                  : "Marcar semana actual sin UFC"}
+              </button>
+              {selected && (
+                <button
+                  type="button"
+                  className={styles.danger}
+                  onClick={() => void adminAction(selected)}
+                >
+                  Ocultar {sport === "river" ? "partido" : "cartelera"}
+                </button>
+              )}
+            </details>
+          </div>
         </details>
       )}
       </>}
@@ -464,5 +504,6 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         Todos los horarios son de Argentina · Datos curados.
       </footer>
     </main>
+    </>
   );
 }

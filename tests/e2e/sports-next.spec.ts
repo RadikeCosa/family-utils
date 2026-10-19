@@ -204,7 +204,14 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
   await expect(page.getByLabel("Escribí un comentario")).toHaveValue(
     "Mi borrador del primer partido",
   );
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "River Plate vs Otro rival", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Escribí un comentario")).toHaveValue("Otro borrador");
+  await page.goForward();
+  await expect(page.getByRole("heading", { name: "River Plate vs Boca Juniors", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Escribí un comentario")).toHaveValue("Mi borrador del primer partido");
   await page.getByText("Administrar", { exact: true }).click();
+  await page.getByText("Agenda · cargas y resultados", { exact: true }).click();
   await page
     .getByRole("button", { name: "Ver ejemplo", exact: true })
     .first()
@@ -219,12 +226,10 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
   const sync = await api.post("/api/sports/sync");
   expect(sync.status()).toBe(200);
   expect((await sync.json()).status).toBe("Automatización desactivada");
-  await page.setViewportSize({ width: 360, height: 800 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  for (const width of [360, 390, 430]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("button", { name: "UFC", exact: true }).click();
@@ -237,6 +242,11 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
   await expect(
     page.getByRole("heading", { name: "Cartelera principal", exact: true }),
   ).toBeVisible();
+  for (const width of [360, 390, 430]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
     path: "test-results/sports-next-mobile.png",
     fullPage: true,
@@ -253,6 +263,10 @@ test("agenda: all events, independent drafts, templates and mobile accessibility
     fullPage: true,
   });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "River", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.goForward();
+  await expect(page.getByRole("button", { name: "UFC", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("link", { name: "‹ Inicio", exact: true }).focus();
   await page.keyboard.press("Tab");
   await expect(
@@ -663,6 +677,21 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   ).toBe(true);
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await expect(page.getByRole("link", { name: /Ranking y estadísticas/ })).toBeVisible();
+  await page.getByRole("link", { name: /Ranking y estadísticas/ }).click();
+  await expect(page.getByRole("heading", { name: "Ranking y estadísticas", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Tabla familiar" })).toHaveAttribute("href", "#ranking");
+  for (const width of [360, 390, 430, 1365]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width === 1365) await page.screenshot({ path: `test-results/ufc-dashboard-desktop-${test.info().project.name.replaceAll(" ", "-")}.png`, fullPage: true });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("link", { name: "Simulación", exact: true }).click();
+  await page.getByText("Simulación de USD 10", { exact: true }).click();
+  await expect(page.getByRole("table", { name: "Retornos según cuotas históricas verificadas" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: `test-results/ufc-dashboard-${test.info().project.name.replaceAll(" ", "-")}.png`, fullPage: true });
 });
 
 
@@ -786,6 +815,7 @@ test("River official lineup: protected publication, conflicts, corrections and r
   expect((await pool.query("SELECT count(*)::int n FROM audit_events WHERE family_id=$1 AND entity_type='sports_river_lineup'",[familyId])).rows[0].n).toBe(1);
   bundle.body="Titulares: Formación corregida";
   await page.getByText('Administrar',{exact:true}).click();
+  await page.getByText('River · formaciones y análisis',{exact:true}).click();
   await page.getByLabel("Contenido JSON de formación oficial").fill(JSON.stringify(bundle));
   await page.getByRole('button',{name:'Validar formación oficial',exact:true}).click();
   await expect(page.getByText('Anterior',{exact:true})).toBeVisible();
@@ -830,7 +860,7 @@ test("River insights: independent sections, missing values, corrections and fami
  await expect(section.getByRole('cell',{name:'0',exact:true})).toBeVisible();await expect(section.getByRole('cell',{name:'Sin dato',exact:true})).toBeVisible();await expect(section).toContainText('Primer dato confirmado de prueba');
  const onlyFacts={version:1,eventId:event,curiosities:{...meta,items:['Curiosidad corregida']}};
  const correction=await(await post('preview',onlyFacts)).json();expect(correction.before.curiosities.items).toEqual(['Primer dato confirmado de prueba']);
- await page.getByText('Administrar',{exact:true}).click();await page.getByLabel('Contenido JSON de datos del partido').fill(JSON.stringify(onlyFacts));await page.getByRole('button',{name:'Validar datos del partido',exact:true}).click();await page.getByRole('button',{name:'Confirmar datos del partido',exact:true}).click();
+ await page.getByText('Administrar',{exact:true}).click();await page.getByText('River · formaciones y análisis',{exact:true}).click();await page.getByLabel('Contenido JSON de datos del partido').fill(JSON.stringify(onlyFacts));await page.getByRole('button',{name:'Validar datos del partido',exact:true}).click();await page.getByRole('button',{name:'Confirmar datos del partido',exact:true}).click();
  await expect(section).toContainText('Curiosidad corregida');await expect(section.getByRole('cell',{name:'0',exact:true})).toBeVisible();
  expect((await post('import',onlyFacts,correction.token)).status()).toBe(409);
  const clear={...onlyFacts,curiosities:{...meta,items:[]}};const cp=await(await post('preview',clear)).json();await post('import',clear,cp.token);await page.getByRole('button',{name:'Actualizar',exact:true}).click();await expect(section).toContainText('Todavía no se publicaron curiosidades');await expect(section.getByRole('cell',{name:'Sin dato',exact:true})).toBeVisible();
