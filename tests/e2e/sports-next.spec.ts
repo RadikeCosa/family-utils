@@ -670,11 +670,20 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
     }),
   ).toBeVisible();
   await page.setViewportSize({ width: 360, height: 800 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  const overflow = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: innerWidth,
+    elements: [...document.querySelectorAll("body *")]
+      .filter((element) => element.getBoundingClientRect().right > innerWidth + 1)
+      .slice(0, 8)
+      .map((element) => ({
+        tag: element.tagName,
+        className: typeof element.className === "string" ? element.className : "",
+        right: Math.round(element.getBoundingClientRect().right),
+        width: Math.round(element.getBoundingClientRect().width),
+      })),
+  }));
+  expect(overflow.documentWidth <= overflow.viewportWidth, JSON.stringify(overflow)).toBe(true);
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await expect(page.getByRole("link", { name: /Ranking y estadísticas/ })).toBeVisible();
