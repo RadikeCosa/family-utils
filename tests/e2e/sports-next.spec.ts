@@ -730,6 +730,11 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   await page.getByRole("link", { name: "Simulación", exact: true }).click();
   await page.getByText("Simulación de USD 10", { exact: true }).click();
   await expect(page.getByRole("table", { name: "Retornos según cuotas históricas verificadas" })).toBeVisible();
+  const captionLayout = await page.getByRole("table", { name: "Retornos según cuotas históricas verificadas" }).evaluate((table) => ({
+    tableWidth: table.getBoundingClientRect().width,
+    captionWidth: table.querySelector("caption")!.getBoundingClientRect().width,
+  }));
+  expect(captionLayout.captionWidth).toBeGreaterThanOrEqual(captionLayout.tableWidth - 1);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: `test-results/ufc-dashboard-${test.info().project.name.replaceAll(" ", "-")}.png`, fullPage: true });
 });
