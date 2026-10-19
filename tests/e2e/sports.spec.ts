@@ -103,6 +103,7 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await page.getByRole("button", { name: "UFC", exact: true }).click();
   await expect(page.getByText("No hay UFC esta semana. Podés consultar las próximas carteleras.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
+  await page.getByText("Administrar", { exact: true }).click();
   const bundle = curatedBundle();
   await page.getByLabel("Contenido JSON", { exact: true }).first().fill(JSON.stringify(bundle));
   await page.getByRole("button", { name: "Validar y revisar", exact: true }).first().click();
