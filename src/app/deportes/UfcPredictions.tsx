@@ -123,15 +123,25 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
   return (
     <section id="predictions" aria-label="Pronósticos UFC">
       <div className={styles.panel}>
+        <p className={styles.eyebrow}>UFC · PRONÓSTICOS</p>
         <h3>Tus pronósticos</h3>
-        <p>
-          Elegiste {data.chosen} de {data.total} peleas. Un punto por acierto.
-        </p>
-        <p>
+        <div className={styles.predictionProgress}>
+          <span>{data.closed ? "Cartelera cerrada" : "Tu avance"}</span>
+          <strong>{data.chosen} de {data.total} · {Math.max(0, data.total - data.chosen)} pendientes</strong>
+          <div role="progressbar" aria-label="Pronósticos completados" aria-valuemin={0} aria-valuemax={data.total} aria-valuenow={data.chosen}>
+            <i style={{ width: `${data.total ? Math.round(data.chosen / data.total * 100) : 0}%` }} />
+          </div>
+        </div>
+        <p>Un punto por ganador acertado.</p>
+        <p className={styles.predictionDeadline}>
           Los pronósticos de toda la cartelera cierran al comenzar el primer bloque de peleas, incluidas las preliminares.
           Esto incluye la cartelera principal. Las elecciones de la familia se revelan todas juntas.
         </p>
-        <p>{data.closesAt ? `${data.closed ? "La cartelera cerró" : "Toda la cartelera cierra"} ${time(data.closesAt)} · Argentina` : "Horario del primer bloque a confirmar · pronósticos no habilitados"}</p>
+        <p className={styles.predictionDeadline}>
+          {data.closesAt
+            ? `${data.closed ? "Cerró" : "Cierra"} ${time(data.closesAt)} · hora argentina${data.closed ? "" : " · elegí antes de ese horario"}`
+            : "Horario del primer bloque a confirmar · pronósticos no habilitados"}
+        </p>
         {data.transition && <p role="status">Actualizamos la regla: se cerraron todos los pronósticos y se revelaron también las elecciones de la cartelera principal. Conservamos las elecciones ya guardadas.</p>}
         {loadError && <p role="alert">{loadError}</p>}
         {message && <p role="status">{message}</p>}

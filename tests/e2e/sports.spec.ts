@@ -75,6 +75,7 @@ test("Deportes ofrece importación curada y no intenta sincronizar fuentes", asy
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
   await page.getByText("Administrar", { exact: true }).click();
+  await page.getByText("Agenda · cargas y resultados", { exact: true }).click();
   await expect(page.getByLabel("Contenido JSON", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Automatización desactivada", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Actualizar", exact: true })).toBeVisible();
@@ -93,10 +94,17 @@ test("JSON curado carga River y UFC y conserva formación, comentario e identida
   await page.goto("/");
   await page.getByRole("link", { name: "Abrir Deportes" }).click();
   await page.getByText("Administrar", { exact: true }).click();
+  await page.getByText("Agenda · cargas y resultados", { exact: true }).click();
   await page.getByRole("button", { name: "UFC", exact: true }).click();
+  await page.getByText("Semana y visibilidad", { exact: true }).click();
   await page.getByRole("button", { name: "Marcar semana actual sin UFC", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Quitar marca de semana sin evento", exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "UFC", exact: true }).click();
   await expect(page.getByText("No hay UFC esta semana. Podés consultar las próximas carteleras.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "River", exact: true }).click();
+  await page.getByText("Administrar", { exact: true }).click();
+  await page.getByText("Agenda · cargas y resultados", { exact: true }).click();
   const bundle = curatedBundle();
   await page.getByLabel("Contenido JSON", { exact: true }).first().fill(JSON.stringify(bundle));
   await page.getByRole("button", { name: "Validar y revisar", exact: true }).first().click();
