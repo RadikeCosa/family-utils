@@ -14,37 +14,37 @@ No se pudo iniciar la aplicación con datos familiares ni verificar sus estados 
 
 ### P1 · La ficha principal queda después de controles de agenda
 
-En River y UFC, la página muestra las pestañas, selección de eventos, estados Próximos/Anteriores y botón Actualizar antes de la ficha del evento ([AgendaApp.tsx:215](../src/app/deportes/AgendaApp.tsx:215), [AgendaApp.tsx:245](../src/app/deportes/AgendaApp.tsx:245)). En un teléfono, esta secuencia desplaza fecha, hora y enfrentamiento —la información más consultada— hacia abajo, y la lista horizontal de eventos requiere un gesto lateral cuyo contenido adicional puede pasar inadvertido.
+En River y UFC, la página muestra las pestañas, selección de eventos, estados Próximos/Anteriores y botón Actualizar antes de la ficha del evento ([AgendaApp.tsx, línea 215](../src/app/deportes/AgendaApp.tsx#L215), [línea 245](../src/app/deportes/AgendaApp.tsx#L245)). En un teléfono, esta secuencia desplaza fecha, hora y enfrentamiento —la información más consultada— hacia abajo, y la lista horizontal de eventos requiere un gesto lateral cuyo contenido adicional puede pasar inadvertido.
 
 **Mejora:** presentar primero la ficha del evento seleccionado, con fecha, hora argentina y estado; colocar selección de evento en un control compacto y accesible después o dentro de la ficha. Hacer visible que la lista tiene más contenido lateral cuando se conserve el carrusel.
 
 ### P1 · Atrás no recupera deporte o evento anterior
 
-`navigate` actualiza la URL con `router.replace` al cambiar de deporte o evento ([AgendaApp.tsx:108](../src/app/deportes/AgendaApp.tsx:108)). El destino queda enlazable, pero cada selección sustituye el historial; Atrás puede abandonar Deportes en lugar de volver a la selección previa.
+`navigate` actualiza la URL con `router.replace` al cambiar de deporte o evento ([AgendaApp.tsx, línea 108](../src/app/deportes/AgendaApp.tsx#L108)). El destino queda enlazable, pero cada selección sustituye el historial; Atrás puede abandonar Deportes en lugar de volver a la selección previa.
 
 **Mejora:** usar navegación que cree historial para cambios explícitos y mantener selección e historial sincronizados con la URL. Probar Atrás/Adelante en cada pestaña y selección.
 
 ### P2 · La navegación a Champions no comparte la misma continuidad
 
-Champions presenta su propia tira de jornadas, conteo de pronósticos y tarjetas de partidos ([ChampionsAgenda.tsx:43](../src/app/deportes/ChampionsAgenda.tsx:43)). La selección de jornada también reemplaza la URL. El patrón no indica claramente el evento/jornada activa en una ficha resumida antes del listado.
+Champions presenta su propia tira de jornadas, conteo de pronósticos y tarjetas de partidos ([ChampionsAgenda.tsx, línea 43](../src/app/deportes/ChampionsAgenda.tsx#L43)). La selección de jornada también reemplaza la URL. El patrón no indica claramente el evento/jornada activa en una ficha resumida antes del listado.
 
 **Mejora:** conservar el patrón de cabecera y selector entre deportes, mostrando nombre, rango de fechas, avance de pronósticos y estado; preservar Atrás/Adelante.
 
 ### P2 · Los flujos de participación pueden quedar lejos de la información del evento
 
-La ficha ofrece enlaces directos a formación, pronósticos y conversación, y los anclajes tienen margen de desplazamiento ([AgendaApp.tsx:303](../src/app/deportes/AgendaApp.tsx:303); [agenda.module.css](../src/app/deportes/agenda.module.css)). Sin embargo, al aterrizar en una ficha la persona debe interpretar qué participación está abierta o qué acción le falta. UFC comunica cantidad elegida y cierre dentro del bloque de pronósticos, no junto al resumen del evento ([UfcPredictions.tsx:124](../src/app/deportes/UfcPredictions.tsx:124)).
+La ficha ofrece enlaces directos a formación, pronósticos y conversación, y los anclajes tienen margen de desplazamiento ([AgendaApp.tsx, línea 303](../src/app/deportes/AgendaApp.tsx#L303); [agenda.module.css](../src/app/deportes/agenda.module.css)). Sin embargo, al aterrizar en una ficha la persona debe interpretar qué participación está abierta o qué acción le falta. UFC comunica cantidad elegida y cierre dentro del bloque de pronósticos, no junto al resumen del evento ([UfcPredictions.tsx, línea 124](../src/app/deportes/UfcPredictions.tsx#L124)).
 
 **Mejora:** mostrar un resumen pequeño de tarea/estado bajo la ficha (“X de Y pronósticos · cierre …”) que lleve al bloque; añadir progreso equivalente de jornada en Champions. Mantener privacidad de elecciones hasta el cierre.
 
 ### P2 · Las estadísticas UFC combinan varias lecturas extensas
 
-El dashboard apila métricas, tabla expandible, evolución, batacazos, detalle por pelea y simulación financiera ([UfcDashboard.tsx:75](../src/app/deportes/ufc-dashboard/UfcDashboard.tsx:75)). En móvil, la tabla financiera conserva desplazamiento horizontal y algunos valores usan tamaño compacto ([dashboard.module.css](../src/app/deportes/ufc-dashboard/dashboard.module.css)). La tabla familiar de Champions, en cambio, solo expone puesto, integrante y puntos.
+El dashboard apila métricas, tabla expandible, evolución, batacazos, detalle por pelea y simulación financiera ([UfcDashboard.tsx, línea 75](../src/app/deportes/ufc-dashboard/UfcDashboard.tsx#L75)). En móvil, la tabla financiera conserva desplazamiento horizontal y algunos valores usan tamaño compacto ([dashboard.module.css](../src/app/deportes/ufc-dashboard/dashboard.module.css)). La tabla familiar de Champions, en cambio, solo expone puesto, integrante y puntos.
 
 **Mejora:** mantener al principio velada, resumen y ranking; dar acceso por anclas a evolución y detalle; permitir leer cada resultado sin depender de la tabla ancha. Mantener la simulación secundaria y declarada como hipotética. Asegurar unidad y significado visibles para todos los números.
 
 ### P3 · Herramientas administrativas requieren demasiado recorrido
 
-Los importadores y acciones de administración aparecen al pie de la página en un `details` que contiene varias herramientas ([AgendaApp.tsx:439](../src/app/deportes/AgendaApp.tsx:439)). Esto mantiene limpia la vista de familia, pero hace difícil localizar la operación correcta y recorrerla en teléfono.
+Los importadores y acciones de administración aparecen al pie de la página en un `details` que contiene varias herramientas ([AgendaApp.tsx, línea 439](../src/app/deportes/AgendaApp.tsx#L439)). Esto mantiene limpia la vista de familia, pero hace difícil localizar la operación correcta y recorrerla en teléfono.
 
 **Mejora:** conservar el acceso protegido y cerrado por defecto, pero ordenar las operaciones en grupos con nombre, estado y propósito. Mantener plantilla, validación, vista previa, confirmación y errores inline.
 
