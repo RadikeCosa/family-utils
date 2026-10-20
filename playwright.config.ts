@@ -31,6 +31,7 @@ export default defineConfig({
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
       BETTER_AUTH_URL: baseURL,
       LIBRARY_ENABLED: "true",
+      TRAINING_ENABLED: "true",
       SPORTS_ENABLED: "true",
       SPORTS_AGENDA_ENABLED: "true",
       SPORTS_RIVER_RESULTS_ENABLED: "true",

@@ -1,0 +1,43 @@
+.page { max-width: 1040px; margin: auto; padding: 24px 24px 64px; color: var(--ink); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.back { padding: 12px 0; font-weight: 600; }
+.private { color: #526457; font-size: .85rem; }
+.hero { margin: 40px 0 28px; max-width: 650px; }
+.eyebrow { letter-spacing: .15em; font-size: .75rem; font-weight: 700; color: #50664f; }
+.hero h1 { font-family: Manrope, sans-serif; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -.04em; margin: 10px 0; }
+.hero p, .muted { color: #59645d; line-height: 1.6; }
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid #d9ded6; padding-bottom: 12px; }
+.page button, .page select, .page input, .page textarea { font: inherit; min-height: 44px; border-radius: 10px; border: 1px solid #b9c5ba; background: #fff; color: var(--ink); }
+.page button { padding: 10px 16px; font-weight: 600; cursor: pointer; }
+.page button:hover:not(:disabled) { background: #edf1e9; }
+.page button:disabled { opacity: .55; cursor: default; }
+.page button.primary, .tabs button[aria-current="page"] { background: #415b49; color: #fff; border-color: #415b49; }
+.page button.primary:hover:not(:disabled), .tabs button[aria-current="page"]:hover { background: #304b37; }
+.page :is(button, a, input, select, textarea):focus-visible { outline: 3px solid #78592b; outline-offset: 3px; }
+.page h1:focus, .editor h2:focus { outline: none; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0; }
+.filter { max-width: 260px; margin-bottom: 24px; }
+.page label { display: flex; flex-direction: column; gap: 8px; font-size: .95rem; font-weight: 600; min-width: 0; }
+.page input, .page select, .page textarea { display: block; width: 100%; padding: 10px 12px; box-sizing: border-box; }
+.page textarea { resize: vertical; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.card, .editor, .empty { border: 1px solid #dde2d9; border-radius: 20px; padding: 24px; background: #fbfbf8; overflow-wrap: anywhere; }
+.card h3 { margin-top: 0; }
+.card h2 { margin-top: 24px; }
+.empty { text-align: center; padding: 40px 24px; color: #59645d; }
+.empty h3 { color: var(--ink); }
+.fields { border: 0; padding: 0; margin: 0; display: grid; gap: 20px; min-width: 0; }
+.block { padding: 20px; border: 1px solid #bfcdbf; border-radius: 14px; margin: 8px 0; min-width: 0; display: grid; gap: 16px; }
+.block legend, .exercise legend { padding: 0 8px; font-weight: 700; }
+.exercise { padding: 16px; border: 1px solid #d9e0d4; border-radius: 12px; min-width: 0; display: grid; gap: 16px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.saveBar { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; padding-top: 20px; border-top: 1px solid #d9ded6; }
+.summary { padding-left: 24px; display: grid; gap: 20px; line-height: 1.6; }
+.summary ul { padding-left: 20px; }
+.error { color: #7b2924; background: #fff0ec; border: 1px solid #d19b90; padding: 16px; border-radius: 12px; margin: 16px 0; }
+.error button { display: block; margin-top: 12px; }
+.notice, .confirm { background: #eaf0e4; padding: 16px; border-radius: 12px; margin: 16px 0; }
+.note { white-space: pre-wrap; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 600px) { .page { padding: 16px 16px 40px; } .hero { margin-top: 28px; } .grid, .row { grid-template-columns: minmax(0, 1fr); } .card, .editor { padding: 16px; } .block { padding: 12px; } .exercise { padding: 12px; } .toolbar { align-items: flex-start; } .toolbar h2 { font-size: 1.25rem; } }
