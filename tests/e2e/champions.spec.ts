@@ -120,6 +120,8 @@ test('Champions: team standings are separate from family predictions and fit mob
     if (width === 375) await page.screenshot({ path: `test-results/champions-standings-mobile-${test.info().project.name.replaceAll(' ', '-')}.png`, fullPage: true });
   }
   await page.getByRole('button', { name: 'Actualizar tabla', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Actualizar tabla', exact: true })).toBeEnabled();
+  await expect(page).toHaveTitle('Family Utils — aplicaciones para tu familia');
   await expect(table.locator('tbody tr')).toHaveCount(36);
   const { default: AxeBuilder } = await import('@axe-core/playwright');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
