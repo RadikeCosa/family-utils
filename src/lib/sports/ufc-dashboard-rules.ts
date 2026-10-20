@@ -1,3 +1,5 @@
+import { ufcFightPoints, type UfcScoring } from "./prediction-rules.ts";
+
 export type DashboardFight = {
   id: string;
   eventId: string;
@@ -8,6 +10,8 @@ export type DashboardFight = {
   firstFighterId: string;
   secondFighterId: string;
   mainEvent: boolean;
+  coMainEvent: boolean;
+  points: number;
   eligible: boolean;
   removed: boolean;
   result: "winner" | "draw" | "no_contest" | "cancelled" | null;
@@ -19,7 +23,7 @@ export type DashboardFight = {
   referenceAt: string | null;
   choices: Array<{ memberId: string; name: string; winnerId: string }>;
 };
-export type DashboardEvent = { id: string; title: string; eventDate: string; fights: DashboardFight[] };
+export type DashboardEvent = { id: string; title: string; eventDate: string; scoringVersion: number; mainFightId: string | null; coMainFightId: string | null; fights: DashboardFight[] };
 export type DashboardMember = { id: string; name: string; archived: boolean };
 export type UfcOddsBundle = {
   version: 1;
@@ -94,11 +98,15 @@ function upsetFor(events: DashboardEvent[], allFights: DashboardFight[], names: 
 export function buildUfcDashboard(events: DashboardEvent[], members: DashboardMember[]) {
   const rows = members.map((member) => ({
     memberId: member.id, name: member.name, archived: member.archived,
-    hits: 0, misses: 0, picks: 0, eligibleFights: 0,
+    points: 0, hits: 0, misses: 0, picks: 0, eligibleFights: 0,
     stake: 0, returned: 0, pricedPicks: 0, settledPicks: 0,
   }));
   const people = new Map(rows.map((person) => [person.memberId, person]));
   const fights = events.flatMap((event) => event.fights);
+  const fightPoints = new Map(events.flatMap((event) => {
+    const scoring: UfcScoring = { ufc_scoring_version: event.scoringVersion, ufc_main_fight_id: event.mainFightId, ufc_co_main_fight_id: event.coMainFightId };
+    return [...ufcFightPoints(event.fights.map((fight) => ({ id: fight.id, prode_eligible: fight.eligible, removed_at: fight.removed ? "removed" : null })), scoring)];
+  }));
   for (const fight of fights) {
     if (!fight.eligible || fight.removed) continue;
     for (const person of rows) person.eligibleFights++;
@@ -108,7 +116,7 @@ export function buildUfcDashboard(events: DashboardEvent[], members: DashboardMe
       person.picks++;
       const resolvedWinner = fight.result === "winner" && fight.winnerId;
       const correct = !!resolvedWinner && pick.winnerId === fight.winnerId;
-      if (correct) person.hits++;
+      if (correct) { person.hits++; person.points += fightPoints.get(fight.id) ?? 0; }
       else if (resolvedWinner) person.misses++;
       if (!fight.result) continue;
       const odds = pick.winnerId === fight.firstFighterId ? fight.firstOdds : fight.secondOdds;
@@ -133,10 +141,10 @@ export function buildUfcDashboard(events: DashboardEvent[], members: DashboardMe
       net,
       roi: person.stake ? net / person.stake : null,
     };
-  }).sort((a, b) => b.hits - a.hits || (b.accuracy ?? -1) - (a.accuracy ?? -1) || a.name.localeCompare(b.name, "es"));
+  }).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, "es"));
   let rank = 0;
   const ranked = ranking.map((row, index) => {
-    if (!index || row.hits !== ranking[index - 1].hits) rank = index + 1;
+    if (!index || row.points !== ranking[index - 1].points) rank = index + 1;
     return { ...row, rank };
   });
   const completeEvents = events.filter((event) => event.fights.length > 0 && event.fights.every((fight) => !fight.eligible || fight.removed || fight.result !== null));
