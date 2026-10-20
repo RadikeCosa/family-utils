@@ -77,6 +77,12 @@ Los nombres, calendarios y asignaciones de una familia son configuración
 privada; la documentación del repositorio usa roles genéricos y ejemplos
 ficticios.
 
+## Entrenamiento
+
+Utilidad personal en `/entrenamiento`, controlada por `TRAINING_ENABLED=true`.
+Requiere la migración `0053_training` y el cierre operativo de respaldo y ensayo.
+Contratos, límites, pruebas y activación en [Entrenamiento](sources/training.md).
+
 ## Biblioteca familiar
 
 Implementación por etapas y estado operativo en [Biblioteca familiar](sources/family-library.md).

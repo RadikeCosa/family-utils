@@ -302,6 +302,13 @@
       "when": 1792529065713,
       "tag": "0052_ufc_scoring",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792533110742,
+      "tag": "0053_training",
+      "breakpoints": true
     }
   ]
 }
