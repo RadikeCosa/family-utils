@@ -1,3 +1,4 @@
+import { ufcFightPoints } from "./prediction-rules";
 import { getPool } from "@/db";
 import { sportsFeatures } from "./config";
 import { sportsActor, activeSportsActor, sportsResponseError, privateHeaders } from "./request";
@@ -13,7 +14,7 @@ export async function loadUfcDashboard(request: Request) {
     await tx.query("BEGIN READ ONLY");
     await activeSportsActor(tx, actor, false, false);
     const { rows: cards } = await tx.query(
-      `SELECT id,title,event_date::text AS event_date
+      `SELECT id,title,event_date::text AS event_date,ufc_scoring_version,ufc_main_fight_id,ufc_co_main_fight_id
        FROM sports_events
        WHERE family_id=$1 AND kind='ufc_card' AND hidden=false AND source_absent_at IS NULL
          AND status='completed' AND card_status='finalized'
@@ -41,7 +42,7 @@ export async function loadUfcDashboard(request: Request) {
        ORDER BY e.event_date DESC,e.id DESC,f.bout_order,p.member_id`,
       [actor.familyId, ids],
     ) : { rows: [] };
-    const eventMap = new Map<string, DashboardEvent>(cards.map((card) => [card.id, { id: card.id, title: card.title, eventDate: card.event_date, fights: [] }]));
+    const eventMap = new Map<string, DashboardEvent>(cards.map((card) => [card.id, { id: card.id, title: card.title, eventDate: card.event_date, scoringVersion: card.ufc_scoring_version ?? 1, mainFightId: card.ufc_main_fight_id, coMainFightId: card.ufc_co_main_fight_id, fights: [] }]));
     const memberMap = new Map<string, { id: string; name: string; archived: boolean }>(
       familyMembers.map((member) => [member.id,{ id: member.id,name: member.name,archived: !!member.archived_at }]),
     );
@@ -54,8 +55,10 @@ export async function loadUfcDashboard(request: Request) {
           id: row.fight_id,eventId: row.event_id,eventTitle: eventMap.get(row.event_id)!.title,
           eventDate: eventMap.get(row.event_id)!.eventDate,firstFighter: row.first_fighter,
           secondFighter: row.second_fighter,firstFighterId: row.first_fighter_id,
-          secondFighterId: row.second_fighter_id,mainEvent: row.is_main_event,
-          eligible: row.prode_eligible,removed: !!row.removed_at,result: row.outcome,
+          secondFighterId: row.second_fighter_id,
+          mainEvent: eventMap.get(row.event_id)!.scoringVersion === 2 ? row.fight_id === eventMap.get(row.event_id)!.mainFightId : row.is_main_event,
+          coMainEvent: eventMap.get(row.event_id)!.scoringVersion === 2 && row.fight_id === eventMap.get(row.event_id)!.coMainFightId,
+          points: 0, eligible: row.prode_eligible,removed: !!row.removed_at,result: row.outcome,
           winnerId: row.winner_id,firstOdds: row.first_decimal_odds === null ? null : Number(row.first_decimal_odds),
           secondOdds: row.second_decimal_odds === null ? null : Number(row.second_decimal_odds),
           bookmaker: row.bookmaker,source: row.odds_source,
@@ -68,6 +71,11 @@ export async function loadUfcDashboard(request: Request) {
         memberMap.set(row.member_id,{ id: row.member_id,name: row.member_name,archived: !!row.archived_at });
         fight.choices.push({ memberId: row.member_id,name: row.member_name,winnerId: row.pick_winner_id });
       }
+    }
+    for (const card of cards) {
+      const event = eventMap.get(card.id)!;
+      const weights = ufcFightPoints(event.fights.map((fight) => ({ id: fight.id, prode_eligible: fight.eligible, removed_at: fight.removed ? "removed" : null })), card);
+      for (const fight of event.fights) fight.points = weights.get(fight.id) ?? 0;
     }
     const complete = [...eventMap.values()].filter((event) =>
       event.fights.length > 0 && event.fights.every((fight) => !fight.eligible || fight.removed || fight.result !== null),

@@ -13,10 +13,12 @@ import {
 import {
   closedAt,
   ranked,
+  ufcFightPoints,
   type UfcView,
+  type UfcScoring,
   type Outcome,
 } from "./prediction-rules";
-export type UfcEventRow = {
+export type UfcEventRow = UfcScoring & {
   id: string;
   title: string;
   kind: string;
@@ -35,6 +37,7 @@ export type UfcEventRow = {
 };
 export type UfcFightRow = {
   is_main_event: boolean;
+  bout_order: number;
   prode_eligible: boolean;
   prediction_closed_at: Date | null;
   id: string;
@@ -131,6 +134,7 @@ export async function ufcSnapshot(
 }
 export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
   const points = new Map<string, number>();
+  const fightPoints = ufcFightPoints(snapshot.fights, snapshot.event);
   for (const vote of snapshot.votes) {
     const fight = snapshot.fights.find((f) => f.id === vote.fight_id);
     const result = results.find((r) => r.fight_id === vote.fight_id);
@@ -144,7 +148,7 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
       result?.outcome === "winner" &&
       result.winner_id === vote.winner_id
     )
-      points.set(vote.member_id, (points.get(vote.member_id) ?? 0) + 1);
+      points.set(vote.member_id, (points.get(vote.member_id) ?? 0) + (fightPoints.get(fight.id) ?? 0));
   }
   return ranked(
     snapshot.members.map((member) => ({
@@ -155,12 +159,16 @@ export function ufcRanking(snapshot: UfcSnapshot, results = snapshot.results) {
   );
 }
 export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
+  const fightPoints = ufcFightPoints(snapshot.fights, snapshot.event);
   const fights = snapshot.fights.map((fight) => {
     const close = fightDeadline(snapshot);
     const closed = closedAt(close, snapshot.now);
     const result = snapshot.results.find((r) => r.fight_id === fight.id);
     return {
-      isMainEvent: fight.is_main_event,
+      isMainEvent: snapshot.event.ufc_scoring_version === 2
+        ? fight.id === snapshot.event.ufc_main_fight_id : fight.is_main_event,
+      isCoMainEvent: snapshot.event.ufc_scoring_version === 2 && fight.id === snapshot.event.ufc_co_main_fight_id,
+      points: fightPoints.get(fight.id) ?? 0,
       id: fight.id,
       firstFighter: fight.first_fighter,
       secondFighter: fight.second_fighter,
@@ -197,6 +205,7 @@ export function ufcView(snapshot: UfcSnapshot, memberId: string): UfcView {
     };
   });
   return {
+    scoringVersion: snapshot.event.ufc_scoring_version ?? 1,
     fights,
     closesAt: deadline(snapshot)?.toISOString() ?? null,
     closed: closedAt(deadline(snapshot), snapshot.now),

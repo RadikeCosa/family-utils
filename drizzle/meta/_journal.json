@@ -295,6 +295,13 @@
       "when": 1792362536598,
       "tag": "0051_sports_river_insights",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792529065713,
+      "tag": "0052_ufc_scoring",
+      "breakpoints": true
     }
   ]
 }

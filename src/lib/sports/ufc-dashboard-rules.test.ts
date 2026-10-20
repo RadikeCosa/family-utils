@@ -11,12 +11,12 @@ function bout(id: string, winnerId: string | null, firstOdds: number | null, sec
   return {
     id,eventId:"event",eventTitle:"UFC Test",eventDate:"2026-10-17",
     firstFighter:"Favorito",secondFighter:"Underdog",firstFighterId:"f1",secondFighterId:"f2",
-    mainEvent:false,eligible:true,removed:false,result:winnerId ? "winner" : "draw",winnerId,
+    mainEvent:false,coMainEvent:false,points:1,eligible:true,removed:false,result:winnerId ? "winner" : "draw",winnerId,
     firstOdds,secondOdds,bookmaker:"Casa",source:"https://example.com/odds",referenceAt:"2026-10-17T15:00:00Z",choices,
   };
 }
 function card(fights: DashboardFight[]): DashboardEvent {
-  return {id:"event",title:"UFC Test",eventDate:"2026-10-17",fights};
+  return {id:"event",title:"UFC Test",eventDate:"2026-10-17",scoringVersion:1,mainFightId:null,coMainFightId:null,fights};
 }
 
 test("UFC dashboard ranks hits, handles tie places, absent picks and archived members", () => {
@@ -65,4 +65,39 @@ test("odds bundle validates odds bounds, duplicate fights and source metadata", 
   assert.equal(parseUfcOddsBundle({...bundle,events:[{...bundle.events[0],fights:[{fightId:"fight",firstOdds:1,secondOdds:4.5}]}]},new Date("2026-10-18T00:00:00Z")),null);
   assert.equal(parseUfcOddsBundle({...bundle,events:[{...bundle.events[0],fights:[...bundle.events[0].fights,...bundle.events[0].fights]}]},new Date("2026-10-18T00:00:00Z")),null);
   assert.equal(parseUfcOddsBundle({...bundle,events:[{...bundle.events[0],referenceAt:"2026-10-19T00:00:00Z"}]},new Date("2026-10-18T00:00:00Z")),null);
+});
+
+test("weighted dashboard ranks points separately from hits and accumulates historical rules", () => {
+  const picks = (ana: boolean) => [
+    { memberId: "ana", name: "Ana", winnerId: ana ? "f1" : "f2" },
+    { memberId: "beto", name: "Beto", winnerId: ana ? "f2" : "f1" },
+  ];
+  const fights = [bout("main", "f1", 2, 2, picks(true)), bout("co", "f1", 2, 2, picks(false)), bout("other", "f1", 2, 2, picks(false))];
+  const weighted = { ...card(fights), scoringVersion: 2, mainFightId: "main", coMainFightId: "co" };
+  const result = buildUfcDashboard([weighted], people);
+  assert.deepEqual(result.ranking.slice(0, 2).map(({ memberId, points, hits, rank }) => ({ memberId, points, hits, rank })), [
+    { memberId: "ana", points: 5, hits: 1, rank: 1 },
+    { memberId: "beto", points: 4, hits: 2, rank: 2 },
+  ]);
+  assert.equal(result.ranking[0].accuracy, 1 / 3);
+  assert.equal(result.ranking[0].returned, 20);
+  const historical = { ...card([bout("historical-main", "f1", 2, 2, picks(false))]), id: "historical", eventDate: "2026-10-16" };
+  const accumulated = buildUfcDashboard([weighted, historical], people);
+  assert.deepEqual(accumulated.ranking.slice(0, 2).map(({ points, rank }) => ({ points, rank })), [{ points: 5, rank: 1 }, { points: 5, rank: 1 }]);
+});
+
+test("weighted dashboard excludes retired and late fights and gives no points for void outcomes", () => {
+  const choices = [{ memberId: "ana", name: "Ana", winnerId: "f1" }];
+  const fights = [
+    { ...bout("main", "f1", null, null, choices), removed: true },
+    { ...bout("co", "f1", null, null, choices), result: "cancelled" as const },
+    { ...bout("late", "f1", null, null, choices), eligible: false },
+    { ...bout("draw", null, null, null, choices), result: "draw" as const },
+    { ...bout("nc", null, null, null, choices), result: "no_contest" as const },
+    bout("ordinary", "f1", null, null, choices),
+  ];
+  const result = buildUfcDashboard([{ ...card(fights), scoringVersion: 2, mainFightId: "main", coMainFightId: "co" }], people);
+  assert.equal(result.ranking[0].points, 1);
+  assert.equal(result.ranking[0].hits, 1);
+  assert.equal(result.ranking[0].picks, 4);
 });

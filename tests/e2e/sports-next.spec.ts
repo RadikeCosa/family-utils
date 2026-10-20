@@ -616,7 +616,7 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   expect(
     view.ranking.find((r: { memberId: string }) => r.memberId === memberId)
       .points,
-  ).toBe(1);
+  ).toBe(5);
   expect(view.final).toBe(false);
   const corrected = await results([
     {
@@ -633,7 +633,7 @@ test("UFC: private picks, stable fighters, cancellations, results and correction
   expect(
     view.ranking.find((r: { memberId: string }) => r.memberId === bea.id)
       .points,
-  ).toBe(1);
+  ).toBe(5);
   const next = await results(
     [
       {
@@ -811,7 +811,7 @@ test("UFC: partial result preview persists first closure and its confirmation st
   const view = await (await api.get(endpoint)).json();
   expect(view.closed).toBe(true);
   expect(view.final).toBe(false);
-  expect(view.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(1);
+  expect(view.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(5);
   expect(view.fights.find((f: { id: string }) => f.id === fights[1].id).result).toBeNull();
 });
 
@@ -912,4 +912,124 @@ test("River insights: independent sections, missing values, corrections and fami
  await page.screenshot({path:'test-results/river-insights-'+test.info().project.name.replaceAll(' ','-')+'.png',fullPage:true});
  await pool.query("UPDATE members SET role='member' WHERE id=$1",[memberId]);await page.reload();await expect(section.getByRole('cell',{name:'0',exact:true})).toBeVisible();expect((await post('preview')).status()).toBe(403);await expect(page.getByText('Administrar',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test("UFC: weighted points agree across previews, saved results, ties and corrections", async ({ page }) => {
+  const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,preliminary_starts_at,main_card_starts_at,is_current,created_by_member_id,updated_by_member_id)
+    VALUES($1,'ufc_card','UFC: Puntos especiales',CURRENT_DATE,clock_timestamp()+interval '1 hour',clock_timestamp()+interval '3 hours',true,$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
+  const peer = (await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Weighted peer','member') RETURNING id", [familyId])).rows[0];
+  const fights = [];
+  for (const [order, first, second, block] of [[1, 'Estelar Uno', 'Estelar Dos', 'main'], [2, 'Coestelar Uno', 'Coestelar Dos', 'main'], [3, 'Regular Uno', 'Regular Dos', 'main'], [4, 'Prelim Uno', 'Prelim Dos', 'preliminaries']] as const) {
+    fights.push((await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [familyId, event.id, order, first, second, block, order === 1])).rows[0]);
+  }
+  for (const fight of fights) {
+    for (const person of [memberId, peer.id]) await pool.query('INSERT INTO sports_predictions(family_id,event_id,fight_id,member_id,winner_id) VALUES($1,$2,$3,$4,$5)', [familyId, event.id, fight.id, person, fight.first_fighter_id]);
+  }
+  await pool.query("UPDATE sports_events SET preliminary_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
+  const endpoint = `/api/sports/events/${event.id}/predictions`;
+  const initial = await (await api.get(endpoint)).json();
+  expect(initial.fights.map((f: { points: number }) => f.points)).toEqual([5, 3, 1, 1]);
+  expect(initial.fights.filter((f: { isCoMainEvent: boolean }) => f.isCoMainEvent)).toHaveLength(1);
+  const save = async (entries: unknown[], expectedPoints: number) => {
+    const bundle = { version: 1, checkedAt: new Date().toISOString(), source: 'Synthetic scoring fixture', events: [{ eventId: event.id, fights: entries }] };
+    const preview = await (await api.post('/api/sports/results/import', { data: { mode: 'preview', bundle } })).json();
+    expect(preview.errors).toEqual([]);
+    expect(preview.events[0].points.find((p: { name: string }) => p.name === 'Weighted peer').after).toBe(expectedPoints);
+    const saved = await (await api.post('/api/sports/results/import', { data: { mode: 'import', bundle, token: preview.token } })).json();
+    expect(saved.errors).toEqual([]);
+    const view = await (await api.get(endpoint)).json();
+    expect(view.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(expectedPoints);
+    expect(view.ranking.find((r: { memberId: string }) => r.memberId === peer.id).points).toBe(expectedPoints);
+    expect(view.ranking.filter((r: { rank: number }) => r.rank === 1)).toHaveLength(2);
+    const dashboard = await (await api.get('/api/sports/dashboard')).json();
+    if (view.final) {
+      const { buildUfcDashboard } = await import('../../src/lib/sports/ufc-dashboard-rules');
+      const card = dashboard.events.find((item: { id: string }) => item.id === event.id);
+      expect(card.scoringVersion).toBe(2);
+      const ranking = buildUfcDashboard([card], dashboard.members).ranking;
+      for (const person of [memberId, peer.id]) expect(ranking.find(row => row.memberId === person)?.points).toBe(expectedPoints);
+      expect(card.fights.find((f: { id: string }) => f.id === fights[0].id)).toMatchObject({ points: 5, mainEvent: true });
+    }
+    return view;
+  };
+  const winners = fights.map(f => ({ fightId: f.id, result: { outcome: 'winner', winnerId: f.first_fighter_id } }));
+  await save(winners, 10);
+  // Composition edits after close cannot move bonus identities or score values.
+  await pool.query("UPDATE sports_fights SET bout_order=4,bout_block='preliminaries' WHERE id=$1", [fights[1].id]);
+  await pool.query("UPDATE sports_fights SET bout_order=2 WHERE id=$1", [fights[2].id]);
+  const reordered = await (await api.get(endpoint)).json();
+  expect(reordered.fights.find((f: { id: string }) => f.id === fights[1].id)).toMatchObject({ points: 3, isCoMainEvent: true });
+  expect(reordered.fights.find((f: { id: string }) => f.id === fights[2].id)).toMatchObject({ points: 1, isCoMainEvent: false });
+  expect(reordered.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(10);
+  await page.goto(`/deportes?sport=ufc&event=${event.id}`);
+  await expect(page.getByText('ESTELAR · 5 PUNTOS', { exact: true })).toBeVisible();
+  await expect(page.getByText('COESTELAR · 3 PUNTOS', { exact: true })).toBeVisible();
+  // Corrections use the same weights: a main-event miss removes five points.
+  await save([{ fightId: fights[0].id, result: { outcome: 'winner', winnerId: fights[0].second_fighter_id } }], 5);
+  // Cancelled co-main gives zero and does not promote the regular main-card bout.
+  const cancelled = await save([{ fightId: fights[1].id, result: { outcome: 'cancelled', winnerId: null } }], 2);
+  expect(cancelled.fights.find((f: { id: string }) => f.id === fights[2].id).points).toBe(1);
+  await save([{ fightId: fights[2].id, result: { outcome: 'draw', winnerId: null } }], 1);
+  await save([{ fightId: fights[3].id, result: { outcome: 'no_contest', winnerId: null } }], 0);
+});
+
+
+test("UFC: historical cards keep one point, including result previews and labels", async ({ page }) => {
+  const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,main_card_starts_at,is_current,created_by_member_id,updated_by_member_id)
+    VALUES($1,'ufc_card','UFC: Histórica','2026-10-16',clock_timestamp()+interval '1 hour',true,$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
+  const fight = (await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+    VALUES($1,$2,1,'Histórico Uno','Histórico Dos','main',true) RETURNING *`, [familyId, event.id])).rows[0];
+  await pool.query('INSERT INTO sports_predictions(family_id,event_id,fight_id,member_id,winner_id) VALUES($1,$2,$3,$4,$5)', [familyId,event.id,fight.id,memberId,fight.first_fighter_id]);
+  await pool.query("UPDATE sports_events SET main_card_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
+  const bundle = { version: 1, checkedAt: new Date().toISOString(), source: 'Historical scoring fixture', events: [{ eventId: event.id, fights: [{fightId:fight.id, result:{outcome:'winner',winnerId:fight.first_fighter_id}}] }] };
+  const preview = await (await api.post('/api/sports/results/import', { data: { mode: 'preview', bundle } })).json();
+  expect(preview.errors).toEqual([]);
+  expect(preview.events[0].points).toHaveLength(1);
+  expect(preview.events[0].points[0].after).toBe(1);
+  expect((await (await api.post('/api/sports/results/import',{data:{mode:'import',bundle,token:preview.token}})).json()).errors).toEqual([]);
+  const view = await (await api.get(`/api/sports/events/${event.id}/predictions`)).json();
+  expect(view.scoringVersion).toBe(1);
+  expect(view.fights[0]).toMatchObject({points:1,isCoMainEvent:false});
+  expect(view.ranking.find((r: { memberId: string })=>r.memberId===memberId).points).toBe(1);
+  await page.goto(`/deportes?sport=ufc&event=${event.id}`);
+  await expect(page.getByText('ESTELAR · 1 PUNTO',{exact:true})).toBeVisible();
+  await expect(page.getByText('Cada ganador acertado suma 1 punto.',{exact:false})).toBeVisible();
+});
+
+test("UFC: card and dashboard agree when one main-event hit beats two other hits", async ({ page }) => {
+  const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,main_card_starts_at,created_by_member_id,updated_by_member_id)
+    VALUES($1,'ufc_card','UFC: Ranking ponderado','2026-10-17',clock_timestamp()+interval '1 hour',$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
+  const peer = (await pool.query("INSERT INTO members(family_id,name,role) VALUES($1,'Dos aciertos','member') RETURNING id", [familyId])).rows[0];
+  const fights = [];
+  for (let order = 1; order <= 3; order++) {
+    const fight = (await pool.query(`INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event)
+      VALUES($1,$2,$3,$4,$5,'main',$6) RETURNING *`, [familyId, event.id, order, `Peleador ${order}`, `Rival ${order}`, order === 1])).rows[0];
+    fights.push(fight);
+    for (const person of [memberId, peer.id]) {
+      const correct = person === memberId ? order === 1 : order !== 1;
+      await pool.query('INSERT INTO sports_predictions(family_id,event_id,fight_id,member_id,winner_id) VALUES($1,$2,$3,$4,$5)', [familyId,event.id,fight.id,person,correct ? fight.first_fighter_id : fight.second_fighter_id]);
+    }
+  }
+  await pool.query("UPDATE sports_events SET main_card_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
+  const bundle = {version:1,checkedAt:new Date().toISOString(),source:'Synthetic weighted ranking',events:[{eventId:event.id,fights:fights.map(f=>({fightId:f.id,result:{outcome:'winner',winnerId:f.first_fighter_id}}))}]};
+  const preview = await (await api.post('/api/sports/results/import',{data:{mode:'preview',bundle}})).json();
+  expect(preview.errors).toEqual([]);
+  expect((await (await api.post('/api/sports/results/import',{data:{mode:'import',bundle,token:preview.token}})).json()).errors).toEqual([]);
+  const card = await (await api.get(`/api/sports/events/${event.id}/predictions`)).json();
+  const dashboard = await (await api.get('/api/sports/dashboard')).json();
+  const { buildUfcDashboard } = await import('../../src/lib/sports/ufc-dashboard-rules');
+  const ranking = buildUfcDashboard(dashboard.events.filter((item: { id: string }) => item.id === event.id), dashboard.members).ranking;
+  for (const [person, points, rank] of [[memberId,5,1],[peer.id,4,2]] as const) {
+    expect(card.ranking.find((row: { memberId: string })=>row.memberId===person)).toMatchObject({points,rank});
+    expect(ranking.find(row=>row.memberId===person)).toMatchObject({points,rank});
+  }
+  await page.goto(`/deportes/ufc-dashboard?event=${event.id}`);
+  const table = page.locator('#ranking');
+  await expect(table).toContainText('Estelar 5 · coestelar 3 · demás peleas 1');
+  await expect(table.locator('li').first()).toContainText('5');
+  await expect(table.locator('li').nth(1)).toContainText('Dos aciertos');
+  await expect(table.locator('li').nth(1)).toContainText('4');
+  await page.getByRole('button',{name:'Histórico',exact:true}).click();
+  await expect(table).toContainText('Suma de puntos según la regla de cada velada');
 });

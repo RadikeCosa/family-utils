@@ -132,7 +132,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
             <i style={{ width: `${data.total ? Math.round(data.chosen / data.total * 100) : 0}%` }} />
           </div>
         </div>
-        <p>Un punto por ganador acertado.</p>
+        <p>{data.scoringVersion === 2 ? "Por acertar al ganador: 5 puntos en la estelar, 3 en la coestelar y 1 en las demás." : "Cada ganador acertado suma 1 punto."}</p>
         <p className={styles.predictionDeadline}>
           Los pronósticos de toda la cartelera cierran al comenzar el primer bloque de peleas, incluidas las preliminares.
           Esto incluye la cartelera principal. Las elecciones de la familia se revelan todas juntas.
@@ -179,8 +179,9 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   className={fight.isMainEvent ? styles.mainFight : undefined}
                 >
                   {fight.isMainEvent && (
-                    <strong className={styles.badge}>ESTELAR</strong>
+                    <strong className={styles.badge}>ESTELAR · {data.scoringVersion === 2 ? "5 PUNTOS" : "1 PUNTO"}</strong>
                   )}
+                  {fight.isCoMainEvent && <strong className={styles.badge}>COESTELAR · 3 PUNTOS</strong>}
                   <strong>
                     {fight.firstFighter} <small>vs</small> {fight.secondFighter}
                   </strong>
@@ -224,6 +225,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                     <p>Tu pronóstico: {winnerName(fight, fight.ownWinnerId)}</p>
                   )}
                   <p>{outcomeLabel(fight)}</p>
+                  {fight.prodeEligible && !fight.isMainEvent && !fight.isCoMainEvent && <p>1 punto por acertar al ganador.</p>}
                   {fight.closed && (
                     <details>
                       <summary>Elecciones de la familia</summary>
@@ -263,7 +265,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
       <section id="ranking" className={styles.panel}>
         <h3>Tabla de la cartelera · {data.final ? "Final" : "Parcial"}</h3>
         <table className={styles.ranking}>
-          <caption>Un punto por ganador acertado</caption>
+          <caption>{data.scoringVersion === 2 ? "Puntos por ganador acertado: estelar 5 · coestelar 3 · demás peleas 1" : "Un punto por ganador acertado"}</caption>
           <thead>
             <tr>
               <th scope="col">Puesto</th>

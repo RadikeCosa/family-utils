@@ -43,3 +43,18 @@ test("UFC result templates allow null and reject invalid winners, duplicates and
   value.events[0].fights.push(value.events[0].fights[0]);
   assert.equal(parseResultsBundle(value), null);
 });
+
+test("UFC uses stored version and roles, preserving historical scores and reserved slots", async () => {
+  const { ufcFightPoints } = await import("./prediction-rules.ts");
+  const main = { id: "main", prode_eligible: true, removed_at: null as Date | null };
+  const co = { ...main, id: "co" };
+  const other = { ...main, id: "other" };
+  const late = { ...main, id: "late", prode_eligible: false };
+  const scoring = { ufc_scoring_version: 2, ufc_main_fight_id: main.id, ufc_co_main_fight_id: co.id };
+  const weights = ufcFightPoints([other, co, late, main], scoring);
+  assert.deepEqual([...weights.values()], [1, 3, 0, 5]);
+  assert.deepEqual([...ufcFightPoints([main, co, other], {...scoring, ufc_scoring_version: 1}).values()], [1, 1, 1]);
+  co.removed_at = new Date();
+  assert.deepEqual([...ufcFightPoints([other, co, main], scoring).values()], [1, 0, 5]);
+  assert.equal(ufcFightPoints([other], scoring).get(other.id), 1);
+});
