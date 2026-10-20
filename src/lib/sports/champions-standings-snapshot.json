@@ -1,7 +1,7 @@
 {
   "season": "2026/27",
   "seasonYear": "2027",
-  "checkedAt": "2026-10-20T19:46:19.411Z",
+  "checkedAt": "2026-10-20T21:06:14.520Z",
   "sourceUrl": "https://www.uefa.com/uefachampionsleague/standings/",
   "rows": [
     {
@@ -12,30 +12,44 @@
       "won": 3,
       "drawn": 0,
       "lost": 0,
-      "goalsFor": 11,
-      "goalsAgainst": 3,
-      "goalDifference": 8,
+      "goalsFor": 14,
+      "goalsAgainst": 5,
+      "goalDifference": 9,
       "points": 9,
-      "live": true
+      "live": false
     },
     {
-      "teamId": "50107",
-      "name": "Stuttgart",
+      "teamId": "7889",
+      "name": "Liverpool",
       "position": 2,
       "played": 3,
       "won": 3,
       "drawn": 0,
       "lost": 0,
-      "goalsFor": 7,
-      "goalsAgainst": 1,
-      "goalDifference": 6,
+      "goalsFor": 12,
+      "goalsAgainst": 7,
+      "goalDifference": 5,
       "points": 9,
-      "live": true
+      "live": false
+    },
+    {
+      "teamId": "50107",
+      "name": "Stuttgart",
+      "position": 3,
+      "played": 3,
+      "won": 2,
+      "drawn": 1,
+      "lost": 0,
+      "goalsFor": 7,
+      "goalsAgainst": 2,
+      "goalDifference": 5,
+      "points": 7,
+      "live": false
     },
     {
       "teamId": "52683",
       "name": "Aston Villa",
-      "position": 3,
+      "position": 4,
       "played": 2,
       "won": 2,
       "drawn": 0,
@@ -49,21 +63,35 @@
     {
       "teamId": "50080",
       "name": "Barcelona",
-      "position": 4,
+      "position": 5,
+      "played": 3,
+      "won": 2,
+      "drawn": 0,
+      "lost": 1,
+      "goalsFor": 11,
+      "goalsAgainst": 6,
+      "goalDifference": 5,
+      "points": 6,
+      "live": false
+    },
+    {
+      "teamId": "52919",
+      "name": "Man City",
+      "position": 6,
       "played": 3,
       "won": 2,
       "drawn": 0,
       "lost": 1,
       "goalsFor": 9,
-      "goalsAgainst": 3,
-      "goalDifference": 6,
+      "goalsAgainst": 5,
+      "goalDifference": 4,
       "points": 6,
-      "live": true
+      "live": false
     },
     {
       "teamId": "50149",
       "name": "Sporting CP",
-      "position": 5,
+      "position": 7,
       "played": 2,
       "won": 2,
       "drawn": 0,
@@ -77,7 +105,7 @@
     {
       "teamId": "52280",
       "name": "Arsenal",
-      "position": 6,
+      "position": 8,
       "played": 2,
       "won": 2,
       "drawn": 0,
@@ -87,34 +115,6 @@
       "goalDifference": 4,
       "points": 6,
       "live": false
-    },
-    {
-      "teamId": "7889",
-      "name": "Liverpool",
-      "position": 7,
-      "played": 3,
-      "won": 2,
-      "drawn": 0,
-      "lost": 1,
-      "goalsFor": 9,
-      "goalsAgainst": 6,
-      "goalDifference": 3,
-      "points": 6,
-      "live": true
-    },
-    {
-      "teamId": "70691",
-      "name": "Villarreal",
-      "position": 8,
-      "played": 3,
-      "won": 2,
-      "drawn": 0,
-      "lost": 1,
-      "goalsFor": 7,
-      "goalsAgainst": 5,
-      "goalDifference": 2,
-      "points": 6,
-      "live": true
     },
     {
       "teamId": "50051",
@@ -145,23 +145,9 @@
       "live": false
     },
     {
-      "teamId": "52919",
-      "name": "Man City",
-      "position": 11,
-      "played": 3,
-      "won": 2,
-      "drawn": 0,
-      "lost": 1,
-      "goalsFor": 6,
-      "goalsAgainst": 4,
-      "goalDifference": 2,
-      "points": 6,
-      "live": true
-    },
-    {
       "teamId": "52758",
       "name": "B. Dortmund",
-      "position": 12,
+      "position": 11,
       "played": 3,
       "won": 2,
       "drawn": 0,
@@ -175,7 +161,7 @@
     {
       "teamId": "50037",
       "name": "Bayern München",
-      "position": 13,
+      "position": 12,
       "played": 2,
       "won": 1,
       "drawn": 1,
@@ -183,6 +169,20 @@
       "goalsFor": 8,
       "goalsAgainst": 3,
       "goalDifference": 5,
+      "points": 4,
+      "live": false
+    },
+    {
+      "teamId": "50137",
+      "name": "Roma",
+      "position": 13,
+      "played": 3,
+      "won": 1,
+      "drawn": 1,
+      "lost": 1,
+      "goalsFor": 8,
+      "goalsAgainst": 5,
+      "goalDifference": 3,
       "points": 4,
       "live": false
     },
@@ -201,23 +201,37 @@
       "live": false
     },
     {
-      "teamId": "50137",
-      "name": "Roma",
+      "teamId": "50124",
+      "name": "Atleti",
       "position": 15,
       "played": 3,
       "won": 1,
       "drawn": 1,
       "lost": 1,
-      "goalsFor": 6,
-      "goalsAgainst": 5,
+      "goalsFor": 4,
+      "goalsAgainst": 3,
       "goalDifference": 1,
       "points": 4,
-      "live": true
+      "live": false
+    },
+    {
+      "teamId": "50062",
+      "name": "PSV",
+      "position": 16,
+      "played": 3,
+      "won": 1,
+      "drawn": 1,
+      "lost": 1,
+      "goalsFor": 2,
+      "goalsAgainst": 2,
+      "goalDifference": 0,
+      "points": 4,
+      "live": false
     },
     {
       "teamId": "79946",
       "name": "Como",
-      "position": 16,
+      "position": 17,
       "played": 2,
       "won": 1,
       "drawn": 0,
@@ -231,7 +245,7 @@
     {
       "teamId": "52682",
       "name": "Man Utd",
-      "position": 17,
+      "position": 18,
       "played": 2,
       "won": 1,
       "drawn": 0,
@@ -243,9 +257,23 @@
       "live": false
     },
     {
+      "teamId": "70691",
+      "name": "Villarreal",
+      "position": 19,
+      "played": 3,
+      "won": 1,
+      "drawn": 0,
+      "lost": 2,
+      "goalsFor": 8,
+      "goalsAgainst": 8,
+      "goalDifference": 0,
+      "points": 3,
+      "live": false
+    },
+    {
       "teamId": "50043",
       "name": "Club Brugge",
-      "position": 18,
+      "position": 20,
       "played": 2,
       "won": 1,
       "drawn": 0,
@@ -257,23 +285,9 @@
       "live": false
     },
     {
-      "teamId": "50124",
-      "name": "Atleti",
-      "position": 19,
-      "played": 3,
-      "won": 1,
-      "drawn": 0,
-      "lost": 2,
-      "goalsFor": 3,
-      "goalsAgainst": 3,
-      "goalDifference": 0,
-      "points": 3,
-      "live": true
-    },
-    {
       "teamId": "52277",
       "name": "Lens",
-      "position": 20,
+      "position": 21,
       "played": 2,
       "won": 1,
       "drawn": 0,
@@ -287,21 +301,21 @@
     {
       "teamId": "50136",
       "name": "Napoli",
-      "position": 21,
+      "position": 22,
       "played": 3,
       "won": 1,
       "drawn": 0,
       "lost": 2,
-      "goalsFor": 3,
-      "goalsAgainst": 5,
+      "goalsFor": 5,
+      "goalsAgainst": 7,
       "goalDifference": -2,
       "points": 3,
-      "live": true
+      "live": false
     },
     {
       "teamId": "2603790",
       "name": "Leipzig",
-      "position": 22,
+      "position": 23,
       "played": 2,
       "won": 1,
       "drawn": 0,
@@ -315,7 +329,7 @@
     {
       "teamId": "52749",
       "name": "Feyenoord",
-      "position": 23,
+      "position": 24,
       "played": 2,
       "won": 1,
       "drawn": 0,
@@ -329,7 +343,7 @@
     {
       "teamId": "2609356",
       "name": "Sabah",
-      "position": 24,
+      "position": 25,
       "played": 3,
       "won": 1,
       "drawn": 0,
@@ -341,20 +355,6 @@
       "live": false
     },
     {
-      "teamId": "50129",
-      "name": "AEK Athens",
-      "position": 25,
-      "played": 3,
-      "won": 1,
-      "drawn": 0,
-      "lost": 2,
-      "goalsFor": 2,
-      "goalsAgainst": 5,
-      "goalDifference": -3,
-      "points": 3,
-      "live": true
-    },
-    {
       "teamId": "59333",
       "name": "Bodø/Glimt",
       "position": 26,
@@ -362,25 +362,25 @@
       "won": 1,
       "drawn": 0,
       "lost": 2,
-      "goalsFor": 2,
-      "goalsAgainst": 7,
+      "goalsFor": 4,
+      "goalsAgainst": 9,
       "goalDifference": -5,
       "points": 3,
-      "live": true
+      "live": false
     },
     {
-      "teamId": "50062",
-      "name": "PSV",
+      "teamId": "50129",
+      "name": "AEK Athens",
       "position": 27,
       "played": 3,
-      "won": 0,
-      "drawn": 2,
-      "lost": 1,
-      "goalsFor": 1,
-      "goalsAgainst": 2,
-      "goalDifference": -1,
-      "points": 2,
-      "live": true
+      "won": 1,
+      "drawn": 0,
+      "lost": 2,
+      "goalsFor": 3,
+      "goalsAgainst": 8,
+      "goalDifference": -5,
+      "points": 3,
+      "live": false
     },
     {
       "teamId": "52692",
@@ -425,23 +425,9 @@
       "live": false
     },
     {
-      "teamId": "50064",
-      "name": "Porto",
-      "position": 31,
-      "played": 3,
-      "won": 0,
-      "drawn": 1,
-      "lost": 2,
-      "goalsFor": 2,
-      "goalsAgainst": 5,
-      "goalDifference": -3,
-      "points": 1,
-      "live": true
-    },
-    {
       "teamId": "50138",
       "name": "Inter",
-      "position": 32,
+      "position": 31,
       "played": 2,
       "won": 0,
       "drawn": 0,
@@ -455,13 +441,27 @@
     {
       "teamId": "63405",
       "name": "LASK",
-      "position": 33,
+      "position": 32,
       "played": 2,
       "won": 0,
       "drawn": 0,
       "lost": 2,
       "goalsFor": 3,
       "goalsAgainst": 7,
+      "goalDifference": -4,
+      "points": 0,
+      "live": false
+    },
+    {
+      "teamId": "50064",
+      "name": "Porto",
+      "position": 33,
+      "played": 3,
+      "won": 0,
+      "drawn": 0,
+      "lost": 3,
+      "goalsFor": 2,
+      "goalsAgainst": 6,
       "goalDifference": -4,
       "points": 0,
       "live": false
@@ -503,10 +503,10 @@
       "drawn": 0,
       "lost": 3,
       "goalsFor": 1,
-      "goalsAgainst": 11,
-      "goalDifference": -10,
+      "goalsAgainst": 13,
+      "goalDifference": -12,
       "points": 0,
-      "live": true
+      "live": false
     }
   ]
 }
