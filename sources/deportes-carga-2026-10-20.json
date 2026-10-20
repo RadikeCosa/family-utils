@@ -1,0 +1,408 @@
+{
+  "schemaVersion": 1,
+  "status": "curated",
+  "checkedAt": "2026-10-20T17:26:43.978Z",
+  "timezone": "America/Argentina/Buenos_Aires",
+  "curation": {
+    "completeHorizon": {
+      "river": {
+        "from": "2026-10-20",
+        "through": "2026-11-08",
+        "complete": true
+      },
+      "ufc": {
+        "from": "2026-10-20",
+        "through": "2026-11-07",
+        "complete": true
+      }
+    }
+  },
+  "events": [
+    {
+      "kind": "football_match",
+      "title": "River Plate vs Racing Club",
+      "competition": "Torneo Clausura Mercado Libre 2026",
+      "firstParticipant": "River Plate",
+      "secondParticipant": "Racing Club",
+      "eventDate": "2026-10-25",
+      "startTime": "19:15",
+      "venue": "Estadio Más Monumental",
+      "channel": "TNT Sports",
+      "status": "scheduled",
+      "source": {
+        "primary": "https://www.ligaprofesional.ar/notas/primera/2026/10/07/agenda-de-la-13-a-la-15/",
+        "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
+        "checkedAt": "2026-10-20T17:26:43.978Z"
+      },
+      "sourceProvider": "espn",
+      "externalReference": "401841634"
+    },
+    {
+      "kind": "football_match",
+      "title": "Boca Juniors vs River Plate",
+      "competition": "Torneo Clausura Mercado Libre 2026",
+      "firstParticipant": "Boca Juniors",
+      "secondParticipant": "River Plate",
+      "eventDate": "2026-11-01",
+      "startTime": "15:00",
+      "venue": "Alberto José Armando (La Bombonera)",
+      "channel": "TNT Sports / ESPN Premium",
+      "status": "scheduled",
+      "source": {
+        "primary": "https://www.ligaprofesional.ar/notas/primera/2026/10/07/agenda-de-la-13-a-la-15/",
+        "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
+        "checkedAt": "2026-10-20T17:26:43.978Z"
+      },
+      "sourceProvider": "espn",
+      "externalReference": "401841658"
+    },
+    {
+      "kind": "football_match",
+      "sourceProvider": "espn",
+      "externalReference": "401841659",
+      "title": "Aldosivi vs River Plate",
+      "competition": "Torneo Clausura Mercado Libre 2026",
+      "firstParticipant": "Aldosivi",
+      "secondParticipant": "River Plate",
+      "eventDate": "2026-11-08",
+      "startTime": null,
+      "venue": null,
+      "channel": null,
+      "status": "scheduled",
+      "source": {
+        "primary": "https://www.ligaprofesional.ar/?p=75980",
+        "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "notes": "LPF confirma Aldosivi–River en la fecha 16. ESPN ubica el encuentro el 08/11/2026 pero timeValid=false tanto en evento como competencia: fecha provisional del proveedor y horario, estadio y canal pendientes de confirmación específica de LPF."
+      }
+    },
+    {
+      "kind": "ufc_card",
+      "sourceProvider": "ufc_official",
+      "externalReference": "ufc-333",
+      "title": "UFC 333: Volkanovski vs Evloev",
+      "eventDate": "2026-10-24",
+      "venue": "Etihad Arena",
+      "city": "Yas Island/Yas West",
+      "country": "Emiratos Árabes Unidos",
+      "eventType": "numerado",
+      "fights": [
+        {
+          "firstFighter": "Alexander Volkanovski",
+          "secondFighter": "Movsar Evloev",
+          "boutBlock": "main",
+          "isMainEvent": true
+        },
+        {
+          "firstFighter": "Petr Yan",
+          "secondFighter": "Merab Dvalishvili",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Lone’er Kavanagh",
+          "secondFighter": "Ramazan Temirov",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Alexander Volkov",
+          "secondFighter": "Rizvan Kuniev",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Aaron Pico",
+          "secondFighter": "Losene Keita",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Azamat Murzakanov",
+          "secondFighter": "Dominick Reyes",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Nikita Krylov",
+          "secondFighter": "Abdul Rakhman Yakhyaev",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Abus Magomedov",
+          "secondFighter": "Cam Rowston",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Grant Dawson",
+          "secondFighter": "Nurullo Aliev",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Colby Thicknesse",
+          "secondFighter": "Asaf Chopurov",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Abubakar Vagaev",
+          "secondFighter": "Jacob Malkoun",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Bolaji Oki",
+          "secondFighter": "Daniel Santos",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Kody Steele",
+          "secondFighter": "Noah Gugnon",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Iasmin Lucindo",
+          "secondFighter": "Nicolle Caliari",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        }
+      ],
+      "source": {
+        "primary": "https://www.ufc.com/event/ufc-333",
+        "crossCheck": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261020-20261109&limit=100",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "validation": {
+          "officialFightCount": 14,
+          "officialCardComplete": true,
+          "independentCrossCheck": "passed"
+        },
+        "notes": "Todas las peleas publicadas se cotejaron con ESPN. Horarios desde data-timestamp oficial; fechas de bloque convertidas a America/Argentina/Buenos_Aires."
+      },
+      "mainCardDate": "2026-10-24",
+      "mainCardTime": "15:00",
+      "preliminaryDate": "2026-10-24",
+      "preliminaryTime": "13:00",
+      "earlyPreliminariesDate": "2026-10-24",
+      "earlyPreliminariesTime": "11:00"
+    },
+    {
+      "kind": "ufc_card",
+      "sourceProvider": "ufc_official",
+      "externalReference": "ufc-fight-night-october-31-2026",
+      "title": "UFC Fight Night: Moicano vs Nolan",
+      "eventDate": "2026-10-31",
+      "venue": "Meta APEX",
+      "city": "Las Vegas",
+      "country": "Estados Unidos",
+      "eventType": "fight_night",
+      "fights": [
+        {
+          "firstFighter": "Renato Moicano",
+          "secondFighter": "Tom Nolan",
+          "boutBlock": "main",
+          "isMainEvent": true
+        },
+        {
+          "firstFighter": "Randy Brown",
+          "secondFighter": "Carlos Leal",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Yana Santos",
+          "secondFighter": "Luana Santos",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jean-Paul Lebosnoyani",
+          "secondFighter": "Farman Hasanov",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Francis Marshall",
+          "secondFighter": "Gaston Bolanos",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Azamat Bekoev",
+          "secondFighter": "Andre Petroski",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Rodrigo Sezinando",
+          "secondFighter": "Theodor Berggren",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Julian Erosa",
+          "secondFighter": "JeongYeong Lee",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Nick Klein",
+          "secondFighter": "Joseph Kropschot",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Talita Alencar",
+          "secondFighter": "Piera Rodriguez",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Lucia Szabova",
+          "secondFighter": "Tainara Lisboa",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        }
+      ],
+      "source": {
+        "primary": "https://www.ufc.com/event/ufc-fight-night-october-31-2026",
+        "crossCheck": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261020-20261109&limit=100",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "validation": {
+          "officialFightCount": 11,
+          "officialCardComplete": true,
+          "independentCrossCheck": "passed"
+        },
+        "notes": "Todas las peleas publicadas se cotejaron con ESPN. Horarios desde data-timestamp oficial; fechas de bloque convertidas a America/Argentina/Buenos_Aires.",
+        "aliasReview": {
+          "official": "Joseph Kropschot",
+          "espn": "Joe Kropschot",
+          "officialProfile": "https://www.ufcespanol.com/athlete/joseph-kropschot",
+          "espnAthleteId": "4687604",
+          "notes": "Variante del nombre de pila; mismo apellido, rival y categoría. Se conserva el nombre oficial y la pelea existente."
+        }
+      },
+      "mainCardDate": "2026-10-31",
+      "mainCardTime": "21:00",
+      "preliminaryDate": "2026-10-31",
+      "preliminaryTime": "18:00"
+    },
+    {
+      "kind": "ufc_card",
+      "sourceProvider": "ufc_official",
+      "externalReference": "ufc-fight-night-november-07-2026",
+      "title": "UFC Fight Night: Bonfim vs Brady",
+      "eventDate": "2026-11-07",
+      "venue": "Meta APEX",
+      "city": "Las Vegas",
+      "country": "Estados Unidos",
+      "eventType": "fight_night",
+      "fights": [
+        {
+          "firstFighter": "Gabriel Bonfim",
+          "secondFighter": "Sean Brady",
+          "boutBlock": "main",
+          "isMainEvent": true
+        },
+        {
+          "firstFighter": "Tatiana Suarez",
+          "secondFighter": "Virna Jandiroba",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Davey Grant",
+          "secondFighter": "Elijah Smith",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Seokhyeon Ko",
+          "secondFighter": "Wellington Turman",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Billy Elekana",
+          "secondFighter": "Lucas Fernando",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Mantas Kondratavičius",
+          "secondFighter": "Wes Schultz",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Gabriel Lorenco",
+          "secondFighter": "Alvin Hines",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Karine Silva",
+          "secondFighter": "Gabriella Fernandes",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jose Delano",
+          "secondFighter": "Murtazali Magomedov",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Keiichiro Nakamura",
+          "secondFighter": "Ollie Schmid",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Austin Bashi",
+          "secondFighter": "Lucas Brennan",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Priscila Cachoeira",
+          "secondFighter": "Nina Milošević",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jonny Parsons",
+          "secondFighter": "José Souza",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        }
+      ],
+      "source": {
+        "primary": "https://www.ufc.com/event/ufc-fight-night-november-07-2026",
+        "crossCheck": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261020-20261109&limit=100",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "validation": {
+          "officialFightCount": 13,
+          "officialCardComplete": true,
+          "independentCrossCheck": "passed"
+        },
+        "notes": "Todas las peleas publicadas se cotejaron con ESPN. Horarios desde data-timestamp oficial; fechas de bloque convertidas a America/Argentina/Buenos_Aires.",
+        "aliasReview": {
+          "official": "José Souza",
+          "espn": "Jose Henrique",
+          "officialProfile": "https://www.ufcespanol.com/athlete/jose-henrique",
+          "espnAthleteId": "5080485",
+          "notes": "El enlace oficial de José Souza usa jose-henrique; el perfil confirma el récord 9-1 y el rival Jonny Parsons coincide."
+        }
+      },
+      "mainCardDate": "2026-11-07",
+      "mainCardTime": "22:00",
+      "preliminaryDate": "2026-11-07",
+      "preliminaryTime": "19:00"
+    }
+  ]
+}
