@@ -1,5 +1,7 @@
 # Champions · documentación
 
+- [Clasificación de equipos y jornadas 4–5](2026-10-20-tabla-y-agenda.md): pantalla de tabla de posiciones, fuentes, horarios y carga del 20/10/2026.
+
 - [Estado de publicación y controles generales](publicar.md): referencia vigente para la apertura de Jornada 3.
 - [Reporte público de publicación](2026-27-jornada-3-reporte.md): evidencia, validaciones y comprobaciones futuras.
 - [Auditoría de implementación](../deportes-champions-auditoria.md), [auditoría de preparación](../audit-2026-10-18.md) y [matriz de verificaciones](verificaciones-fase-1.md): registros históricos de las etapas anteriores; sus bloqueos y conteos corresponden a esas etapas.

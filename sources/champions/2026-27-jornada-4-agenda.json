@@ -1,0 +1,559 @@
+{
+  "schemaVersion": 1,
+  "sport": "champions",
+  "status": "curated",
+  "season": "2026/27",
+  "teams": [
+    {
+      "name": "Fenerbahçe",
+      "externalIds": {
+        "uefa": "52692"
+      }
+    },
+    {
+      "name": "Slavia Praha",
+      "externalIds": {
+        "uefa": "52498"
+      }
+    },
+    {
+      "name": "Sabah",
+      "externalIds": {
+        "uefa": "2609356"
+      }
+    },
+    {
+      "name": "Borussia Dortmund",
+      "externalIds": {
+        "uefa": "52758"
+      }
+    },
+    {
+      "name": "Roma",
+      "externalIds": {
+        "uefa": "50137"
+      }
+    },
+    {
+      "name": "Slovan Bratislava",
+      "externalIds": {
+        "uefa": "52797"
+      }
+    },
+    {
+      "name": "Porto",
+      "externalIds": {
+        "uefa": "50064"
+      }
+    },
+    {
+      "name": "PSV Eindhoven",
+      "externalIds": {
+        "uefa": "50062"
+      }
+    },
+    {
+      "name": "Liverpool",
+      "externalIds": {
+        "uefa": "7889"
+      }
+    },
+    {
+      "name": "Villarreal",
+      "externalIds": {
+        "uefa": "70691"
+      }
+    },
+    {
+      "name": "Manchester City",
+      "externalIds": {
+        "uefa": "52919"
+      }
+    },
+    {
+      "name": "AEK Athens",
+      "externalIds": {
+        "uefa": "50129"
+      }
+    },
+    {
+      "name": "Paris Saint-Germain",
+      "externalIds": {
+        "uefa": "52747"
+      }
+    },
+    {
+      "name": "Barcelona",
+      "externalIds": {
+        "uefa": "50080"
+      }
+    },
+    {
+      "name": "Napoli",
+      "externalIds": {
+        "uefa": "50136"
+      }
+    },
+    {
+      "name": "Bodø/Glimt",
+      "externalIds": {
+        "uefa": "59333"
+      }
+    },
+    {
+      "name": "Stuttgart",
+      "externalIds": {
+        "uefa": "50107"
+      }
+    },
+    {
+      "name": "Atlético de Madrid",
+      "externalIds": {
+        "uefa": "50124"
+      }
+    },
+    {
+      "name": "Como",
+      "externalIds": {
+        "uefa": "79946"
+      }
+    },
+    {
+      "name": "Manchester United",
+      "externalIds": {
+        "uefa": "52682"
+      }
+    },
+    {
+      "name": "Lille",
+      "externalIds": {
+        "uefa": "75797"
+      }
+    },
+    {
+      "name": "Galatasaray",
+      "externalIds": {
+        "uefa": "50067"
+      }
+    },
+    {
+      "name": "Aston Villa",
+      "externalIds": {
+        "uefa": "52683"
+      }
+    },
+    {
+      "name": "Viking",
+      "externalIds": {
+        "uefa": "52319"
+      }
+    },
+    {
+      "name": "Club Brugge",
+      "externalIds": {
+        "uefa": "50043"
+      }
+    },
+    {
+      "name": "Lens",
+      "externalIds": {
+        "uefa": "52277"
+      }
+    },
+    {
+      "name": "Bayern München",
+      "externalIds": {
+        "uefa": "50037"
+      }
+    },
+    {
+      "name": "Arsenal",
+      "externalIds": {
+        "uefa": "52280"
+      }
+    },
+    {
+      "name": "Inter",
+      "externalIds": {
+        "uefa": "50138"
+      }
+    },
+    {
+      "name": "Shakhtar Donetsk",
+      "externalIds": {
+        "uefa": "52707"
+      }
+    },
+    {
+      "name": "Real Madrid",
+      "externalIds": {
+        "uefa": "50051"
+      }
+    },
+    {
+      "name": "Leipzig",
+      "externalIds": {
+        "uefa": "2603790"
+      }
+    },
+    {
+      "name": "Real Betis",
+      "externalIds": {
+        "uefa": "52265"
+      }
+    },
+    {
+      "name": "Feyenoord",
+      "externalIds": {
+        "uefa": "52749"
+      }
+    },
+    {
+      "name": "Sporting CP",
+      "externalIds": {
+        "uefa": "50149"
+      }
+    },
+    {
+      "name": "LASK",
+      "externalIds": {
+        "uefa": "63405"
+      }
+    }
+  ],
+  "checkedAt": "2026-10-20T19:45:41.162Z",
+  "rounds": [
+    {
+      "reference": "league-4",
+      "name": "Jornada 4",
+      "originalFrom": "2026-11-03",
+      "originalThrough": "2026-11-04",
+      "matches": [
+        {
+          "externalIds": {
+            "uefa": "2049613"
+          },
+          "homeTeam": "52707",
+          "awayTeam": "50149",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T17:45:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049613--shakhtar-vs-sporting-cp/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049614"
+          },
+          "homeTeam": "50067",
+          "awayTeam": "50107",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T17:45:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049614--galatasaray-vs-stuttgart/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049608"
+          },
+          "homeTeam": "50124",
+          "awayTeam": "50037",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049608--atleti-vs-bayern-munchen/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049607"
+          },
+          "homeTeam": "50080",
+          "awayTeam": "52683",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049607--barcelona-vs-aston-villa/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049610"
+          },
+          "homeTeam": "52749",
+          "awayTeam": "50138",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049610--feyenoord-vs-inter/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049611"
+          },
+          "homeTeam": "59333",
+          "awayTeam": "75797",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049611--bodo-glimt-vs-lille/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049615"
+          },
+          "homeTeam": "63405",
+          "awayTeam": "52797",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049615--lask-vs-s-bratislava/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049609"
+          },
+          "homeTeam": "52682",
+          "awayTeam": "50137",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049609--man-utd-vs-roma/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049612"
+          },
+          "homeTeam": "70691",
+          "awayTeam": "52747",
+          "eventDate": "2026-11-03",
+          "startsAt": "2026-11-03T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049612--villarreal-vs-paris/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049622"
+          },
+          "homeTeam": "50129",
+          "awayTeam": "50051",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T17:45:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049622--aek-athens-vs-real-madrid/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049620"
+          },
+          "homeTeam": "52692",
+          "awayTeam": "7889",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T17:45:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049620--fenerbahce-vs-liverpool/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049616"
+          },
+          "homeTeam": "52758",
+          "awayTeam": "52265",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049616--b-dortmund-vs-real-betis/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049617"
+          },
+          "homeTeam": "50064",
+          "awayTeam": "50136",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049617--porto-vs-napoli/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049618"
+          },
+          "homeTeam": "50062",
+          "awayTeam": "50043",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049618--psv-vs-club-brugge/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049619"
+          },
+          "homeTeam": "2603790",
+          "awayTeam": "52919",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049619--leipzig-vs-man-city/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049623"
+          },
+          "homeTeam": "52277",
+          "awayTeam": "79946",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049623--lens-vs-como/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049621"
+          },
+          "homeTeam": "52498",
+          "awayTeam": "52280",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049621--slavia-praha-vs-arsenal/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        },
+        {
+          "externalIds": {
+            "uefa": "2049624"
+          },
+          "homeTeam": "52319",
+          "awayTeam": "2609356",
+          "eventDate": "2026-11-04",
+          "startsAt": "2026-11-04T20:00:00Z",
+          "status": "scheduled",
+          "venue": null,
+          "channel": null,
+          "neutralVenue": false,
+          "source": {
+            "uefaUrl": "https://www.uefa.com/uefachampionsleague/match/2049624--viking-vs-sabah/",
+            "kickoffConfirmed": true,
+            "note": "Horario UEFA CET (Europe/Paris, UTC+01:00 en noviembre)."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { ChampionsPageData } from "@/lib/sports/champions-server";
 import type { FootballChoice, FootballPredictionView } from "@/lib/sports/football-predictions-server";
 import { sportsNowDay } from "@/lib/sports/rules";
@@ -39,6 +40,7 @@ export default function ChampionsAgenda({ initial, admin, familyId, currentMembe
   const computable=data.matches.filter(m=>m.status!=="cancelled"&&m.resolutionKind!=="void_for_prode"),chosen=computable.filter(m=>m.prediction.ownChoice!==null).length;
   const days=[...new Set(data.matches.map(m=>m.startsAt?sportsNowDay(new Date(m.startsAt)):m.eventDate))];
   return <>
+    <nav className={styles.dashboardEntry} aria-label="Clasificación de Champions"><Link href="/deportes/champions/tabla"><span><strong>Tabla de posiciones</strong><small>Los 36 equipos · puntos, goles y clasificación</small></span><b aria-hidden="true">↗</b></Link></nav>
     {round&&<article className={styles.championsSummary}><p className={styles.eyebrow}>UEFA CHAMPIONS LEAGUE · {round.season}</p><h2 ref={roundHeading} tabIndex={-1}>{round.name}</h2><p>{round.partial?"Jornada parcial":"Jornada finalizada"} · {data.matches.length} partidos</p><div className={styles.championsProgress} role="group" aria-label="Avance de tus pronósticos"><span>Tus pronósticos</span><strong>{chosen} de {computable.length}</strong><div role="progressbar" aria-label="Pronósticos completados" aria-valuemin={0} aria-valuemax={computable.length} aria-valuenow={chosen}><i style={{width:`${computable.length?Math.round(chosen/computable.length*100):0}%`}}/></div></div><div className={styles.championsLinks}><a href="#champions-table">Tabla familiar</a><a href="#champions-round-thread">Conversación de jornada</a></div><small>Local, empate o visitante a los 90 minutos más descuento. Tus elecciones son privadas hasta el cierre de cada partido.</small></article>}
     <nav className={styles.agenda} aria-label="Jornadas de Champions"><div className={styles.agendaHeading}><h3>Elegí una jornada</h3><span>{data.rounds.length} disponibles</span></div><div className={styles.eventSelector}>{data.rounds.map(r=><button key={r.id} aria-pressed={r.id===data.selectedRoundId} onClick={()=>{navigationFocusRef.current=true;router.push(`/deportes?sport=champions&round=${r.id}`,{scroll:false});}}><strong>{r.name}</strong><span>{r.season}</span><small>{dayLabel(r.originalFrom)}{r.originalThrough!==r.originalFrom?` a ${dayLabel(r.originalThrough)}`:""}</small><span>{r.partial?"Parcial":"Finalizada"}</span></button>)}{data.rounds.length===0&&<p>No hay jornadas cargadas todavía.</p>}</div></nav>
     {round ? <><nav className={styles.championsLinks} aria-label="Días de partidos">{days.map(day=><a key={day??"unknown"} href={`#champions-day-${day??"por-confirmar"}`}>{day?dayLabel(day):"Horario a confirmar"} · {data.matches.filter(m=>(m.startsAt?sportsNowDay(new Date(m.startsAt)):m.eventDate)===day).length}</a>)}</nav>

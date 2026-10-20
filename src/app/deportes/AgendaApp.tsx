@@ -205,6 +205,11 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         </button>
         <button aria-pressed={sport === "champions"} onClick={() => navigate("champions")}>Champions</button>
       </nav>
+      {sport === "river" && (
+        <nav className={styles.dashboardEntry} aria-label="River en el campeonato">
+          <Link href="/deportes/river/campeonato"><span className={styles.dashboardMark} aria-hidden="true">RIV</span><span><strong>River en el Clausura</strong><small>Posición, goles, asistencias y tarjetas</small></span><b aria-hidden="true">↗</b></Link>
+        </nav>
+      )}
       {sport === "ufc" && initial.features?.ufc && (
         <nav className={styles.dashboardEntry} aria-label="Estadísticas UFC">
           <a href="/deportes/ufc-dashboard"><span className={styles.dashboardMark} aria-hidden="true">UFC</span><span><strong>Ranking y estadísticas</strong><small>Resultados de la familia · última velada e histórico</small></span><b aria-hidden="true">↗</b></a>

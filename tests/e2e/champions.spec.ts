@@ -104,3 +104,26 @@ test('Champions: remains available without a family switch and preserves the jor
  await page.reload();await expect(page.getByRole('heading',{name:'Jornada 3',exact:true})).toBeVisible();
  expect((await pool.query("SELECT count(*)::int n FROM sports_events WHERE family_id=$1 AND round_id=$2",[familyId,round])).rows[0].n).toBe(2);
 });
+
+test('Champions: team standings are separate from family predictions and fit mobile', async ({ page }) => {
+  await page.goto('/deportes?sport=champions');
+  await page.getByRole('link', { name: /Tabla de posiciones/ }).click();
+  await expect(page).toHaveURL(/\/deportes\/champions\/tabla$/);
+  await expect(page.getByRole('heading', { name: 'Tabla de posiciones', exact: true })).toBeVisible();
+  const table = page.getByRole('table', { name: /clasificación provisional de UEFA/ });
+  await expect(table.locator('tbody tr')).toHaveCount(36);
+  await expect(table.getByRole('columnheader', { name: 'Pts', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Ver en UEFA ↗' })).toHaveAttribute('href', 'https://www.uefa.com/uefachampionsleague/standings/');
+  for (const width of [375, 768, 1365]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width === 375) await page.screenshot({ path: `test-results/champions-standings-mobile-${test.info().project.name.replaceAll(' ', '-')}.png`, fullPage: true });
+  }
+  await page.getByRole('button', { name: 'Actualizar tabla', exact: true }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(36);
+  const { default: AxeBuilder } = await import('@axe-core/playwright');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: `test-results/champions-standings-${test.info().project.name.replaceAll(' ', '-')}.png`, fullPage: true });
+  await page.getByRole('link', { name: '‹ Champions', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Champions', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});

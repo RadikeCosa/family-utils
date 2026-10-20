@@ -541,3 +541,27 @@
   .championsSummary { padding: 17px; }
   .championsSummary h2 { font-size: 23px; }
 }
+
+.standingsScroll { max-width: 100%; overflow-x: auto; border-radius: 8px; }
+.teamStandings { width: 100%; font-variant-numeric: tabular-nums; }
+.teamStandings th, .teamStandings td { white-space: nowrap; padding: 12px 10px; }
+.teamStandings th:first-child, .teamStandings td:first-child { text-align: center; }
+.teamStandings tbody th { text-align: left; min-width: 160px; }
+.teamStandings tbody td { text-align: center; }
+.teamStandings abbr { text-decoration: none; }
+.standingsCut > * { border-top: 3px solid #526055; }
+.standingsLive { display: block; font-size: 12px; font-weight: 600; color: #294f32; }
+.standingsLegend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-weight: 700; line-height: 1.5; }
+@media (max-width: 600px) {
+  .teamStandings th, .teamStandings td { padding: 12px 8px; }
+  .teamStandings tbody th { min-width: 135px; }
+}
+
+.standingsDirect { --qualification-color: #267044; --qualification-background: #edf7ef; }
+.standingsPlayoff { --qualification-color: #2459a1; --qualification-background: #edf3fc; }
+.standingsOutside { --qualification-color: #68716b; --qualification-background: #f3f4f2; }
+.teamStandings tbody tr > * { background: var(--qualification-background); }
+.teamStandings tbody tr > :first-child { border-left: 4px solid var(--qualification-color); }
+.standingsPosition { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 30px; border-radius: 8px; color: #fff; background: var(--qualification-color); font-weight: 800; }
+.standingsLegend > span { display: inline-flex; align-items: center; gap: 8px; }
+.standingsLegend > span::before { content: ""; flex: 0 0 14px; width: 14px; height: 14px; border-radius: 3px; background: var(--qualification-color); }

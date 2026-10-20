@@ -22,9 +22,11 @@ referencia externa, solo se reutiliza un evento equivalente único dentro de
 siete días; si la coincidencia es ambigua, la categoría no se importa.
 
 La información actual preparada para importar está en
-[`deportes-carga-2026-10-15.json`](deportes-carga-2026-10-15.json). La cartelera
-UFC del 31 de octubre tiene validación oficial completa y verificación
-independiente pendiente; esa advertencia aparece en la vista previa.
+[`deportes-carga-2026-10-20.json`](deportes-carga-2026-10-20.json), aplicada en
+producción con tres próximos de River y tres de UFC. Las carteleras tienen
+verificación oficial y cotejo con ESPN; Aldosivi–River conserva fecha provisional
+y horario a confirmar. Fuentes y comprobaciones en el
+[informe de actualización](deportes-carga-2026-10-20-reporte.md).
 
 ## Presentación y datos familiares
 
