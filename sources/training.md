@@ -20,6 +20,8 @@ la base también comprueba la estructura y los límites con `training_blocks_val
 conserva su copia de nombre y bloques aunque la rutina se edite o archive. El
 origen es obligatorio e inmutable. Corregir permite cambiar todos los datos de la
 sesión salvo su origen, propietario e identidad. No hay borrado definitivo.
+Desde `0054_training_optional_metrics`, duración y esfuerzo pueden ser NULL;
+los límites CHECK siguen aplicándose a cualquier valor informado.
 
 ### API privada
 
@@ -34,6 +36,23 @@ sesión salvo su origen, propietario e identidad. No hay borrado definitivo.
 - `GET /api/training/sessions/[id]`.
 - `PATCH /api/training/sessions/[id]`: los campos de creación, reemplazando
   `operationKey` por `version`.
+
+`TRAINING_OPTIONAL_METRICS_ENABLED` permite sesiones sin duración ni esfuerzo y
+permanece apagada por defecto. Controla la API: apagada, ambos campos siguen
+siendo obligatorios; activa, todos los endpoints de sesiones requieren
+`X-Training-Contract: 2` y aceptan NULL. Los clientes antiguos autenticados
+reciben 409 `CLIENT_UPDATE_REQUIRED` antes de consultar o modificar sesiones.
+Las respuestas del contrato 2 incluyen ambos campos, con `null` cuando no se
+informaron. Omisión y `null` se normalizan igual antes de calcular la huella
+idempotente; un valor informado sigue siendo distinto de uno ausente. Los hashes
+históricos completos no cambian.
+
+`TRAINING_OPTIONAL_METRICS_FORM_ENABLED` controla solo el formulario y también
+permanece apagada por defecto. La interfaz lo muestra como opcional únicamente
+cuando ambas banderas están activas. Tras guardar el primer NULL, mantener activa
+la bandera de API para conservar la lectura compatible con contrato 2; apagar la
+bandera del formulario permite exigir nuevamente las métricas sin romper esas
+lecturas.
 
 Ejercicio: `{ name, mode: "repetitions", repetitions }` o
 `{ name, mode: "time", seconds }`. Bloque: `{ name, rounds, exercises }`.
@@ -70,8 +89,9 @@ página ni escritura offline.
 3. Registro, historial y corrección; recorrido móvil y accesibilidad.
 
 Las tres etapas se implementan detrás de una bandera desactivada por defecto.
-La migración nueva es `0053_training`, posterior a `0052_ufc_scoring`; no editar
-SQL ni hashes de migraciones anteriores. Antes de publicar, comparar nuevamente
+La migración `0053_training` incorporó el módulo. La migración nueva es
+`0054_training_optional_metrics`; no editar SQL ni hashes de migraciones
+anteriores. Antes de publicar, comparar nuevamente
 archivos, diario y migraciones aplicadas en el destino con `npm run db:check` y
 la verificación de hashes. No renumerar una migración ya aplicada.
 
@@ -96,7 +116,28 @@ la verificación de hashes. No renumerar una migración ya aplicada.
 - Verificar páginas y API bloqueadas; habilitar solo al completar la aceptación.
   Ante problemas, apagar la bandera conservando las tablas y el historial.
 
+Para liberar métricas opcionales, aplicar primero `0054` y desplegar API y cliente
+con ambas banderas apagadas. Activar `TRAINING_OPTIONAL_METRICS_ENABLED` y probar
+contrato 2 mientras el formulario sigue exigiendo métricas; después activar
+`TRAINING_OPTIONAL_METRICS_FORM_ENABLED`. Si ya se guardaron NULL, mantener activa
+la bandera de API y no restaurar NOT NULL. Apagar solo la bandera del formulario
+vuelve a exigir métricas y conserva lecturas y correcciones compatibles con NULL.
+
 El ensayo local no sustituye el ensayo Neon ni certifica el respaldo de producción.
+
+### Preparación de métricas opcionales — 21/10/2026
+
+- Antes del cambio, Vercel producción servía `main` en `c2eabb5`; coincide con
+  el checkout revisado. `TRAINING_ENABLED=true` y
+  `TRAINING_OPTIONAL_METRICS_ENABLED` todavía no estaba configurada.
+- La base de producción tenía 44 migraciones hasta `0053_training`. Los 44
+  hashes y marcas de tiempo coinciden con el diario local. `training_sessions`
+  no tenía registros y ambas métricas seguían `NOT NULL`.
+- La bandera nueva de API estaba ausente y la bandera del formulario opcional no
+  estaba configurada; ambas permanecen apagadas por defecto.
+- La migración `0054_training_optional_metrics` está pendiente. No se aplicó en
+  producción durante esta implementación. El entorno local no tiene una base
+  aislada disponible para ensayar PostgreSQL ni ejecutar el recorrido móvil.
 
 ## Verificación reproducible
 
@@ -107,6 +148,10 @@ migrado. La prueba de actualización crea y retira otra base temporal.
 - Build y rutas: `npm run build`, luego `node --test tests/training-routes.integration.mjs`.
 - Móvil y accesibilidad: `npx playwright test tests/e2e/training.spec.ts --project='iPhone viewport' --project='Android viewport'`.
 - Calidad general: `npm run lint`, `npm run typecheck`, `npm test`.
+
+La cobertura de métricas opcionales verifica normalización idempotente de omisión
+y NULL, rechazo de clientes viejos con la bandera activa, correcciones concurrentes
+con control de versión y guardado móvil sin métricas seguido de completarlas.
 
 Las pruebas de rutas crean perfiles sintéticos, servidores separados con bandera
 apagada/encendida y verifican claves concurrentes, archivo, aislamiento, paginación

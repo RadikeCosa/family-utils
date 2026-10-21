@@ -32,6 +32,8 @@ export default defineConfig({
       BETTER_AUTH_URL: baseURL,
       LIBRARY_ENABLED: "true",
       TRAINING_ENABLED: "true",
+      TRAINING_OPTIONAL_METRICS_ENABLED: "true",
+      TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true",
       SPORTS_ENABLED: "true",
       SPORTS_AGENDA_ENABLED: "true",
       SPORTS_RIVER_RESULTS_ENABLED: "true",

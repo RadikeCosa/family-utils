@@ -27,6 +27,17 @@ test("session date, effort, duration, note and source constraints", () => {
   for (const patch of [{ durationSeconds: 0 }, { durationSeconds: 86401 }, { durationSeconds: 1.5 }, { effort: 0 }, { effort: 11 }, { effort: 2.5 }, { sourceRoutineId: "bad" }, { note: "😀".repeat(2001) }]) assert.throws(() => validateSession({ ...session(), ...patch }, "2026-10-20"));
   assert.doesNotThrow(() => validateSession({ ...session(), durationSeconds: 86400, note: "😀".repeat(2000) }, "2026-10-20"));
 });
+test("optional session metrics are explicit nulls, while required mode and zero duration fail", () => {
+  const absent = { ...session(), durationSeconds: undefined, effort: undefined };
+  assert.throws(() => validateSession(absent, "2026-10-20"));
+  const optional = validateSession(absent, "2026-10-20", true);
+  assert.equal(optional.durationSeconds, null); assert.equal(optional.effort, null);
+  assert.deepEqual(validateSession({ ...session(), durationSeconds: null, effort: null }, "2026-10-20", true), optional);
+  for (const durationSeconds of [0, 86401, 1.5]) assert.throws(() => validateSession({ ...session(), durationSeconds }, "2026-10-20", true));
+  assert.doesNotThrow(() => validateSession({ ...session(), durationSeconds: 60, effort: null }, "2026-10-20", true));
+  assert.doesNotThrow(() => validateSession({ ...session(), durationSeconds: null, effort: 1 }, "2026-10-20", true));
+  assert.equal(effortLabel(null), "Sin registrar");
+});
 test("family day and effort wording have one definition", () => {
   assert.equal(todayInZone("America/Argentina/Buenos_Aires", new Date("2026-10-21T01:30:00Z")), "2026-10-20");
   assert.deepEqual(Array.from({ length: 10 }, (_, i) => effortLabel(i + 1)), ["Suave", "Suave", "Suave", "Moderado", "Moderado", "Moderado", "Intenso", "Intenso", "Máximo", "Máximo"]);
