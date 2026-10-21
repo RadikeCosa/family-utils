@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
-import { trainingEnabled } from "./config";
+import { optionalTrainingMetricsEnabled, trainingEnabled } from "./config";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor";
 import { identifier, integer, LIMITS, object, onlyKeys, todayInZone, TrainingValidationError, UUID, validateRoutine, validateSession } from "./rules";
 import type { RoutineInput, SessionInput, TrainingBlock } from "./types";
@@ -57,7 +57,7 @@ export async function readTrainingBody(request: Request): Promise<Record<string,
 interface TrainingRow {
   id: string; name: string; blocks: TrainingBlock[]; version: number; archived_at?: Date | null;
   created_at: Date; updated_at: Date; cursor_at: string; creation_hash: string;
-  source_routine_id?: string; performed_on?: string; duration_seconds?: number; effort?: number; note?: string;
+  source_routine_id?: string; performed_on?: string; duration_seconds?: number | null; effort?: number | null; note?: string;
 }
 function mapRow(row: TrainingRow, kind: Kind) {
   const common = { id: row.id, name: row.name, blocks: row.blocks, version: row.version, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString() };
@@ -77,6 +77,9 @@ export async function readTraining(request: Request, kind: Kind, id?: string) {
   let tx: PoolClient | undefined;
   try {
     const actor = await actorFor(request); const today = todayInZone(actor.familyTimeZone);
+    if (kind === "sessions" && optionalTrainingMetricsEnabled() && request.headers.get("x-training-contract") !== "2") {
+      return response({ error: "Actualizá la página para consultar o registrar entrenamientos.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
+    }
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
     if (id) {
       const item = mapRow(await getOwned(tx, kind, actor, id), kind);
@@ -114,6 +117,9 @@ export async function mutateTraining(request: Request, kind: Kind, id?: string) 
     const origin = request.headers.get("origin");
     if (origin && origin !== new URL(request.url).origin) fail(403, "NO_ACCESS", "Origen no permitido.");
     const actor = await actorFor(request); const today = todayInZone(actor.familyTimeZone);
+    if (kind === "sessions" && optionalTrainingMetricsEnabled() && request.headers.get("x-training-contract") !== "2") {
+      return response({ error: "Actualizá la página para consultar o registrar entrenamientos.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
+    }
     const body = await readTrainingBody(request);
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
     let item: TrainingRow;
@@ -127,7 +133,7 @@ export async function mutateTraining(request: Request, kind: Kind, id?: string) 
         item = rows[0];
       } else {
         onlyKeys(body, [...(kind === "sessions" ? sessionKeys : routineKeys), "version"]);
-        const input = kind === "sessions" ? validateSession(body, today) : validateRoutine(body);
+        const input = kind === "sessions" ? validateSession(body, today, optionalTrainingMetricsEnabled()) : validateRoutine(body);
         if (kind === "sessions" && (input as SessionInput).sourceRoutineId !== previous.source_routine_id) throw new TrainingValidationError("La rutina de origen no se puede cambiar.");
         const values: unknown[] = [input.name, JSON.stringify(input.blocks), id, actor.memberId, actor.familyId];
         let extra = "";
@@ -141,7 +147,7 @@ export async function mutateTraining(request: Request, kind: Kind, id?: string) 
     } else {
       onlyKeys(body, [...(kind === "sessions" ? sessionKeys : routineKeys), "operationKey"]);
       const operationKey = identifier(body.operationKey);
-      const input: RoutineInput | SessionInput = kind === "sessions" ? validateSession(body, today) : validateRoutine(body);
+      const input: RoutineInput | SessionInput = kind === "sessions" ? validateSession(body, today, optionalTrainingMetricsEnabled()) : validateRoutine(body);
       const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
       // Serialize matching keys even before the first row exists. Hash collisions only serialize unrelated writes.
       await tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`training:${kind}:${actor.memberId}:${operationKey}`]);

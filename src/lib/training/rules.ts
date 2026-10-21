@@ -61,13 +61,20 @@ export function validateRoutine(value: unknown): RoutineInput {
   });
   return { name, blocks };
 }
-export function validateSession(value: unknown, today: string): SessionInput {
+export function validateSession(value: unknown, today: string, allowOptionalMetrics = false): SessionInput {
   const input = object(value);
   const performedOn = calendarDate(input.performedOn);
   if (performedOn > today) invalid("La fecha no puede ser posterior a hoy.");
+  const optionalNumber = (field: "durationSeconds" | "effort", label: string, max: number): number | null => {
+    if (input[field] === undefined || input[field] === null) {
+      if (!allowOptionalMetrics) invalid(`${label}: este dato es obligatorio.`);
+      return null;
+    }
+    return integer(input[field], label, max);
+  };
   return { ...validateRoutine(input), sourceRoutineId: identifier(input.sourceRoutineId), performedOn,
-    durationSeconds: integer(input.durationSeconds, "Duración total", LIMITS.durationSeconds),
-    effort: integer(input.effort, "Esfuerzo", 10), note: text(input.note ?? "", "Nota", LIMITS.note, false) };
+    durationSeconds: optionalNumber("durationSeconds", "Duración total", LIMITS.durationSeconds),
+    effort: optionalNumber("effort", "Esfuerzo", 10), note: text(input.note ?? "", "Nota", LIMITS.note, false) };
 }
-export function effortLabel(effort: number) { return effort <= 3 ? "Suave" : effort <= 6 ? "Moderado" : effort <= 8 ? "Intenso" : "Máximo"; }
+export function effortLabel(effort: number | null) { if (effort === null) return "Sin registrar"; return effort <= 3 ? "Suave" : effort <= 6 ? "Moderado" : effort <= 8 ? "Intenso" : "Máximo"; }
 export function formatDuration(seconds: number) { return `${Math.floor(seconds / 60)} min${seconds % 60 ? ` ${seconds % 60} s` : ""}`; }

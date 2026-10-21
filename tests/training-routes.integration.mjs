@@ -7,9 +7,9 @@ import pg from "pg";
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATABASE_URL required");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function start(port, enabled) {
+async function start(port, enabled, optionalMetrics = false) {
   const origin = `http://localhost:${port}`;
-  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, TRAINING_ENABLED: String(enabled), BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "training-test-only-secret-not-production", CODE_PEPPER: "training-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, TRAINING_ENABLED: String(enabled), TRAINING_OPTIONAL_METRICS_ENABLED: String(optionalMetrics), BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "training-test-only-secret-not-production", CODE_PEPPER: "training-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
   for (let attempt = 0; ; attempt++) {
     if (server.exitCode !== null) throw new Error("Training server failed");
     try { if ((await fetch(origin)).ok) return { origin, server }; } catch { /* waiting for listener */ }
@@ -24,7 +24,7 @@ test("training authenticated API: gates, isolation, replay, concurrency, history
     for (const [path, methods] of [["/entrenamiento", ["GET"]], ["/api/training/routines", ["GET", "POST"]], ["/api/training/sessions", ["GET", "POST"]], ["/api/training/routines/123", ["GET", "PATCH"]], ["/api/training/sessions/123", ["GET", "PATCH"]]]) for (const method of methods) assert.equal((await fetch(disabled.origin + path, { method })).status, 404);
     assert.ok(!(await fetch(disabled.origin).then((r) => r.text())).includes('href="/entrenamiento"'));
   } finally { await stop(disabled.server); }
-  const { origin, server } = await start(3351, true); const pool = new pg.Pool({ connectionString });
+  const { origin, server } = await start(3351, true, true); const pool = new pg.Pool({ connectionString });
   const families = [], users = [];
   async function family() { const row = (await pool.query("INSERT INTO families(name) VALUES($1) RETURNING id", [`training-${randomUUID()}`])).rows[0]; families.push(row.id); return row.id; }
   async function identity(familyId, role = "member", existingMember, unbound = false) {
@@ -36,7 +36,7 @@ test("training authenticated API: gates, isolation, replay, concurrency, history
     await pool.query("INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)", [id, session.user.id]); return { cookie, id, userId: session.user.id };
   }
   async function req(person, path = "routines", method = "GET", body, headers = {}) {
-    const r = await fetch(`${origin}/api/training/${path}`, { method, headers: { Cookie: person?.cookie ?? "", Origin: origin, "Content-Type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const r = await fetch(`${origin}/api/training/${path}`, { method, headers: { Cookie: person?.cookie ?? "", Origin: origin, "Content-Type": "application/json", ...(path.startsWith("sessions") ? { "X-Training-Contract": "2" } : {}), ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: r.status, body: await r.json(), cache: r.headers.get("cache-control") };
   }
   const create = (name = "Circuito") => ({ name, blocks: structuredClone(blocks), operationKey: randomUUID() });
@@ -86,6 +86,22 @@ test("training authenticated API: gates, isolation, replay, concurrency, history
       await req(owner, `routines/${routine.id}`, "PATCH", { name: "Changed", blocks: [{ ...blocks[0], rounds: 9 }], version: routine.version });
       assert.equal((await req(owner, `sessions/${session.id}`)).body.item.blocks[0].rounds, 2);
     });
+    await t.test("optional metrics normalize idempotent retries and reject old clients", async () => {
+      const today = (await req(owner)).body.today;
+      const oldClient = await fetch(`${origin}/api/training/sessions`, { headers: { Cookie: owner.cookie } });
+      assert.equal(oldClient.status, 409); assert.equal((await oldClient.json()).code, "CLIENT_UPDATE_REQUIRED");
+      const input = { name: "Sin métricas", blocks, sourceRoutineId: routine.id, performedOn: today, note: "", operationKey: randomUUID() };
+      const first = await req(owner, "sessions", "POST", input); assert.equal(first.status, 201); assert.equal(first.body.item.durationSeconds, null); assert.equal(first.body.item.effort, null);
+      const replay = await req(owner, "sessions", "POST", { ...input, durationSeconds: null, effort: null }); assert.equal(replay.status, 200); assert.equal(replay.body.item.id, first.body.item.id);
+      const changed = await req(owner, "sessions", "POST", { ...input, durationSeconds: 600 }); assert.equal(changed.status, 409);
+      const competing = await req(owner, "sessions", "POST", { ...input, operationKey: randomUUID(), name: "Edición concurrente", durationSeconds: 600, effort: 4 });
+      assert.equal(competing.status, 201);
+      const edits = await Promise.all([
+        req(owner, `sessions/${competing.body.item.id}`, "PATCH", { ...input, operationKey: undefined, name: "Edición concurrente", durationSeconds: 600, effort: null, version: 1 }),
+        req(owner, `sessions/${competing.body.item.id}`, "PATCH", { ...input, operationKey: undefined, name: "Edición concurrente", durationSeconds: 600, effort: 8, version: 1 }),
+      ]);
+      assert.deepEqual(edits.map((r) => r.status).sort(), [200, 409]);
+    });
     await t.test("archive serializes with session creation; replay and full correction still work", async () => {
       routine = (await req(owner, `routines/${routine.id}`)).body.item;
       const blocker = await pool.connect();
@@ -111,7 +127,7 @@ test("training authenticated API: gates, isolation, replay, concurrency, history
         for (const row of result.body.items) { assert.ok(!seen.has(row.id));seen.add(row.id); }
         path=result.body.nextCursor ? `sessions?limit=20&cursor=${encodeURIComponent(result.body.nextCursor)}` : null;
       } while (path);
-      assert.equal(seen.size,49);
+      assert.equal(seen.size,51);
       assert.equal((await req(peer,`sessions?cursor=${encodeURIComponent(first)}`)).status,400);
       const page=await req(owner,"routines?limit=1"); assert.ok(page.body.nextCursor);
       assert.equal((await req(owner,`routines?archived=true&cursor=${encodeURIComponent(page.body.nextCursor)}`)).status,400);

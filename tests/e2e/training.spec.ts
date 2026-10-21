@@ -52,9 +52,10 @@ test("mobile full story: mixed blocks, keyboard reorder, independent actuals, hi
   await page.getByRole("button", { name: "Guardar rutina", exact: true }).click();
   await page.getByRole("button", { name: "Ver Circuito personal", exact: true }).click();
   await page.getByRole("button", { name: "Registrar entrenamiento", exact: true }).click();
+  await page.getByText("Ajustar lo realizado", { exact: true }).click();
   await page.getByLabel("Vueltas", { exact: true }).nth(1).fill("2");
-  await page.getByLabel("Minutos", { exact: true }).fill("25");
-  await page.getByRole("combobox", { name: "Esfuerzo percibido", exact: true }).selectOption("7");
+  await page.getByLabel("Minutos (opcional)", { exact: true }).fill("25");
+  await page.getByRole("combobox", { name: "Esfuerzo percibido (opcional)", exact: true }).selectOption("7");
   await page.getByLabel("Nota (opcional)").fill("Hoy hice dos vueltas.");
   await page.getByRole("button", { name: "Guardar entrenamiento", exact: true }).click();
   await expect(page.getByRole("button", { name: "Historial", exact: true })).toHaveAttribute("aria-current", "page");
@@ -62,8 +63,9 @@ test("mobile full story: mixed blocks, keyboard reorder, independent actuals, hi
   await expect(page.getByText("Hoy hice dos vueltas.", { exact: true })).toBeVisible();
   await expect(page.locator("main")).toContainText("2 vueltas");
   await page.getByRole("button", { name: "Corregir entrenamiento" }).click();
+  await page.getByText("Ajustar lo realizado", { exact: true }).click();
   await page.getByLabel("Nombre", { exact: true }).fill("Circuito corregido");
-  await page.getByLabel("Minutos", { exact: true }).fill("20");
+  await page.getByLabel("Minutos (opcional)", { exact: true }).fill("20");
   await page.getByLabel("Vueltas", { exact: true }).nth(1).fill("1");
   await page.getByRole("button", { name: "Guardar entrenamiento", exact: true }).click();
   await expect(page.getByRole("button", { name: "Ver Circuito corregido", exact: true })).toBeVisible();
@@ -84,6 +86,31 @@ test("mobile full story: mixed blocks, keyboard reorder, independent actuals, hi
   expect((await new AxeBuilder({ page }).include("main").analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath("training-history.png"), fullPage: true });
+});
+test("quick session accepts missing metrics and keeps exercise adjustments folded until requested", async ({ page }) => {
+  await page.goto("/entrenamiento"); await page.getByRole("button", { name: "Nueva rutina", exact: true }).click();
+  await page.getByLabel("Nombre", { exact: true }).fill("Rutina breve");
+  await page.getByLabel("Nombre del ejercicio", { exact: true }).fill("Movilidad");
+  await page.getByLabel("Repeticiones por vuelta").fill("8");
+  await page.getByRole("button", { name: "Guardar rutina", exact: true }).click();
+  const routineCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Rutina breve" }) });
+  await routineCard.getByRole("button", { name: "Registrar entrenamiento" }).click();
+  await expect(page.getByText("Ajustar lo realizado", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Vueltas", { exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "Guardar entrenamiento", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Historial", exact: true })).toHaveAttribute("aria-current", "page");
+  const sessionCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Rutina breve" }) });
+  await expect(sessionCard).toContainText("Duración: Sin registrar");
+  await expect(sessionCard).toContainText("Esfuerzo: Sin registrar");
+  await sessionCard.getByRole("button", { name: "Ver Rutina breve" }).click();
+  await expect(page.locator("main")).toContainText("Duración: Sin registrar");
+  await page.getByRole("button", { name: "Corregir entrenamiento" }).click();
+  await page.getByLabel("Minutos (opcional)", { exact: true }).fill("12");
+  await page.getByRole("combobox", { name: "Esfuerzo percibido (opcional)", exact: true }).selectOption("5");
+  await page.getByRole("button", { name: "Guardar entrenamiento", exact: true }).click();
+  await page.getByRole("button", { name: "Ver Rutina breve", exact: true }).click();
+  await expect(page.locator("main")).toContainText("Duración: 12 min");
+  await expect(page.locator("main")).toContainText("Esfuerzo: 5/10 (Moderado)");
 });
 test("lost create response retries once; edit conflict preserves form until explicit reload", async ({ page }) => {
   await page.goto("/entrenamiento"); await page.getByRole("button", { name: "Nueva rutina", exact: true }).click();
