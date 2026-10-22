@@ -82,7 +82,7 @@ test("entry is today/day; dated reload, back/forward and secondary week preserve
 test("adult conflict keeps the current dish visible before saving a replacement",async({page})=>{
   await addDish("Pasta");await page.goto("/menus");const lunch=page.getByRole("article",{name:"Almuerzo",exact:true});
   const state=await api.get("/api/meals/planner").then(r=>r.json()),meal=state.meals.find((m:{date:string;mealType:string})=>m.date===getDayInTimeZone()&&m.mealType==="lunch");
-  expect((await api.put("/api/meals/planner",{headers:{Origin:baseURL},data:{date:meal.date,mealType:"lunch",expectedVersion:meal.version,action:"confirm",menu:1,title:"Sopa"}})).status()).toBe(200);
+  expect((await api.put("/api/meals/planner",{headers:{Origin:baseURL},data:{date:meal.date,mealType:"lunch",expectedVersion:meal.version,action:"confirm",menu:1,title:"Sopa",replace:true}})).status()).toBe(200);
   await lunch.getByRole("button",{name:"Cambiar comida",exact:true}).click();
   let dialog=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await dialog.getByLabel("¿Qué vamos a comer?").fill("Pasta");
@@ -97,11 +97,13 @@ test("adult conflict keeps the current dish visible before saving a replacement"
 test("annotating a dish does not add it to the day and it can be reused",async({page})=>{
   await page.goto("/menus");const lunch=page.getByRole("article",{name:"Almuerzo",exact:true});
   await lunch.getByRole("button",{name:"Agregar comida",exact:true}).click();
-  const bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
+  let bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await bank.getByLabel("¿Qué vamos a comer?").fill("Puré familiar");
   await bank.getByRole("button",{name:"Anotar para otro día",exact:true}).click();
-  await bank.getByLabel("Nota opcional",{exact:true}).fill("Sin sal");
-  await bank.getByRole("button",{name:"Guardar plato",exact:true}).click();
+  const annotation=page.getByRole("dialog",{name:"Anotar para otro día",exact:true});
+  await annotation.getByLabel("Nota opcional",{exact:true}).fill("Sin sal");
+  await annotation.getByRole("button",{name:"Guardar plato",exact:true}).click();
+  bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await expect(lunch.getByText("Todavía no elegimos qué comer",{exact:true})).toBeVisible();
   await expect(bank.getByRole("heading",{name:"Agregar comida",exact:true})).toBeVisible();
   await bank.getByLabel("¿Qué vamos a comer?").fill("Puré familiar");
