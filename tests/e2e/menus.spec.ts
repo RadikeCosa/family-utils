@@ -114,7 +114,7 @@ test("annotating a dish does not add it to the day and it can be reused",async({
   await lunch.getByRole("button",{name:"Cambiar comida",exact:true}).click();
   await bank.getByRole("button",{name:"Ver todos los platos",exact:true}).click();
   await bank.getByRole("button",{name:/Editar.*Puré familiar/}).click();
-  let edit=page.getByRole("dialog",{name:"Editar plato",exact:true});
+  const edit=page.getByRole("dialog",{name:"Editar plato",exact:true});
   await edit.getByLabel("Nombre",{exact:true}).fill("Puré con calabaza");
   await edit.getByRole("button",{name:"Guardar plato",exact:true}).click();
   bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
