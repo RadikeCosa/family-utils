@@ -51,7 +51,7 @@ export async function PUT(request: Request) {
         let suggestion = isUuid(body.suggestionId) ? (await tx.select().from(mealSuggestions).where(and(eq(mealSuggestions.id, body.suggestionId), eq(mealSuggestions.slotId, slot.id), isNull(mealSuggestions.withdrawnAt))).limit(1))[0] : undefined;
         if (body.suggestionId !== undefined && !suggestion) throw new MealError("La idea ya no está disponible.");
         if (!suggestion) {
-          let title = typeof body.title === "string" ? body.title.trim() : "";
+          let title = typeof body.title === "string" ? body.title.trim().replace(/\s+/g, " ") : "";
           let note = typeof body.note === "string" ? body.note.trim() : "";
           let catalogIdeaId: string | null = null;
           if (body.catalogIdeaId !== undefined) {
