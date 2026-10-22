@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, mealIdeas } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { isUuid, parseIdeaFields } from "@/lib/meals/rules";
+import { isUuid, normalizeMealIdea, parseIdeaFields } from "@/lib/meals/rules";
 import { lockFamilyActor, bumpMenusRevision, MealError } from "@/lib/meals/server";
 export const runtime="nodejs";
 export async function PATCH(request:Request,{params}:{params:Promise<{ideaId:string}>}) {
@@ -24,7 +24,10 @@ export async function PATCH(request:Request,{params}:{params:Promise<{ideaId:str
    if(!before)throw new MealError("No se encontró la idea.",404);
    if(current.role!=="administrator"&&before.authorMemberId!==current.memberId)throw new MealError("Solo podés administrar tus propias ideas.",403);
    if(before.version!==body.expectedVersion)throw new MealError("La idea cambió mientras editabas. Tu borrador se conserva; volvé al banco para consultar la versión actual.",409);
-   const [after]=await tx.update(mealIdeas).set({...fields,...(action==="archive"?{archivedAt:new Date()}:action==="restore"?{archivedAt:null}:{}),version:before.version+1,updatedAt:new Date()}).where(eq(mealIdeas.id,before.id)).returning();
+   if(before.mergedIntoId)throw new MealError("Este plato se unificó con otro del repertorio. Buscalo por su nombre.",409);
+   const normalizedTitle=fields?normalizeMealIdea(fields.title).replace(/\s+/g," "):before.normalizedTitle;
+   if(fields){const [duplicate]=await tx.select({id:mealIdeas.id}).from(mealIdeas).where(and(eq(mealIdeas.familyId,actor.familyId),eq(mealIdeas.normalizedTitle,normalizedTitle),isNull(mealIdeas.mergedIntoId))).limit(1);if(duplicate&&duplicate.id!==before.id)throw new MealError("Ya existe un plato con ese nombre en el repertorio.",409);}
+   const [after]=await tx.update(mealIdeas).set({...fields,...(fields?{normalizedTitle}:{}),...(action==="archive"?{archivedAt:new Date()}:action==="restore"?{archivedAt:null}:{}),version:before.version+1,updatedAt:new Date()}).where(eq(mealIdeas.id,before.id)).returning();
    await tx.insert(auditEvents).values({familyId:actor.familyId,actorMemberId:current.memberId,entityType:"meal_idea",entityId:before.id,action:action==="edit"?"updated":action==="archive"?"archived":"restored",before,after});
    await bumpMenusRevision(tx,actor.familyId);return after;
   });

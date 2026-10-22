@@ -14,7 +14,7 @@ export type LegacyInput = {
   attendance: { memberId: string; status: string | null }[];
   selection: DailySelection | null;
 };
-export const STATUS_LABELS: Record<ParticipationStatus, string> = { home: "Está", packed: "Se lleva", away: "No preparar", unknown: "Sin elegir" };
+export const STATUS_LABELS: Record<ParticipationStatus, string> = { home: "Come en casa", packed: "Se lleva comida", away: "No necesita comida", unknown: "Falta indicar" };
 export function needsMeal(status: ParticipationStatus) { return status === "home" || status === "packed"; }
 export function canChangePerson(role: FamilyRole, actorId: string, targetId: string) { return role === "administrator" || actorId === targetId; }
 export function emptyPlan(memberIds: string[]): DailyPlan {
@@ -24,7 +24,7 @@ export function participationSummary(people: DailyPerson[]): string {
   const home = people.filter(p => p.status === "home").length;
   const packed = people.filter(p => p.status === "packed").length;
   const pending = people.filter(p => p.status === "unknown").length;
-  if (pending === people.length && pending > 0) return "Falta definir";
+  if (pending === people.length && pending > 0) return "Falta indicar";
   if (!home && !packed) return pending ? `0 para preparar · ${pending} por definir` : "No hay que preparar";
   return `${home} en casa · ${packed} para llevar${pending ? ` · ${pending} por definir` : ""}`;
 }

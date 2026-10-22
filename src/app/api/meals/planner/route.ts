@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, mealDailyPlans, mealIdeas, mealSuggestions } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { addDays, getDayInTimeZone, hasMealAttendance, isMealType, isMenuDateInRange, isParticipationStatus, isUuid, isValidDate, menuDateBounds, startOfWeek } from "@/lib/meals/rules";
+import { addDays, getDayInTimeZone, hasMealAttendance, isMealType, isMenuDateInRange, isParticipationStatus, isUuid, isValidDate, menuDateBounds, normalizeMealIdea, startOfWeek } from "@/lib/meals/rules";
 import { addSecondMenu, canChangePerson, changePerson, duplicateMenu, needsMeal, removeSecondMenu, type DailySelection, type MenuNumber } from "@/lib/meals/daily";
 import { loadPlanner } from "@/lib/meals/planner-server";
 import { bumpMenusRevision, lockFamilyActor, lockMealSlot, MealError } from "@/lib/meals/server";
@@ -48,7 +48,6 @@ export async function PUT(request: Request) {
         if (body.menu && (!needsMeal(body.status) || !plan.menus.some(m => m.number === body.menu))) throw new MealError("Ese menú no está disponible.");
         plan = changePerson(plan, body.memberId, body.status, body.menu as MenuNumber | undefined);
       } else if (body.action === "propose" || body.action === "confirm") {
-        if (body.action === "confirm" && current.role !== "administrator") throw new MealError("Solo una persona adulta puede confirmar el menú.", 403);
         let suggestion = isUuid(body.suggestionId) ? (await tx.select().from(mealSuggestions).where(and(eq(mealSuggestions.id, body.suggestionId), eq(mealSuggestions.slotId, slot.id), isNull(mealSuggestions.withdrawnAt))).limit(1))[0] : undefined;
         if (body.suggestionId !== undefined && !suggestion) throw new MealError("La idea ya no está disponible.");
         if (!suggestion) {
@@ -57,21 +56,44 @@ export async function PUT(request: Request) {
           let catalogIdeaId: string | null = null;
           if (body.catalogIdeaId !== undefined) {
             if (!isUuid(body.catalogIdeaId)) throw new MealError("Idea guardada inválida.");
-            const [idea] = await tx.select().from(mealIdeas).where(and(eq(mealIdeas.id, body.catalogIdeaId), eq(mealIdeas.familyId, actor.familyId), isNull(mealIdeas.archivedAt))).limit(1);
-            if (!idea) throw new MealError("La idea guardada ya no está disponible.");
+            const [idea] = await tx.select().from(mealIdeas).where(and(eq(mealIdeas.id, body.catalogIdeaId), eq(mealIdeas.familyId, actor.familyId), isNull(mealIdeas.mergedIntoId))).limit(1);
+            if (!idea || (idea.archivedAt && body.action !== "confirm")) throw new MealError("El plato ya no está disponible.");
             title = idea.title; note = idea.note ?? ""; catalogIdeaId = idea.id;
           }
+          const selectedFromCatalog = !!catalogIdeaId;
           if (!title || title.length > 160 || note.length > 1000) throw new MealError("Escribí un plato de hasta 160 caracteres y una nota de hasta 1.000.");
+          {
+            const normalizedTitle = normalizeMealIdea(title).replace(/\s+/g, " ");
+            let [catalog] = catalogIdeaId
+              ? await tx.select().from(mealIdeas).where(and(eq(mealIdeas.id, catalogIdeaId), eq(mealIdeas.familyId, actor.familyId))).limit(1)
+              : await tx.select().from(mealIdeas).where(and(eq(mealIdeas.familyId, actor.familyId), eq(mealIdeas.normalizedTitle, normalizedTitle))).limit(1);
+            if (catalog?.mergedIntoId) {
+              [catalog] = await tx.select().from(mealIdeas).where(and(eq(mealIdeas.id, catalog.mergedIntoId), eq(mealIdeas.familyId, actor.familyId))).limit(1);
+            }
+            if (catalog) {
+              if (catalog.archivedAt) {
+                const [restored] = await tx.update(mealIdeas).set({ archivedAt: null, version: catalog.version + 1, updatedAt: new Date() }).where(eq(mealIdeas.id, catalog.id)).returning();
+                await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: catalog.id, action: "restored", before: catalog, after: restored });
+              }
+              title = catalog.title; note = selectedFromCatalog ? (catalog.note ?? "") : (note || catalog.note || ""); catalogIdeaId = catalog.id;
+            } else {
+              const [created] = await tx.insert(mealIdeas).values({ familyId: actor.familyId, authorMemberId: current.memberId, title, note: note || null, normalizedTitle }).returning();
+              await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: created.id, action: "created_from_meal", after: created });
+              catalogIdeaId = created.id;
+            }
+          }
           [suggestion] = await tx.insert(mealSuggestions).values({ slotId: slot.id, authorMemberId: current.memberId, title, note: note || null, catalogIdeaId }).returning();
         }
         if (body.action === "confirm") {
           if (body.menu !== 1 && body.menu !== 2) throw new MealError("Elegí qué menú querés confirmar.");
           const menu = plan.menus.find(m => m.number === body.menu);
           if (!menu) throw new MealError("Ese menú no está abierto.");
+          if (menu.selection && current.role !== "administrator") throw new MealError("Solo una persona adulta puede cambiar una comida elegida.", 403);
           if (menu.selection && body.replace !== true) throw new MealError("Confirmá el reemplazo del plato actual.", 409, "REPLACE_REQUIRED");
           const selection: DailySelection = { suggestionId: suggestion.id, title: suggestion.title, note: suggestion.note, confirmedByMemberId: current.memberId, confirmedAt: new Date().toISOString() };
           if (duplicateMenu(plan, menu.number, selection)) throw new MealError("Ese plato ya está en el otro menú. Compartilo asignando allí las personas.", 409, "DUPLICATE_MENU");
           menu.selection = selection;
+          if (suggestion.catalogIdeaId) await tx.update(mealIdeas).set({ lastUsedAt: new Date(), updatedAt: new Date() }).where(eq(mealIdeas.id, suggestion.catalogIdeaId));
         }
       } else {
         if (current.role !== "administrator") throw new MealError("Solo una persona adulta puede cambiar los menús.", 403);

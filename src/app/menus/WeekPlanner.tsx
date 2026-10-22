@@ -16,7 +16,7 @@ function MainMeal({meal,label}:{meal:Meal;label:string}) {
   <h3>{label}</h3>
   {meal.groups.filter(group=>!group.followsHome||!group.selection).map(group=><p className={styles.weekDish} key={group.id??group.kind}>
    <span>{group.kind==="home"&&linked.length>0?`Casa (${home?groupPeople(meal,home):0}) + ${linked.map(item=>`${item.name.toLowerCase()} (${groupPeople(meal,item)})`).join(" + ")}`:group.name}</span>
-   <strong className={!group.selection?styles.pendingText:undefined}>{group.selection?.title??(group.followsHome?"Pendiente de Casa":"Sin plan")}</strong>
+   <strong className={!group.selection?styles.pendingText:undefined}>{group.selection?.title??(group.followsHome?"Todavía no eligieron la comida de casa":"Todavía no elegimos qué comer")}</strong>
   </p>)}
   <small className={styles.weekPeople}>{counts.home} en casa · {counts.packed} llevan{counts.away>0?` · ${counts.away} afuera`:""}{counts.unknown>0?` · ${counts.unknown} por definir`:""}</small>
  </section>;
@@ -39,9 +39,9 @@ export default function WeekPlanner({data,onSelect}:{data:WeekData|null;onSelect
    return <article className={`${styles.weekDay} ${today?styles.weekToday:""}`} key={date} ref={today?todayCard:undefined}>
     <h2><button aria-label={`Ver ${today?"hoy, ":""}${full}`} aria-current={today?"date":undefined} disabled={!isMenuDateInRange(date,data.today)} onClick={()=>onSelect(date)}>{short.charAt(0).toUpperCase()+short.slice(1)}{today&&<span>Hoy</span>}</button></h2>
     {date<data.today&&<p className={styles.weekReadOnly}>Solo lectura</p>}
-    <p className={styles.weekSecondary}><span>Desayuno</span> {meal("breakfast")?.selection?.title??"Sin plan"}</p>
+    <p className={styles.weekSecondary}><span>Desayuno</span> {meal("breakfast")?.selection?.title??"Todavía no elegimos qué comer"}</p>
     {lunch&&<MainMeal meal={lunch} label="Almuerzo" />}
-    <p className={styles.weekSecondary}><span>Merienda</span> {meal("snack")?.selection?.title??"Sin plan"}</p>
+    <p className={styles.weekSecondary}><span>Merienda</span> {meal("snack")?.selection?.title??"Todavía no elegimos qué comer"}</p>
     {dinner&&<MainMeal meal={dinner} label="Cena" />}
    </article>;
   })}
