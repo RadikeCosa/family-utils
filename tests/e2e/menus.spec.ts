@@ -87,9 +87,10 @@ test("adult conflict keeps the current dish visible before saving a replacement"
   let dialog=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await dialog.getByLabel("¿Qué vamos a comer?").fill("Pasta");
   await dialog.getByRole("button",{name:/Agregar.*Pasta/}).click();
-  dialog=page.getByRole("dialog",{name:"Cambiar comida",exact:true});await expect(dialog).toContainText("Sopa");
+  dialog=page.getByRole("dialog",{name:"Cambiar comida",exact:true});
   await dialog.getByRole("button",{name:"Guardar cambio",exact:true}).click();
   await expect(dialog.getByRole("alert").filter({hasText:"Alguien cambió"})).toBeVisible();
+  await expect(dialog).toContainText("Sopa");
   await dialog.getByRole("button",{name:"Guardar cambio",exact:true}).click();await expect(dialog).toBeHidden();
   await expect(lunch.getByText("Pasta",{exact:true})).toBeVisible();
 });
@@ -113,8 +114,10 @@ test("annotating a dish does not add it to the day and it can be reused",async({
   await lunch.getByRole("button",{name:"Cambiar comida",exact:true}).click();
   await bank.getByRole("button",{name:"Ver todos los platos",exact:true}).click();
   await bank.getByRole("button",{name:/Editar.*Puré familiar/}).click();
-  await bank.getByLabel("Nombre",{exact:true}).fill("Puré con calabaza");
-  await bank.getByRole("button",{name:"Guardar plato",exact:true}).click();
+  let edit=page.getByRole("dialog",{name:"Editar plato",exact:true});
+  await edit.getByLabel("Nombre",{exact:true}).fill("Puré con calabaza");
+  await edit.getByRole("button",{name:"Guardar plato",exact:true}).click();
+  bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await expect(bank.getByRole("heading",{name:"Puré con calabaza",exact:true})).toBeVisible();
   await expect(lunch.getByText("Puré familiar",{exact:true})).toBeVisible();
   await bank.getByRole("button",{name:"Cerrar repertorio",exact:true}).click();
