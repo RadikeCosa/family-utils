@@ -69,13 +69,7 @@ async function createFixture(baseURL: string, browser: Browser): Promise<Fixture
       assigneeIds: [],
     } });
     expect(task.ok()).toBeTruthy();
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
-    const planner = await api.get("/api/meals/planner");
-    const initialMeal = (await planner.json()).meals.find((m: {date:string;mealType:string}) => m.date === today && m.mealType === "lunch");
-    const meal = await api.put("/api/meals/planner", { data: {
-      action: "propose", expectedVersion: initialMeal.version,
-      date: today,
-      mealType: "lunch",
+    const meal = await api.post("/api/meals/ideas", { data: {
       title: "Tarta de verduras",
       note: "Con ensalada fresca",
     } });
@@ -171,7 +165,7 @@ async function inspectControls(page: import("@playwright/test").Page) {
   });
 }
 
-test("menús diario mantiene personas visibles e ideas junto a confirmar a 360 px", async ({ browser, baseURL }) => {
+test("menús diario mantiene personas visibles y permite agregar desde el repertorio a 360 px", async ({ browser, baseURL }) => {
   const fixture = await createFixture(baseURL!, browser);
   try {
     const context = await browser.newContext({ storageState: fixture.storageState, viewport: { width: 360, height: 800 } });
@@ -179,26 +173,19 @@ test("menús diario mantiene personas visibles e ideas junto a confirmar a 360 p
     await page.goto("/menus");
     const lunch = page.getByRole("article", { name: "Almuerzo", exact: true });
     await expect(lunch.getByRole("group", { name: "Preparación para Alex" })).toBeVisible();
-    await lunch.getByRole("button",{name:"Confirmar",exact:true}).click();
-    await expect(lunch.getByText("MENÚ 1 · Confirmado")).toBeVisible();
-    const details=lunch.locator("details").filter({has:page.locator("summary").filter({hasText:"Otras ideas"})});
-    await expect(details).not.toHaveAttribute("open", "");
-    await lunch.getByRole("button",{name:"Cambiar",exact:true}).click();
-    await lunch.getByRole("button",{name:"Escribir y confirmar otro plato",exact:true}).click();
-    await lunch.getByLabel("Plato",{exact:true}).fill("Pasta");
-    await lunch.getByRole("button",{name:"Confirmar",exact:true}).click();
-    const dialog=page.getByRole("dialog",{name:"Confirmar plato"});
-    await expect(dialog).toBeVisible();
+    await expect(lunch.getByText("Todavía no elegimos qué comer", { exact: true })).toBeVisible();
+    await lunch.getByRole("button", { name: "Agregar comida", exact: true }).click();
+    const bank = page.getByRole("dialog", { name: "Agregar comida", exact: true });
+    await bank.getByLabel("¿Qué vamos a comer?").fill("Tarta de verduras");
+    const dish = bank.getByRole("button", { name: /Agregar.*Tarta de verduras/ });
+    await expect(dish).toBeVisible();
     expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-    await expect(lunch.getByRole("button",{name:"Confirmar",exact:true})).toBeFocused();
-    await lunch.getByRole("button",{name:"Confirmar",exact:true}).click();
-    await dialog.getByRole("button",{name:"Confirmar reemplazo",exact:true}).click();
-    await expect(dialog).toBeHidden();
+    await dish.click();
+    await expect(bank).toBeHidden();
+    await expect(lunch.getByText("Tarta de verduras", { exact: true })).toBeVisible();
     const group=lunch.getByRole("group",{name:"Preparación para Alex"});
-    await group.getByRole("button",{name:"Está",exact:true}).click();
-    await expect(group.getByRole("button",{name:"Está",exact:true})).toHaveAttribute("aria-pressed","true");
+    await group.getByRole("button",{name:"Come en casa",exact:true}).click();
+    await expect(group.getByRole("button",{name:"Come en casa",exact:true})).toHaveAttribute("aria-pressed","true");
     await page.keyboard.press("Tab");
     expect(await inspectControls(page)).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBe(0);
