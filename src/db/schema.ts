@@ -768,13 +768,16 @@ export const mealIdeas = pgTable("meal_ideas", {
   familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
   authorMemberId: uuid("author_member_id").notNull().references(() => members.id),
   title: varchar("title", { length: 160 }).notNull(),
+  normalizedTitle: varchar("normalized_title", { length: 160 }).notNull().default(""),
   note: varchar("note", { length: 1000 }),
   mealTypes: jsonb("meal_types").$type<(typeof MEAL_TYPES)[number][]>().notNull().default([]),
   packedSuitable: boolean("packed_suitable").notNull().default(false),
   version: integer("version").notNull().default(1),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  mergedIntoId: uuid("merged_into_id"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   createdAt: createdAt(), updatedAt: updatedAt(),
-}, table => [index("meal_ideas_family_idx").on(table.familyId, table.archivedAt)]);
+}, table => [index("meal_ideas_family_idx").on(table.familyId, table.archivedAt), index("meal_ideas_catalog_order_idx").on(table.familyId, table.lastUsedAt), index("meal_ideas_merged_idx").on(table.mergedIntoId)]);
 
 export const sportsFootballResults = pgTable("sports_football_results", {
   eventId: uuid("event_id").primaryKey().references(() => sportsEvents.id, { onDelete: "restrict" }),

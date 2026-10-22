@@ -81,4 +81,5 @@ test("idea bank validates optional labels and searches titles without accents",(
   assert.equal(parseIdeaFields({title:"Pasta",mealTypes:["brunch"]}),null);
   assert.equal(parseIdeaFields({title:"Pasta",packedSuitable:"yes"}),null);
   assert.equal(normalizeMealIdea("  PURÉ  "),"pure");
+  assert.equal(normalizeMealIdea("  CREMA   de Zapallo "),"crema de zapallo");
 });

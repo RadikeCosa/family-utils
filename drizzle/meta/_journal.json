@@ -316,6 +316,13 @@
       "when": 1792608966380,
       "tag": "0054_training_optional_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792667946240,
+      "tag": "0055_meal_catalog",
+      "breakpoints": true
     }
   ]
 }

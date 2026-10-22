@@ -31,7 +31,6 @@ export default function MenuApp() {
   const [undo, setUndo] = useState<{ date: string; type: MealType; person: DailyPerson; version: string } | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [bank, setBank] = useState<BankState | null>(null);
-  const [bankMenu, setBankMenu] = useState<MenuNumber | undefined>();
   const dialog = useRef<HTMLDialogElement>(null), opener = useRef<HTMLElement | null>(null);
   const today = data?.today ?? familyDay();
   const bounds = menuDateBounds(today), week = startOfWeek(date);
@@ -181,37 +180,37 @@ export default function MenuApp() {
       {Array.from({ length: 7 }, (_, i) => addDays(week, i)).map(day => <article key={day} className={styles.mealCard}>
         <button className={styles.weekDayButton} onClick={() => navigate(day, "day")}>{dayLabel(day)}{day === today ? " · Hoy" : ""}</button>
         {data.meals.filter(m => m.date === day).map(meal => <div className={styles.weekMealSummary} key={meal.mealType}><strong>{MEAL_LABELS[meal.mealType]}</strong>
-          {meal.readOnly ? <span>Plan anterior · Solo lectura</span> : meal.plan.menus.map(menu => <span key={menu.number}>{menu.selection?.title ?? `Menú ${menu.number} pendiente de confirmar`}{hasMealAttendance(meal.mealType) ? ` · ${menuSummary(meal.plan, menu.number)}` : ""}</span>)}
+          {meal.readOnly ? <span>Plan anterior · Solo lectura</span> : meal.plan.menus.map(menu => <span key={menu.number}>{menu.selection?.title ?? "Todavía no elegimos qué comer"}{hasMealAttendance(meal.mealType) ? ` · ${menuSummary(meal.plan, menu.number)}` : ""}</span>)}
           {hasMealAttendance(meal.mealType) && <small>{participationSummary(meal.plan.people)}</small>}
         </div>)}
       </article>)}
     </section> : <section className={styles.mealList} aria-label={`Comidas del ${dayLabel(date)}`}>
       {MEAL_TYPES.map(type => {
         const meal = data.meals.find(m => m.date === date && m.mealType === type)!;
-        const card = <DailyMeal key={`${date}-${type}`} meal={meal} data={data} busy={busy} adult={!!adult} readOnly={date < today || meal.readOnly} onMutate={mutate} onAsk={ask} onBank={(target, event) => { setBankMenu(target); setBank({ date, mealType: type, opener: event }); }} />;
-        return hasMealAttendance(type) ? card : <details className={styles.compactMeal} key={`${date}-${type}`}><summary><strong>{MEAL_LABELS[type]}</strong><span>{meal.plan.menus.map(m => m.selection?.title).filter(Boolean).join(" · ") || "Sin plan"}</span><span>Ver</span></summary>{card}</details>;
+        const card = <DailyMeal key={`${date}-${type}`} meal={meal} data={data} busy={busy} adult={!!adult} readOnly={date < today || meal.readOnly} onMutate={mutate} onAsk={ask} onBank={(target, event) => { setBank({ date, mealType: type, menu: target, opener: event }); }} />;
+        return hasMealAttendance(type) ? card : <details className={styles.compactMeal} key={`${date}-${type}`}><summary><strong>{MEAL_LABELS[type]}</strong><span>{meal.plan.menus.map(m => m.selection?.title).filter(Boolean).join(" · ") || "Todavía no elegimos qué comer"}</span><span>Ver</span></summary>{card}</details>;
       })}
     </section>}
     <footer className={styles.footer}><Link href="/">Family Utils</Link><span role="status">{busy ? "Guardando…" : loading ? "Actualizando…" : "Plan compartido"}</span></footer>
     <dialog ref={dialog} className={styles.dialog} aria-labelledby="confirm-menu-title" onCancel={e => { e.preventDefault(); if (!busy) setConfirmation(null); }}>
       {confirmation && currentMeal && <>
-        <h2 id="confirm-menu-title">{confirmation.kind === "remove-second" ? "Quitar menú 2" : confirmation.kind === "clear" ? "Dejar menú pendiente" : "Confirmar plato"}</h2>
+        <h2 id="confirm-menu-title">{confirmation.kind === "remove-second" ? "Quitar opción 2" : confirmation.kind === "clear" ? "Quitar comida" : currentSelection ? "Cambiar comida" : "Agregar comida"}</h2>
         <p>{MEAL_LABELS[confirmation.mealType]} · {dayLabel(confirmation.date)}</p>
         {confirmation.kind === "confirm" ? <>
-          <p><strong>{confirmation.idea?.title}</strong></p>
-          {currentMeal.plan.menus.length === 2 && <fieldset className={styles.choiceList}><legend>¿Para qué menú?</legend>{currentMeal.plan.menus.map(m => <label className={styles.choiceOption} key={m.number}><input type="radio" name="target-menu" checked={confirmation.menu === m.number} onChange={() => setConfirmation({ ...confirmation, menu: m.number })} disabled={busy} />Menú {m.number} · {m.selection?.title ?? "Pendiente"}</label>)}</fieldset>}
-          {currentSelection && <p>Ahora está confirmado <strong>{currentSelection.title}</strong>. Se reemplazará por <strong>{confirmation.idea?.title}</strong>.</p>}
-        </> : confirmation.kind === "remove-second" ? <p>{currentMeal.plan.people.filter(p => p.menu === 2).map(p => data?.members.find(m => m.id === p.memberId)?.name).join(", ") || "No hay personas asignadas al menú 2"}. Al quitarlo, las personas asignadas vuelven al menú 1{!currentMeal.plan.menus[0].selection ? ", que está pendiente de confirmar" : ""}. La idea sigue disponible.</p> : <p>Se quita la confirmación de “{currentSelection?.title}”. La idea sigue disponible y las personas mantienen su asignación.</p>}
+          <p>{currentSelection ? <>Se cambiará <strong>{currentSelection.title}</strong> por <strong>{confirmation.idea?.title}</strong>.</> : <strong>{confirmation.idea?.title}</strong>}</p>
+        </> : confirmation.kind === "remove-second" ? <p>{currentMeal.plan.people.filter(p => p.menu === 2).map(p => data?.members.find(m => m.id === p.memberId)?.name).join(", ") || "No hay personas asignadas a la opción 2"}. Al quitarla, las personas asignadas vuelven a la opción 1{!currentMeal.plan.menus[0].selection ? ", que todavía no tiene una comida elegida" : ""}.</p> : <p>Se quita “{currentSelection?.title}”. Las personas mantienen su asignación.</p>}
         {error && <p className={styles.error} role="alert">{error}</p>}
-        <div className={styles.dialogActions}><button className={styles.secondaryButton} disabled={busy} onClick={() => { setConfirmation(null); setError(""); }}>Cancelar</button><button className={styles.primaryButton} disabled={busy || (confirmation.kind === "confirm" && !confirmation.menu) || !!currentMeal.readOnly} onClick={() => void confirm()}>{busy ? "Guardando…" : confirmation.kind === "remove-second" ? "Quitar y reasignar" : currentSelection && confirmation.kind === "confirm" ? "Confirmar reemplazo" : "Confirmar"}</button></div>
+        <div className={styles.dialogActions}><button className={styles.secondaryButton} disabled={busy} onClick={() => { setConfirmation(null); setError(""); }}>Cancelar</button><button className={styles.primaryButton} disabled={busy || (confirmation.kind === "confirm" && !confirmation.menu) || !!currentMeal.readOnly} onClick={() => void confirm()}>{busy ? "Guardando…" : confirmation.kind === "remove-second" ? "Quitar y reasignar" : currentSelection && confirmation.kind === "confirm" ? "Guardar cambio" : "Agregar comida"}</button></div>
       </>}
     </dialog>
-    <IdeaBank state={bank} onClose={() => setBank(null)} onChanged={refresh} currentMemberId={data?.currentMemberId ?? ""} adult={!!adult} today={today} onUse={async (idea, targetDate, type) => {
-      const meal = data?.meals.find(m => m.date === targetDate && m.mealType === type);
-      if (!meal) throw new Error("Primero abrí el día de esa comida.");
-      setBank(null);
-      if (adult) ask(meal, "confirm", bankMenu, { id: "", title: idea.title, note: idea.note, authorName: idea.authorName }, idea.id);
-      else await mutate(meal, { action: "propose", catalogIdeaId: idea.id }, "Idea propuesta. Falta la confirmación de un adulto.");
+    <IdeaBank state={bank} onClose={() => setBank(null)} onChanged={refresh} currentMemberId={data?.currentMemberId ?? ""} adult={!!adult} today={today} onUse={async idea => {
+      const meal = data?.meals.find(m => m.date === bank?.date && m.mealType === bank.mealType);
+      if (!meal || !bank) return false;
+      const selection = meal.plan.menus.find(m => m.number === bank.menu)?.selection;
+      if (selection) { setBank(null); ask(meal, "confirm", bank.menu, { id: "", title: idea.title, note: idea.note, authorName: idea.authorName }, idea.id || undefined); return true; }
+      const saved = await mutate(meal, { action: "confirm", menu: bank.menu, ...(idea.id ? { catalogIdeaId: idea.id } : { title: idea.title, note: idea.note }) }, "Comida agregada.");
+      if (saved) setBank(null);
+      return saved;
     }} />
   </main>;
 }
@@ -219,33 +218,23 @@ export default function MenuApp() {
 type DailyMealProps = { meal: PlannerMeal; data: PlannerWeek; busy: boolean; adult: boolean; readOnly: boolean;
   onMutate: (meal: PlannerMeal, action: Action, success: string, remember?: DailyPerson) => Promise<boolean>;
   onAsk: (meal: PlannerMeal, kind: Confirmation["kind"], menu?: MenuNumber, idea?: DailyIdea) => void;
-  onBank: (menu: MenuNumber | undefined, opener: HTMLElement) => void;
+  onBank: (menu: MenuNumber, opener: HTMLElement) => void;
 };
 function DailyMeal({ meal, data, busy, adult, readOnly, onMutate, onAsk, onBank }: DailyMealProps) {
-  const [expanded, setExpanded] = useState(false), [target, setTarget] = useState<MenuNumber | undefined>();
-  const [title, setTitle] = useState(""), [note, setNote] = useState(""), [writing, setWriting] = useState(false);
-  const [openIdeas, setOpenIdeas] = useState(false);
-  const missing = meal.plan.menus.some(m => !m.selection);
-  const ideas = meal.suggestions.filter(i => !meal.plan.menus.some(m => m.selection?.suggestionId === i.id));
+  const [expanded, setExpanded] = useState(false);
   const attendance = hasMealAttendance(meal.mealType);
-  const confirmedKey = meal.plan.menus.map(m => m.selection?.suggestionId ?? "").join("|");
-  useEffect(() => { queueMicrotask(() => { setWriting(false); setOpenIdeas(false); setTarget(undefined); }); }, [confirmedKey]);
-  async function propose(event: React.FormEvent) {
-    event.preventDefault();
-    if (await onMutate(meal, { action: "propose", title, note }, "Idea propuesta. Falta la confirmación de un adulto.")) { setTitle(""); setNote(""); setWriting(false); }
-  }
   return <article className={styles.mealCard} aria-label={MEAL_LABELS[meal.mealType]}>
     <h2 className={styles.dailyMealTitle}>{MEAL_LABELS[meal.mealType]}</h2>
     {meal.readOnly ? <><p className={styles.warning}>Plan anterior · Solo lectura. {meal.reason}</p><PreviousPlan meal={meal} data={data} /></> : <>
       {meal.plan.menus.map(menu => <div className={styles.dailyMenu} key={menu.number}>
-        <div><small>MENÚ {menu.number} · {menu.selection ? "Confirmado" : "Pendiente"}</small><strong>{menu.selection?.title ?? `Menú ${menu.number} pendiente de confirmar`}</strong>
+        <div>{meal.plan.menus.length > 1 && <small>OPCIÓN {menu.number}</small>}<strong>{menu.selection?.title ?? "Todavía no elegimos qué comer"}</strong>
           {menu.selection?.note && <p>{menu.selection.note}</p>}
           {attendance && <span>{menuSummary(meal.plan, menu.number)}</span>}
           {attendance && <small>{meal.plan.people.filter(p => p.menu === menu.number).map(p => data.members.find(m => m.id === p.memberId)?.name).filter(Boolean).join(" · ")}</small>}
         </div>
-        {adult && !readOnly && <div className={styles.menuActions}><button disabled={busy} onClick={() => { setTarget(menu.number); setOpenIdeas(true); }}>{menu.selection ? "Cambiar" : "Elegir"}</button>{menu.selection && <button disabled={busy} onClick={() => onAsk(meal, "clear", menu.number)}>Quitar elección</button>}{menu.number === 2 && <button disabled={busy} onClick={() => onAsk(meal, "remove-second", 2)}>Quitar menú 2</button>}</div>}
+        {!readOnly && <div className={styles.menuActions}>{menu.selection ? adult && <><button disabled={busy} onClick={e => onBank(menu.number, e.currentTarget)}>{"Cambiar comida"}</button><button disabled={busy} onClick={() => onAsk(meal, "clear", menu.number)}>Quitar comida</button></> : <button className={styles.primaryButton} disabled={busy} onClick={e => onBank(menu.number, e.currentTarget)}>Agregar comida</button>}{adult && menu.number === 2 && <button disabled={busy} onClick={() => onAsk(meal, "remove-second", 2)}>Quitar opción 2</button>}</div>}
       </div>)}
-      {adult && !readOnly && attendance && meal.plan.menus.length === 1 && <button className={styles.inlineAction} disabled={busy} onClick={() => void onMutate(meal, { action: "add-second" }, "Menú 2 abierto. Las personas siguen en el menú 1.")}>Agregar segundo menú</button>}
+      {adult && !readOnly && attendance && meal.plan.menus.length === 1 && <button className={styles.inlineAction} disabled={busy} onClick={() => void onMutate(meal, { action: "add-second" }, "Segunda opción agregada.")}>Agregar otra opción</button>}
       {attendance && <div className={styles.dailyPeople}>
         <p className={styles.dailySummary}>{participationSummary(meal.plan.people)}</p>
         {meal.plan.people.map(person => {
@@ -254,30 +243,13 @@ function DailyMeal({ meal, data, busy, adult, readOnly, onMutate, onAsk, onBank 
           return <div className={styles.dailyPerson} key={person.memberId}>
             <strong>{profile.name}</strong>
             <div className={styles.personChoices} role="group" aria-label={`Preparación para ${profile.name}`}>
-              {(["home", "away", "packed"] as const).map(status => <button key={status} aria-pressed={person.status === status} disabled={disabled} onClick={() => void onMutate(meal, { action: "person", memberId: person.memberId, status: person.status === status ? "unknown" : status }, "Elección guardada.", person)}>{STATUS_LABELS[status]}</button>)}
+              {(["home", "away", "packed"] as const).map(status => <button key={status} aria-pressed={person.status === status} disabled={disabled} onClick={() => void onMutate(meal, { action: "person", memberId: person.memberId, status: person.status === status ? "unknown" : status }, "Elección guardada.", person)}>{status === "home" ? "Come en casa" : status === "packed" ? "Se lleva comida" : "No necesita comida"}</button>)}
             </div>
-            {person.status === "unknown" && <small>Falta definir</small>}
-            {needsMeal(person.status) && meal.plan.menus.length === 2 && <label className={styles.personMenu}><span>Menú de {profile.name}</span><select aria-label={`Menú de ${profile.name}`} value={person.menu ?? 1} disabled={disabled} onChange={e => void onMutate(meal, { action: "person", memberId: person.memberId, status: person.status, menu: Number(e.target.value) }, "Menú asignado.", person)}>{meal.plan.menus.map(m => <option key={m.number} value={m.number}>Menú {m.number} · {m.selection?.title ?? "Pendiente de confirmar"}</option>)}</select></label>}
+            {person.status === "unknown" && <small>Falta indicar</small>}
+            {needsMeal(person.status) && meal.plan.menus.length === 2 && <label className={styles.personMenu}><span>Opción para {profile.name}</span><select aria-label={`Comida de ${profile.name}`} value={person.menu ?? 1} disabled={disabled} onChange={e => void onMutate(meal, { action: "person", memberId: person.memberId, status: person.status, menu: Number(e.target.value) }, "Comida asignada.", person)}>{meal.plan.menus.map(m => <option key={m.number} value={m.number}>Opción {m.number} · {m.selection?.title ?? "Sin elegir"}</option>)}</select></label>}
           </div>;
         })}
       </div>}
-      {!readOnly && <>
-        <details className={styles.details} open={missing || openIdeas} onToggle={e => { if (!missing) setOpenIdeas(e.currentTarget.open); }}>
-          <summary>{missing ? "Ideas para confirmar" : `Otras ideas (${ideas.length})`}{target && <span>Menú {target}</span>}</summary>
-          <div className={styles.dailyIdeas}>
-            {!ideas.length && <p className={styles.muted}>Todavía no hay otras ideas para esta comida.</p>}
-            {ideas.map(idea => <div className={styles.suggestion} key={idea.id}><div className={styles.suggestionText}><small>Idea · {idea.authorName}</small><strong>{idea.title}</strong>{idea.note && <p>{idea.note}</p>}</div>{adult && <button className={styles.secondaryButton} disabled={busy} onClick={() => onAsk(meal, "confirm", target, idea)}>Confirmar</button>}</div>)}
-            <button className={styles.inlineAction} disabled={busy} onClick={e => onBank(target, e.currentTarget)}>Buscar guardadas</button>
-            {adult && !writing && <button className={styles.inlineAction} disabled={busy} onClick={() => setWriting(true)}>Escribir y confirmar otro plato</button>}
-          </div>
-        </details>
-        <button className={styles.inlineAction} disabled={busy} onClick={() => setWriting(!writing)}>Proponer idea</button>
-        {writing && <form className={styles.formFields} onSubmit={propose}>
-          <label>Plato<input value={title} maxLength={160} required onChange={e => setTitle(e.target.value)} /></label>
-          <label>Nota opcional<input value={note} maxLength={1000} onChange={e => setNote(e.target.value)} /></label>
-          <div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} disabled={busy} onClick={() => setWriting(false)}>Cancelar</button><button className={styles.secondaryButton} disabled={busy || !title.trim()}>Proponer idea</button>{adult && <button type="button" className={styles.primaryButton} disabled={busy || !title.trim()} onClick={() => onAsk(meal, "confirm", target, { id: "", title: title.trim(), note: note.trim() || null, authorName: "" })}>Confirmar</button>}</div>
-        </form>}
-      </>}
       {readOnly && <p className={styles.muted}>Solo lectura</p>}
       {meal.previous && <details className={styles.details} open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}><summary>Información anterior</summary><PreviousPlan meal={meal} data={data} /></details>}
     </>}

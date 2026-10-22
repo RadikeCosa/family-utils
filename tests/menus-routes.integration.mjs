@@ -43,9 +43,8 @@ test("daily menus: real authenticated routes, preservation and atomic changes", 
       assert.equal((await pool.query("SELECT count(*)::int AS n FROM meal_slots WHERE family_id=$1",[familyId])).rows[0].n,0);
       assert.equal((await request(null,"/api/meals/planner")).status,403);
     });
-    await t.test("server enforces self-only children, adult confirmation, family boundaries and past closure",async()=>{
+    await t.test("members can fill an empty meal; replacement remains adult-only",async()=>{
       assert.equal((await send({action:"person",memberId:peer.id,status:"home"},child)).status,403);
-      assert.equal((await send({action:"confirm",menu:1,title:"Forbidden"},child)).status,403);
       assert.equal((await send({action:"add-second"},child)).status,403);
       assert.equal((await send({action:"person",memberId:child.id,status:"home"},outsider)).status,400);
       await ok({action:"person",memberId:child.id,status:"packed"},child);
@@ -53,6 +52,10 @@ test("daily menus: real authenticated routes, preservation and atomic changes", 
       assert.equal((await send({action:"propose",title:"Past"},admin,addDays(today,-1))).status,403);
       assert.equal((await send({action:"person",memberId:child.id,status:"home"},child,date,"breakfast")).status,400);
       await ok({action:"propose",title:"Yogurt"},child,date,"breakfast");
+      const breakfast=await meal(child,date,"breakfast"), yogurt=breakfast.suggestions.find(i=>i.title==="Yogurt");
+      await ok({action:"confirm",menu:1,suggestionId:yogurt.id},child,date,"breakfast");
+      assert.equal((await meal(child,date,"breakfast")).plan.menus[0].selection.title,"Yogurt");
+      assert.equal((await send({action:"confirm",menu:1,title:"Fruit",replace:true},child,date,"breakfast")).status,403);
     });
     await t.test("second menu, same dish prevention, home/packed preservation and atomic removal",async()=>{
       await ok({action:"confirm",menu:1,title:"Milanesas"});
@@ -98,6 +101,19 @@ test("daily menus: real authenticated routes, preservation and atomic changes", 
       assert.equal((await send({action:"propose",catalogIdeaId:idea.id})).status,400);
       assert.equal((await send({action:"propose",catalogIdeaId:idea.id},outsider)).status,400);
       assert.equal((await request(child,`/api/meals/ideas/${idea.id}`,"PATCH",{action:"restore",expectedVersion:3})).status,200);
+    });
+    await t.test("new meals join one normalized family repertoire and hidden dishes can be reused",async()=>{
+      const firstDay=addDays(today,7),secondDay=addDays(today,8);
+      await ok({action:"confirm",menu:1,title:"  Crema   de zapallo "},child,firstDay,"breakfast");
+      await ok({action:"confirm",menu:1,title:"CREMA DE ZAPALLO"},peer,secondDay,"breakfast");
+      const dishes=(await pool.query("SELECT id,title,normalized_title,archived_at FROM meal_ideas WHERE family_id=$1 AND normalized_title='crema de zapallo'",[familyId])).rows;
+      assert.equal(dishes.length,1);assert.equal(dishes[0].title,"Crema de zapallo");
+      assert.equal((await pool.query("SELECT count(DISTINCT catalog_idea_id)::int AS n FROM meal_suggestions WHERE slot_id IN(SELECT id FROM meal_slots WHERE family_id=$1 AND meal_date=ANY($2::date[]))",[familyId,[firstDay,secondDay]])).rows[0].n,1);
+      assert.equal((await request(child,`/api/meals/ideas/${dishes[0].id}`,"PATCH",{action:"archive",expectedVersion:1})).status,200);
+      const thirdDay=addDays(today,9),used=await send({action:"confirm",menu:1,catalogIdeaId:dishes[0].id},admin,thirdDay,"breakfast");
+      assert.equal(used.status,200,JSON.stringify(used.body));
+      assert.equal((await pool.query("SELECT archived_at FROM meal_ideas WHERE id=$1",[dishes[0].id])).rows[0].archived_at,null);
+      const catalog=await request(child,"/api/meals/catalog?q=zapallo");assert.equal(catalog.status,200);assert.equal(catalog.body.ideas.length,1);
     });
     await t.test("compatible legacy snapshots translate and original records are unchanged",async()=>{
       const legacyDate=addDays(today,2);

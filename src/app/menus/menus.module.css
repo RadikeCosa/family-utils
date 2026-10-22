@@ -202,6 +202,10 @@
 .bankDestination label { display: grid; gap: 6px; color: #35463a; font-size: 14px; font-weight: 700; }
 .bankDestination select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid #7f8d82; border-radius: 7px; background: #fff; color: #26382b; font-size: 16px; }
 .bankIdeas { display: grid; gap: 12px; margin-top: 14px; }
+.newCatalogChoice { display: grid; justify-items: start; gap: 8px; margin-top: 12px; padding: 12px; border-radius: 8px; background: #edf3eb; }
+.newCatalogChoice p { margin: 0; color: #405b46; font-size: 14px; }
+.newCatalogChoice label { display: grid; width: 100%; gap: 6px; color: #35463a; font-size: 14px; font-weight: 700; }
+.newCatalogChoice textarea { width: 100%; padding: 9px; border: 1px solid #7f8d82; border-radius: 7px; color: #26382b; font: 16px 'DM Sans',sans-serif; }
 .bankIdea { min-width: 0; padding: 13px; border: 1px solid #dce3da; border-radius: 9px; }
 .bankIdea h3 { margin: 0; color: #35463a; font-size: 17px; overflow-wrap: anywhere; }
 .bankIdea p { margin: 8px 0; color: #536b58; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -145,5 +145,5 @@ export function parseIdeaFields(body:Record<string,unknown>):IdeaFields|null {
   return {title,note:note||null,mealTypes:MEAL_TYPES.filter(type=>tags.includes(type)),packedSuitable:body.packedSuitable===true};
 }
 export function normalizeMealIdea(value:string):string {
-  return value.normalize("NFD").replace(/\p{M}/gu,"").toLocaleLowerCase("es-AR").trim();
+  return value.normalize("NFD").replace(/\p{M}/gu,"").toLocaleLowerCase("es-AR").trim().replace(/\s+/g," ");
 }

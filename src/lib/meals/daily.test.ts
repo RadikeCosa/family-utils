@@ -6,7 +6,7 @@ const legacy = (overrides: Partial<LegacyInput> = {}): LegacyInput => ({ memberI
 
 test("unknown is no choice and never implies no preparation", () => {
   let plan = emptyPlan(ids);
-  assert.equal(participationSummary(plan.people), "Falta definir");
+  assert.equal(participationSummary(plan.people), "Falta indicar");
   plan = changePerson(changePerson(changePerson(plan,"a","home"),"b","home"),"c","packed");
   assert.equal(participationSummary(plan.people), "2 en casa · 1 para llevar · 1 por definir");
   const away = ids.slice(0,3).reduce((p,id) => changePerson(p,id,"away"),emptyPlan(ids));
