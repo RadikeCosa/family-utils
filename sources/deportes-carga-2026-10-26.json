@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "status": "curated",
+  "checkedAt": "2026-10-26T10:47:50.506Z",
+  "timezone": "America/Argentina/Buenos_Aires",
+  "curation": {
+    "completeHorizon": {
+      "river": {
+        "from": "2026-10-26",
+        "through": "2026-11-08",
+        "complete": true
+      },
+      "ufc": {
+        "from": "2026-10-26",
+        "through": "2026-11-14",
+        "complete": true
+      }
+    }
+  },
+  "events": [
+    {
+      "kind": "football_match",
+      "title": "Boca Juniors vs River Plate",
+      "competition": "Torneo Clausura Mercado Libre 2026",
+      "firstParticipant": "Boca Juniors",
+      "secondParticipant": "River Plate",
+      "eventDate": "2026-11-01",
+      "startTime": "15:00",
+      "venue": "Alberto José Armando (La Bombonera)",
+      "channel": "TNT Sports / ESPN Premium",
+      "status": "scheduled",
+      "source": {
+        "primary": "https://www.ligaprofesional.ar/notas/primera/2026/10/07/agenda-de-la-13-a-la-15/",
+        "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
+        "checkedAt": "2026-10-20T17:26:43.978Z"
+      },
+      "sourceProvider": "espn",
+      "externalReference": "401841658"
+    },
+    {
+      "kind": "football_match",
+      "sourceProvider": "espn",
+      "externalReference": "401841659",
+      "title": "Aldosivi vs River Plate",
+      "competition": "Torneo Clausura Mercado Libre 2026",
+      "firstParticipant": "Aldosivi",
+      "secondParticipant": "River Plate",
+      "eventDate": "2026-11-08",
+      "startTime": null,
+      "venue": null,
+      "channel": null,
+      "status": "scheduled",
+      "source": {
+        "primary": "https://www.ligaprofesional.ar/?p=75980",
+        "scheduleCrossCheck": "https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/16/schedule?fixture=true",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "notes": "LPF confirma Aldosivi–River en la fecha 16. ESPN ubica el encuentro el 08/11/2026 pero timeValid=false tanto en evento como competencia: fecha provisional del proveedor y horario, estadio y canal pendientes de confirmación específica de LPF."
+      }
+    },
+    {
+      "kind": "ufc_card",
+      "sourceProvider": "ufc_official",
+      "externalReference": "ufc-fight-night-october-31-2026",
+      "title": "UFC Fight Night: Moicano vs Nolan",
+      "eventDate": "2026-10-31",
+      "venue": "Meta APEX",
+      "city": "Las Vegas",
+      "country": "Estados Unidos",
+      "eventType": "fight_night",
+      "fights": [
+        {
+          "firstFighter": "Renato Moicano",
+          "secondFighter": "Tom Nolan",
+          "boutBlock": "main",
+          "isMainEvent": true
+        },
+        {
+          "firstFighter": "Randy Brown",
+          "secondFighter": "Carlos Leal",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Yana Santos",
+          "secondFighter": "Luana Santos",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jean-Paul Lebosnoyani",
+          "secondFighter": "Farman Hasanov",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Francis Marshall",
+          "secondFighter": "Gaston Bolanos",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Azamat Bekoev",
+          "secondFighter": "Andre Petroski",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Rodrigo Sezinando",
+          "secondFighter": "Theodor Berggren",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Julian Erosa",
+          "secondFighter": "JeongYeong Lee",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Nick Klein",
+          "secondFighter": "Joseph Kropschot",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Talita Alencar",
+          "secondFighter": "Piera Rodriguez",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Lucia Szabova",
+          "secondFighter": "Tainara Lisboa",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        }
+      ],
+      "source": {
+        "primary": "https://www.ufc.com/event/ufc-fight-night-october-31-2026",
+        "crossCheck": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261020-20261109&limit=100",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "validation": {
+          "officialFightCount": 11,
+          "officialCardComplete": true,
+          "independentCrossCheck": "passed"
+        },
+        "notes": "Todas las peleas publicadas se cotejaron con ESPN. Horarios desde data-timestamp oficial; fechas de bloque convertidas a America/Argentina/Buenos_Aires.",
+        "aliasReview": {
+          "official": "Joseph Kropschot",
+          "espn": "Joe Kropschot",
+          "officialProfile": "https://www.ufcespanol.com/athlete/joseph-kropschot",
+          "espnAthleteId": "4687604",
+          "notes": "Variante del nombre de pila; mismo apellido, rival y categoría. Se conserva el nombre oficial y la pelea existente."
+        }
+      },
+      "mainCardDate": "2026-10-31",
+      "mainCardTime": "21:00",
+      "preliminaryDate": "2026-10-31",
+      "preliminaryTime": "18:00"
+    },
+    {
+      "kind": "ufc_card",
+      "sourceProvider": "ufc_official",
+      "externalReference": "ufc-fight-night-november-07-2026",
+      "title": "UFC Fight Night: Bonfim vs Brady",
+      "eventDate": "2026-11-07",
+      "venue": "Meta APEX",
+      "city": "Las Vegas",
+      "country": "Estados Unidos",
+      "eventType": "fight_night",
+      "fights": [
+        {
+          "firstFighter": "Gabriel Bonfim",
+          "secondFighter": "Sean Brady",
+          "boutBlock": "main",
+          "isMainEvent": true
+        },
+        {
+          "firstFighter": "Tatiana Suarez",
+          "secondFighter": "Virna Jandiroba",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Davey Grant",
+          "secondFighter": "Elijah Smith",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Seokhyeon Ko",
+          "secondFighter": "Wellington Turman",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Billy Elekana",
+          "secondFighter": "Lucas Fernando",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Mantas Kondratavičius",
+          "secondFighter": "Wes Schultz",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Gabriel Lorenco",
+          "secondFighter": "Alvin Hines",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Karine Silva",
+          "secondFighter": "Gabriella Fernandes",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jose Delano",
+          "secondFighter": "Murtazali Magomedov",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Keiichiro Nakamura",
+          "secondFighter": "Ollie Schmid",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Austin Bashi",
+          "secondFighter": "Lucas Brennan",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Priscila Cachoeira",
+          "secondFighter": "Nina Milošević",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jonny Parsons",
+          "secondFighter": "José Souza",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        }
+      ],
+      "source": {
+        "primary": "https://www.ufc.com/event/ufc-fight-night-november-07-2026",
+        "crossCheck": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261020-20261109&limit=100",
+        "checkedAt": "2026-10-20T17:26:43.978Z",
+        "validation": {
+          "officialFightCount": 13,
+          "officialCardComplete": true,
+          "independentCrossCheck": "passed"
+        },
+        "notes": "Todas las peleas publicadas se cotejaron con ESPN. Horarios desde data-timestamp oficial; fechas de bloque convertidas a America/Argentina/Buenos_Aires.",
+        "aliasReview": {
+          "official": "José Souza",
+          "espn": "Jose Henrique",
+          "officialProfile": "https://www.ufcespanol.com/athlete/jose-henrique",
+          "espnAthleteId": "5080485",
+          "notes": "El enlace oficial de José Souza usa jose-henrique; el perfil confirma el récord 9-1 y el rival Jonny Parsons coincide."
+        }
+      },
+      "mainCardDate": "2026-11-07",
+      "mainCardTime": "22:00",
+      "preliminaryDate": "2026-11-07",
+      "preliminaryTime": "19:00"
+    },
+    {
+      "kind": "ufc_card",
+      "sourceProvider": "ufc_official",
+      "externalReference": "ufc-334",
+      "title": "UFC 334: Gane vs Hokit",
+      "eventDate": "2026-11-14",
+      "venue": "Madison Square Garden",
+      "city": "Nueva York",
+      "country": "Estados Unidos",
+      "eventType": "numerado",
+      "mainCardDate": "2026-11-14",
+      "mainCardTime": "23:00",
+      "preliminaryDate": "2026-11-14",
+      "preliminaryTime": "21:00",
+      "earlyPreliminariesDate": "2026-11-14",
+      "earlyPreliminariesTime": "19:00",
+      "fights": [
+        {
+          "firstFighter": "Ciryl Gane",
+          "secondFighter": "Josh Hokit",
+          "boutBlock": "main",
+          "isMainEvent": true
+        },
+        {
+          "firstFighter": "Kayla Harrison",
+          "secondFighter": "Amanda Nunes",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Caio Borralho",
+          "secondFighter": "Yousri Belgaroui",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Uroš Medić",
+          "secondFighter": "Kevin Holland",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Bilal Hasan",
+          "secondFighter": "Luis Gurule",
+          "boutBlock": "main",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Stephen Thompson",
+          "secondFighter": "Charles Radtke",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Drew Dober",
+          "secondFighter": "Chris Duncan",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Jim Miller",
+          "secondFighter": "Terrance McKinney",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Donte Johnson",
+          "secondFighter": "Baisangur Susurkaev",
+          "boutBlock": "preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Macy Chiasson",
+          "secondFighter": "Bia Mesquita",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Adrian Yanez",
+          "secondFighter": "Juan Diaz",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        },
+        {
+          "firstFighter": "Nazim Sadykhov",
+          "secondFighter": "Jefferson Nascimento",
+          "boutBlock": "early_preliminaries",
+          "isMainEvent": false
+        }
+      ],
+      "source": {
+        "primary": "https://www.ufc.com/event/ufc-334",
+        "checkedAt": "2026-10-26T10:47:50.506Z",
+        "crossCheck": "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=20261024-20261122&limit=100",
+        "validation": {
+          "officialCardComplete": true,
+          "officialFightCount": 12,
+          "independentCrossCheck": "pending"
+        },
+        "notes": "Se prioriza la ficha oficial vigente de UFC: 12 peleas. ESPN todavía lista Donte Johnson–Cesar Almeida y Jared Gordon–Melquizael Costa; UFC publica Donte Johnson–Baisangur Susurkaev y no publica Gordon–Costa. Discrepancia documentada, sin mezclar carteleras."
+      }
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { SportsEvent, SportsPageData } from "@/lib/sports/types";
 import { sportsNowDay, isRiverMatch } from "@/lib/sports/rules";
 import UfcPredictions from "./UfcPredictions";
+import UfcInsights from "./UfcInsights";
 import Comments from "./Comments";
 import { RiverLineup, RiverLineupImporter } from "./RiverLineup";
 import { RiverInsights, RiverInsightsImporter } from "./RiverInsights";
@@ -331,6 +332,9 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
           </nav>
           {sport === "ufc" && initial.features?.ufc && (
             <UfcPredictions key={selected.id} eventId={selected.id} />
+          )}
+          {sport === "ufc" && selected.sourceProvider === "ufc_official" && (
+            <UfcInsights reference={selected.externalReference} />
           )}
           {sport === "ufc" && !initial.features?.ufc && (
             <section aria-label="Cartelera">

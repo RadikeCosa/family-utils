@@ -1,0 +1,61 @@
+{
+  "ufc-333": {
+    "checkedAt": "2026-10-26T10:47:50.506Z",
+    "bonuses": [
+      {
+        "award": "Actuación de la noche",
+        "recipients": "Alexander Volkanovski"
+      },
+      {
+        "award": "Actuación de la noche",
+        "recipients": "Lone’er Kavanagh"
+      },
+      {
+        "award": "Pelea de la noche",
+        "recipients": "Petr Yan y Merab Dvalishvili"
+      }
+    ],
+    "statistics": [
+      {
+        "label": "Peleas disputadas",
+        "value": 14
+      },
+      {
+        "label": "Finalizaciones",
+        "value": 7
+      },
+      {
+        "label": "KO / TKO",
+        "value": 6
+      },
+      {
+        "label": "Sumisiones",
+        "value": 1
+      },
+      {
+        "label": "Decisiones",
+        "value": 7
+      },
+      {
+        "label": "Finalizaciones en el primer asalto",
+        "value": 6
+      }
+    ],
+    "curiosities": [
+      "Volkanovski retuvo el título pluma por KO/TKO a los 4:54 del segundo asalto y le quitó el invicto profesional a Evloev.",
+      "Petr Yan retuvo el título gallo por decisión unánime tras cinco asaltos ante Merab Dvalishvili. La coestelar fue elegida pelea de la noche.",
+      "Aaron Pico logró la finalización más rápida de la velada: KO/TKO sobre Losene Keita a los 1:14 del primer asalto.",
+      "Abus Magomedov consiguió la única victoria por sumisión de la cartelera, ante Cam Rowston a los 1:44 del primer asalto."
+    ],
+    "sources": [
+      {
+        "label": "Resultados oficiales de UFC",
+        "url": "https://www.ufc.com/event/ufc-333"
+      },
+      {
+        "label": "Bonos oficiales de UFC",
+        "url": "https://www.ufc.com/news/bonus-coverage-ufc-333-volkanovski-vs-evloev"
+      }
+    ]
+  }
+}
