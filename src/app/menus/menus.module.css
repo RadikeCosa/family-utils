@@ -255,6 +255,19 @@
 .compactMeal > summary span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #536b58; font-size: 13px; }
 .compactMeal > .mealCard { border: 0; }
 .previousPlan { font-size: 13px; color: #536b58; overflow-wrap: anywhere; }
+.compactDayMeal { min-width: 0; border: 1px solid #dce3da; border-radius: 12px; background: #fff; }
+.compactDayHeading { margin: 0; font: 700 16px Manrope,sans-serif; }
+.compactDayHeading button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; width: 100%; border: 0; border-radius: 11px; padding: 10px 14px; background: transparent; color: #35463a; font: inherit; text-align: left; cursor: pointer; }
+.compactDayHeading button:hover { background: #edf3eb; }
+.disclosureHint { flex-shrink: 0; font-size: 12px; font-weight: 500; color: #536b58; }
+.mealOverview { display: grid; gap: 7px; padding: 0 14px 12px; }
+.mealOverview p { min-width: 0; margin: 0; display: grid; gap: 3px; }
+.mealOverview strong { font: 600 19px/1.3 Georgia,serif; overflow-wrap: anywhere; }
+.mealOverview small { color: #536b58; font-size: 12px; }
+.choiceComplete,.choicePending { justify-self: start; font-size: 12px; font-weight: 700; }
+.choiceComplete { color: #304d37; }
+.choicePending { color: #79502d; }
+.mealDetail { padding: 0 14px 14px; border-top: 1px solid #e3e9e1; }
 .dailyNavigation button:disabled,.personChoices button:disabled,.menuActions button:disabled,.inlineAction:disabled,.viewButtons button:disabled { cursor: default; opacity: .65; }
 .notice button { min-height: 44px; margin-left: 8px; padding: 0 8px; color: #304d37; background: #fff; border: 1px solid #617b65; border-radius: 6px; }
 @media (max-width: 400px) {

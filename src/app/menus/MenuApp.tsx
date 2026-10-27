@@ -7,7 +7,7 @@ import { createAuthClient } from "@/lib/family-auth-client";
 import { addDays, getDayInTimeZone, hasMealAttendance, isMenuDateInRange, isValidDate, MEAL_LABELS, MEAL_TYPES, menuDateBounds, startOfWeek, type MealType, type ParticipationStatus } from "@/lib/meals/rules";
 import { canChangePerson, menuSummary, needsMeal, participationSummary, STATUS_LABELS, type DailyIdea, type DailyPerson, type MenuNumber } from "@/lib/meals/daily";
 import type { PlannerMeal, PlannerWeek } from "@/lib/meals/planner-server";
-import { countChosenMeals } from "@/lib/meals/presentation";
+import { countChosenMeals, mealChoiceState } from "@/lib/meals/presentation";
 import IdeaBank, { type BankState } from "./IdeaBank";
 import styles from "./menus.module.css";
 
@@ -16,10 +16,24 @@ type Action = Record<string, unknown>;
 type Confirmation = { date: string; mealType: MealType; version: string; kind: "confirm" | "remove-second" | "clear"; idea?: DailyIdea; catalogIdeaId?: string; menu?: MenuNumber };
 const dayLabel = (day: string) => new Intl.DateTimeFormat("es-AR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }).format(new Date(`${day}T12:00:00Z`));
 const familyDay = () => getDayInTimeZone();
+type MealDisclosure = { detail: boolean; people: boolean };
+const closedMeal: MealDisclosure = { detail: false, people: false };
+const mealButtonId = (date: string, type: MealType) => `meal-${date}-${type}-toggle`;
 
 export default function MenuApp() {
   const router = useRouter();
-  const [date, setDate] = useState(familyDay);
+  const [dayState, setDayState] = useState(() => ({ date: familyDay(), meals: {} as Partial<Record<MealType, MealDisclosure>> }));
+  const date = dayState.date;
+  const selectDate = useCallback((next: string) => {
+    setDayState(current => current.date === next ? current : { date: next, meals: {} });
+  }, []);
+  function toggleMeal(type: MealType, section: keyof MealDisclosure) {
+    setDayState(current => {
+      if (current.date !== date) return current;
+      const meal = current.meals[type] ?? closedMeal;
+      return { ...current, meals: { ...current.meals, [type]: { ...meal, [section]: !meal[section] } } };
+    });
+  }
   const [view, setView] = useState<"day" | "week">("day");
   const [ready, setReady] = useState(false);
   const [data, setData] = useState<PlannerWeek | null>(null);
@@ -32,7 +46,7 @@ export default function MenuApp() {
   const [undo, setUndo] = useState<{ date: string; type: MealType; person: DailyPerson; version: string } | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [bank, setBank] = useState<BankState | null>(null);
-  const dialog = useRef<HTMLDialogElement>(null), opener = useRef<HTMLElement | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null), opener = useRef<HTMLElement | null>(null), openerFallback = useRef<string | null>(null);
   const today = data?.today ?? familyDay();
   const bounds = menuDateBounds(today), week = startOfWeek(date);
   const activeWeek = useRef(week);
@@ -45,7 +59,7 @@ export default function MenuApp() {
       const valid = requested && isValidDate(requested) && isMenuDateInRange(requested, now);
       followsToday.current = !requested || !valid;
       activeWeek.current = startOfWeek(valid ? requested : now);
-      setDate(valid ? requested : now);
+      selectDate(valid ? requested : now);
       setView(params.get("vista") === "semana" ? "week" : "day");
       if (requested && !valid) {
         setNotice("La fecha no es válida. Mostramos hoy.");
@@ -56,7 +70,7 @@ export default function MenuApp() {
     readUrl();
     window.addEventListener("popstate", readUrl);
     return () => window.removeEventListener("popstate", readUrl);
-  }, []);
+  }, [selectDate]);
 
   const refresh = useCallback(async () => {
     if (activeWeek.current !== week) return null;
@@ -68,30 +82,34 @@ export default function MenuApp() {
       if (!response.ok) throw new Error(body.error ?? "No se pudo cargar el plan.");
       if (request !== sequence.current || activeWeek.current !== week) return null;
       setData(body);
-      if (followsToday.current) { activeWeek.current = startOfWeek(body.today); setDate(body.today); }
+      if (followsToday.current) { activeWeek.current = startOfWeek(body.today); selectDate(body.today); }
       return body as PlannerWeek;
     } catch (failure) {
       if (request === sequence.current && activeWeek.current === week) setError(failure instanceof Error ? failure.message : "No se pudo cargar el plan.");
       return null;
     } finally { if (request === sequence.current && activeWeek.current === week) setLoading(false); }
-  }, [week]);
+  }, [week, selectDate]);
 
   useEffect(() => { let cancelled = false; if (ready) queueMicrotask(() => { if (!cancelled) void refresh(); }); return () => { cancelled = true; }; }, [ready, refresh]);
   useEffect(() => {
     const resume = () => {
       if (document.visibilityState !== "visible") return;
-      if (followsToday.current) { const day = getDayInTimeZone(new Date(), data?.timeZone); activeWeek.current = startOfWeek(day); setDate(day); }
+      if (followsToday.current) { const day = getDayInTimeZone(new Date(), data?.timeZone); activeWeek.current = startOfWeek(day); selectDate(day); }
       if (ready) void refresh();
     };
     window.addEventListener("focus", resume);
     document.addEventListener("visibilitychange", resume);
     const timer = window.setInterval(resume, 60_000);
     return () => { window.removeEventListener("focus", resume); document.removeEventListener("visibilitychange", resume); clearInterval(timer); };
-  }, [data?.timeZone, ready, refresh]);
+  }, [data?.timeZone, ready, refresh, selectDate]);
 
   useEffect(() => {
     if (confirmation && !dialog.current?.open) dialog.current?.showModal();
-    else if (!confirmation && dialog.current?.open) { dialog.current.close(); opener.current?.focus(); }
+    else if (!confirmation && dialog.current?.open) {
+      dialog.current.close();
+      if (opener.current?.isConnected && opener.current.checkVisibility()) opener.current.focus();
+      else if (openerFallback.current) document.getElementById(openerFallback.current)?.focus();
+    }
   }, [confirmation]);
 
   function navigate(next: string, nextView = view, follow = false) {
@@ -100,7 +118,7 @@ export default function MenuApp() {
     const chosen = valid ? next : today;
     followsToday.current = follow;
     activeWeek.current = startOfWeek(chosen);
-    setDate(chosen); setView(nextView); setUndo(null); setRetry(null); setError("");
+    selectDate(chosen); setView(nextView); setUndo(null); setRetry(null); setError("");
     if (!valid) setNotice("La fecha no es válida. Mostramos hoy."); else setNotice("");
     const url = new URL(window.location.href);
     url.searchParams.set("fecha", chosen); url.searchParams.set("vista", nextView === "week" ? "semana" : "dia");
@@ -141,6 +159,7 @@ export default function MenuApp() {
       return;
     }
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    openerFallback.current = mealButtonId(meal.date, meal.mealType);
     setError(""); setConfirmation({ date: meal.date, mealType: meal.mealType, version: meal.version, kind, menu: destination, idea, catalogIdeaId });
   }
   const currentMeal = confirmation && data?.meals.find(m => m.date === confirmation.date && m.mealType === confirmation.mealType);
@@ -189,8 +208,7 @@ export default function MenuApp() {
     </section> : <section className={styles.mealList} aria-label={`Comidas del ${dayLabel(date)}`}>
       {MEAL_TYPES.map(type => {
         const meal = data.meals.find(m => m.date === date && m.mealType === type)!;
-        const card = <DailyMeal key={`${date}-${type}`} meal={meal} data={data} busy={busy} adult={!!adult} readOnly={date < today || meal.readOnly} onMutate={mutate} onAsk={ask} onBank={(target, event) => { setBank({ date, mealType: type, menu: target, opener: event }); }} />;
-        return hasMealAttendance(type) ? card : <details className={styles.compactMeal} key={`${date}-${type}`}><summary><strong>{MEAL_LABELS[type]}</strong><span>{meal.plan.menus.map(m => m.selection?.title).filter(Boolean).join(" · ") || "Todavía no elegimos qué comer"}</span><span>Ver</span></summary>{card}</details>;
+        return <DailyMeal key={`${date}-${type}`} meal={meal} data={data} busy={busy} adult={!!adult} readOnly={date < today || meal.readOnly} disclosure={dayState.meals[type] ?? closedMeal} onToggle={section => toggleMeal(type, section)} onMutate={mutate} onAsk={ask} onBank={(target, event) => { setBank({ date, mealType: type, menu: target, opener: event, fallbackOpenerId: mealButtonId(date, type) }); }} />;
       })}
     </section>}
     <footer className={styles.footer}><Link href="/">Family Utils</Link><span role="status">{busy ? "Guardando…" : loading ? "Actualizando…" : "Plan compartido"}</span></footer>
@@ -217,16 +235,24 @@ export default function MenuApp() {
   </main>;
 }
 
-type DailyMealProps = { meal: PlannerMeal; data: PlannerWeek; busy: boolean; adult: boolean; readOnly: boolean;
+type DailyMealProps = { disclosure: MealDisclosure; onToggle: (section: keyof MealDisclosure) => void; meal: PlannerMeal; data: PlannerWeek; busy: boolean; adult: boolean; readOnly: boolean;
   onMutate: (meal: PlannerMeal, action: Action, success: string, remember?: DailyPerson) => Promise<boolean>;
   onAsk: (meal: PlannerMeal, kind: Confirmation["kind"], menu?: MenuNumber, idea?: DailyIdea) => void;
   onBank: (menu: MenuNumber, opener: HTMLElement) => void;
 };
-function DailyMeal({ meal, data, busy, adult, readOnly, onMutate, onAsk, onBank }: DailyMealProps) {
+function DailyMeal({ meal, data, busy, adult, readOnly, disclosure, onToggle, onMutate, onAsk, onBank }: DailyMealProps) {
   const [expanded, setExpanded] = useState(false);
   const attendance = hasMealAttendance(meal.mealType);
-  return <article className={styles.mealCard} aria-label={MEAL_LABELS[meal.mealType]}>
-    <h2 className={styles.dailyMealTitle}>{MEAL_LABELS[meal.mealType]}</h2>
+  const choice = mealChoiceState(meal);
+  const toggleId = mealButtonId(meal.date, meal.mealType);
+  const detailId = `meal-${meal.date}-${meal.mealType}-detail`;
+  return <article className={styles.compactDayMeal} aria-label={MEAL_LABELS[meal.mealType]}>
+    <h2 className={styles.compactDayHeading}><button id={toggleId} aria-expanded={disclosure.detail} aria-controls={detailId} onClick={() => onToggle("detail")}><span>{MEAL_LABELS[meal.mealType]}</span><span className={styles.disclosureHint} aria-hidden="true">{disclosure.detail ? "Cerrar −" : "Ver +"}</span></button></h2>
+    <div className={styles.mealOverview}>
+      <span className={choice.complete ? styles.choiceComplete : styles.choicePending}>{choice.label}</span>
+      {!meal.readOnly && meal.plan.menus.map(menu => <p key={menu.number}>{meal.plan.menus.length > 1 && <small>Opción {menu.number}</small>}<strong>{menu.selection?.title ?? "Sin elegir"}</strong></p>)}
+    </div>
+    <div id={detailId} hidden={!disclosure.detail} className={styles.mealDetail}>
     {meal.readOnly ? <><p className={styles.warning}>Plan anterior · Solo lectura. {meal.reason}</p><PreviousPlan meal={meal} data={data} /></> : <>
       {meal.plan.menus.map(menu => <div className={styles.dailyMenu} key={menu.number}>
         <div>{meal.plan.menus.length > 1 && <small>OPCIÓN {menu.number}</small>}<strong>{menu.selection?.title ?? "Todavía no elegimos qué comer"}</strong>
@@ -255,6 +281,7 @@ function DailyMeal({ meal, data, busy, adult, readOnly, onMutate, onAsk, onBank 
       {readOnly && <p className={styles.muted}>Solo lectura</p>}
       {meal.previous && <details className={styles.details} open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}><summary>Información anterior</summary><PreviousPlan meal={meal} data={data} /></details>}
     </>}
+    </div>
   </article>;
 }
 function PreviousPlan({ meal, data }: { meal: PlannerMeal; data: PlannerWeek }) {

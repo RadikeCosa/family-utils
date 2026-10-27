@@ -4,7 +4,7 @@ import type { MealType } from "@/lib/meals/rules";
 import type { MealIdea } from "@/lib/meals/types";
 import styles from "./menus.module.css";
 
-export type BankState = { date: string; mealType: MealType; menu: 1 | 2; opener: HTMLElement };
+export type BankState = { date: string; mealType: MealType; menu: 1 | 2; opener: HTMLElement; fallbackOpenerId?: string };
 type CatalogItem = Pick<MealIdea, "id" | "title" | "note" | "authorMemberId" | "authorName" | "version"> & { lastUsedAt: string | null; archivedAt: string | null };
 type Draft = { id?: string; version?: number; title: string; note: string };
 
@@ -38,7 +38,7 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
     return () => { cancelled = true; };
   }, [state, load]);
   useEffect(() => { if (!state || archived) return; const timer = window.setTimeout(() => void load(query, false, 0), 220); return () => clearTimeout(timer); }, [query, state, archived, load]);
-  function close() { if (!busy) { onClose(); if (opener.current?.isConnected) opener.current.focus(); } }
+  function close() { if (!busy) { onClose(); if (opener.current?.isConnected && opener.current.checkVisibility()) opener.current.focus(); else if (state?.fallbackOpenerId) document.getElementById(state.fallbackOpenerId)?.focus(); } }
   async function saveIdea(event: React.FormEvent) {
     event.preventDefault(); if (!draft?.title.trim() || busy) return;
     setBusy(true); setError("");

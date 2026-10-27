@@ -27,6 +27,7 @@ async function addDish(title:string,menu=1){const state=await api.get("/api/meal
 test("360px: blank choices, acknowledged saves, failure/retry, undo and two menus",async({page})=>{
   await page.goto("/menus");
   const lunch=page.getByRole("article",{name:"Almuerzo",exact:true}),alex=lunch.getByRole("group",{name:"Preparación para Alex"});
+  await lunch.getByRole("button",{name:"Almuerzo",exact:true}).click();
   await expect(lunch.getByText("Falta indicar",{exact:true})).toHaveCount(5);
   await expect(alex.locator('[aria-pressed="true"]')).toHaveCount(0);
   await page.route("**/api/meals/planner",route=>route.abort("failed"));
@@ -41,7 +42,7 @@ test("360px: blank choices, acknowledged saves, failure/retry, undo and two menu
   let dialog=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await dialog.getByLabel("¿Qué vamos a comer?").fill("Milanesas");
   await dialog.getByRole("button",{name:"Agregar “Milanesas”",exact:true}).click();
-  await expect(lunch.getByText("Milanesas",{exact:true})).toBeVisible();
+  await expect(lunch.getByText("Milanesas",{exact:true}).first()).toBeVisible();
   await lunch.getByRole("button",{name:"Agregar otra opción",exact:true}).click();
   await expect(lunch.getByText("OPCIÓN 2",{exact:true})).toBeVisible();
   const pedro=lunch.getByRole("group",{name:"Preparación para Pedro"});await pedro.getByRole("button",{name:"Se lleva comida",exact:true}).click();
@@ -53,7 +54,7 @@ test("360px: blank choices, acknowledged saves, failure/retry, undo and two menu
   dialog=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await dialog.getByLabel("¿Qué vamos a comer?").fill("Ensalada");
   await dialog.getByRole("button",{name:"Agregar “Ensalada”",exact:true}).click();
-  await expect(lunch.getByText("Ensalada",{exact:true})).toBeVisible();
+  await expect(lunch.getByText("Ensalada",{exact:true}).first()).toBeVisible();
   await optionTwo.getByRole("button",{name:"Quitar opción 2",exact:true}).click();
   dialog=page.getByRole("dialog");
   await expect(dialog).toContainText("Pedro");await dialog.getByRole("button",{name:"Cancelar",exact:true}).click();
@@ -81,6 +82,7 @@ test("entry is today/day; dated reload, back/forward and secondary week preserve
 
 test("adult conflict keeps the current dish visible before saving a replacement",async({page})=>{
   await addDish("Pasta");await page.goto("/menus");const lunch=page.getByRole("article",{name:"Almuerzo",exact:true});
+  await lunch.getByRole("button",{name:"Almuerzo",exact:true}).click();
   const state=await api.get("/api/meals/planner").then(r=>r.json()),meal=state.meals.find((m:{date:string;mealType:string})=>m.date===getDayInTimeZone()&&m.mealType==="lunch");
   expect((await api.put("/api/meals/planner",{headers:{Origin:baseURL},data:{date:meal.date,mealType:"lunch",expectedVersion:meal.version,action:"confirm",menu:1,title:"Sopa",replace:true}})).status()).toBe(200);
   await lunch.getByRole("button",{name:"Cambiar comida",exact:true}).click();
@@ -92,11 +94,12 @@ test("adult conflict keeps the current dish visible before saving a replacement"
   await expect(dialog.getByRole("alert").filter({hasText:"Alguien cambió"})).toBeVisible();
   await expect(dialog).toContainText("Sopa");
   await dialog.getByRole("button",{name:"Guardar cambio",exact:true}).click();await expect(dialog).toBeHidden();
-  await expect(lunch.getByText("Pasta",{exact:true})).toBeVisible();
+  await expect(lunch.getByText("Pasta",{exact:true}).first()).toBeVisible();
 });
 
 test("annotating a dish does not add it to the day and it can be reused",async({page})=>{
   await page.goto("/menus");const lunch=page.getByRole("article",{name:"Almuerzo",exact:true});
+  await lunch.getByRole("button",{name:"Almuerzo",exact:true}).click();
   await lunch.getByRole("button",{name:"Agregar comida",exact:true}).click();
   let bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await bank.getByLabel("¿Qué vamos a comer?").fill("Puré familiar");
@@ -110,7 +113,7 @@ test("annotating a dish does not add it to the day and it can be reused",async({
   await bank.getByLabel("¿Qué vamos a comer?").fill("Puré familiar");
   await bank.getByRole("button",{name:/Agregar.*Puré familiar/}).click();
   await expect(bank).toBeHidden();
-  await expect(lunch.getByText("Puré familiar",{exact:true})).toBeVisible();
+  await expect(lunch.getByText("Puré familiar",{exact:true}).first()).toBeVisible();
   await lunch.getByRole("button",{name:"Cambiar comida",exact:true}).click();
   await bank.getByRole("button",{name:"Ver todos los platos",exact:true}).click();
   await bank.getByRole("button",{name:/Editar.*Puré familiar/}).click();
@@ -119,9 +122,9 @@ test("annotating a dish does not add it to the day and it can be reused",async({
   await edit.getByRole("button",{name:"Guardar plato",exact:true}).click();
   bank=page.getByRole("dialog",{name:"Agregar comida",exact:true});
   await expect(bank.getByRole("heading",{name:"Puré con calabaza",exact:true})).toBeVisible();
-  await expect(lunch.getByText("Puré familiar",{exact:true})).toBeVisible();
+  await expect(lunch.getByText("Puré familiar",{exact:true}).first()).toBeVisible();
   await bank.getByRole("button",{name:"Cerrar repertorio",exact:true}).click();
-  await expect(lunch.getByText("Puré familiar",{exact:true})).toBeVisible();
+  await expect(lunch.getByText("Puré familiar",{exact:true}).first()).toBeVisible();
 });
 
 test("back during a pending save cannot replace the selected week's data",async({page})=>{
@@ -129,6 +132,7 @@ test("back during a pending save cannot replace the selected week's data",async(
   await page.goto("/menus");await expect(page.getByLabel("Ir a una fecha")).toHaveValue(today);
   await page.getByLabel("Ir a una fecha").fill(future);
   const lunch=page.getByRole("article",{name:"Almuerzo",exact:true});
+  await lunch.getByRole("button",{name:"Almuerzo",exact:true}).click();
   await expect(lunch.getByRole("group",{name:"Preparación para Alex"})).toBeVisible();
   let release!:()=>void;
   const blocked=new Promise<void>(resolve=>{release=resolve;});
@@ -138,6 +142,8 @@ test("back during a pending save cannot replace the selected week's data",async(
   await started;await page.goBack();
   await expect(page.getByLabel("Ir a una fecha")).toHaveValue(today);
   const saved=page.waitForResponse(r=>r.request().method()==="PUT"&&r.url().endsWith("/api/meals/planner"));release();await saved;
+  await expect(lunch.getByRole("button",{name:"Almuerzo",exact:true})).toHaveAttribute("aria-expanded","false");
+  await lunch.getByRole("button",{name:"Almuerzo",exact:true}).click();
   await expect(lunch.getByRole("group",{name:"Preparación para Alex"})).toBeVisible();
   await expect(lunch.getByRole("group",{name:"Preparación para Alex"}).getByRole("button",{name:"Come en casa",exact:true})).toHaveAttribute("aria-pressed","false");
 });

@@ -172,6 +172,7 @@ test("menús diario mantiene personas visibles y permite agregar desde el repert
     const page = await context.newPage();
     await page.goto("/menus");
     const lunch = page.getByRole("article", { name: "Almuerzo", exact: true });
+    await lunch.getByRole("button", { name: "Almuerzo", exact: true }).click();
     await expect(lunch.getByRole("group", { name: "Preparación para Alex" })).toBeVisible();
     await expect(lunch.getByText("Todavía no elegimos qué comer", { exact: true })).toBeVisible();
     await lunch.getByRole("button", { name: "Agregar comida", exact: true }).click();
@@ -182,7 +183,7 @@ test("menús diario mantiene personas visibles y permite agregar desde el repert
     expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
     await dish.click();
     await expect(bank).toBeHidden();
-    await expect(lunch.getByText("Tarta de verduras", { exact: true })).toBeVisible();
+    await expect(lunch.getByText("Tarta de verduras", { exact: true }).first()).toBeVisible();
     const group=lunch.getByRole("group",{name:"Preparación para Alex"});
     await group.getByRole("button",{name:"Come en casa",exact:true}).click();
     await expect(group.getByRole("button",{name:"Come en casa",exact:true})).toHaveAttribute("aria-pressed","true");
