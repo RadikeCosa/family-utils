@@ -165,14 +165,23 @@ async function inspectControls(page: import("@playwright/test").Page) {
   });
 }
 
-test("menús diario mantiene personas visibles y permite agregar desde el repertorio a 360 px", async ({ browser, baseURL }) => {
+test("menús diario despliega comidas y personas y permite agregar desde el repertorio a 360 px", async ({ browser, baseURL }) => {
   const fixture = await createFixture(baseURL!, browser);
   try {
     const context = await browser.newContext({ storageState: fixture.storageState, viewport: { width: 360, height: 800 } });
     const page = await context.newPage();
     await page.goto("/menus");
     const lunch = page.getByRole("article", { name: "Almuerzo", exact: true });
-    await lunch.getByRole("button", { name: "Almuerzo", exact: true }).click();
+    await expect(lunch.getByRole("button", { name: "Almuerzo", exact: true })).toHaveAttribute("aria-expanded", "false");
+    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await lunch.getByRole("button", { name: "Almuerzo", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    const people = lunch.getByRole("button", { name: /Quiénes comen/ });
+    await expect(people).toHaveAttribute("aria-expanded", "false");
+    await expect(lunch.getByRole("group", { name: "Preparación para Alex" })).toBeHidden();
+    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await people.focus();
+    await page.keyboard.press("Space");
     await expect(lunch.getByRole("group", { name: "Preparación para Alex" })).toBeVisible();
     await expect(lunch.getByText("Todavía no elegimos qué comer", { exact: true })).toBeVisible();
     await lunch.getByRole("button", { name: "Agregar comida", exact: true }).click();

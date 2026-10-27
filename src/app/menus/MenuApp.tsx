@@ -246,6 +246,7 @@ function DailyMeal({ meal, data, busy, adult, readOnly, disclosure, onToggle, on
   const choice = mealChoiceState(meal);
   const toggleId = mealButtonId(meal.date, meal.mealType);
   const detailId = `meal-${meal.date}-${meal.mealType}-detail`;
+  const peopleId = `meal-${meal.date}-${meal.mealType}-people`;
   return <article className={styles.compactDayMeal} aria-label={MEAL_LABELS[meal.mealType]}>
     <h2 className={styles.compactDayHeading}><button id={toggleId} aria-expanded={disclosure.detail} aria-controls={detailId} onClick={() => onToggle("detail")}><span>{MEAL_LABELS[meal.mealType]}</span><span className={styles.disclosureHint} aria-hidden="true">{disclosure.detail ? "Cerrar −" : "Ver +"}</span></button></h2>
     <div className={styles.mealOverview}>
@@ -264,7 +265,8 @@ function DailyMeal({ meal, data, busy, adult, readOnly, disclosure, onToggle, on
       </div>)}
       {adult && !readOnly && attendance && meal.plan.menus.length === 1 && <button className={styles.inlineAction} disabled={busy} onClick={() => void onMutate(meal, { action: "add-second" }, "Segunda opción agregada.")}>Agregar otra opción</button>}
       {attendance && <div className={styles.dailyPeople}>
-        <p className={styles.dailySummary}>{participationSummary(meal.plan.people)}</p>
+        <button className={styles.peopleToggle} aria-expanded={disclosure.people} aria-controls={peopleId} onClick={() => onToggle("people")}><span>Quiénes comen</span><span>{participationSummary(meal.plan.people)}</span></button>
+        <div id={peopleId} hidden={!disclosure.people}>
         {meal.plan.people.map(person => {
           const profile = data.members.find(m => m.id === person.memberId)!;
           const disabled = busy || readOnly || !canChangePerson(data.currentRole, data.currentMemberId, person.memberId);
@@ -277,6 +279,7 @@ function DailyMeal({ meal, data, busy, adult, readOnly, disclosure, onToggle, on
             {needsMeal(person.status) && meal.plan.menus.length === 2 && <label className={styles.personMenu}><span>Opción para {profile.name}</span><select aria-label={`Comida de ${profile.name}`} value={person.menu ?? 1} disabled={disabled} onChange={e => void onMutate(meal, { action: "person", memberId: person.memberId, status: person.status, menu: Number(e.target.value) }, "Comida asignada.", person)}>{meal.plan.menus.map(m => <option key={m.number} value={m.number}>Opción {m.number} · {m.selection?.title ?? "Sin elegir"}</option>)}</select></label>}
           </div>;
         })}
+        </div>
       </div>}
       {readOnly && <p className={styles.muted}>Solo lectura</p>}
       {meal.previous && <details className={styles.details} open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}><summary>Información anterior</summary><PreviousPlan meal={meal} data={data} /></details>}

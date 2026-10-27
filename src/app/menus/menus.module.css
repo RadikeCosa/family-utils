@@ -268,6 +268,8 @@
 .choiceComplete { color: #304d37; }
 .choicePending { color: #79502d; }
 .mealDetail { padding: 0 14px 14px; border-top: 1px solid #e3e9e1; }
+.peopleToggle { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; min-height: 44px; width: 100%; padding: 8px 0; border: 0; border-top: 1px solid #e3e9e1; background: transparent; color: #354d3b; font: 700 14px Manrope,sans-serif; text-align: left; cursor: pointer; }
+.peopleToggle span:last-child { font-size: 12px; font-weight: 500; }
 .dailyNavigation button:disabled,.personChoices button:disabled,.menuActions button:disabled,.inlineAction:disabled,.viewButtons button:disabled { cursor: default; opacity: .65; }
 .notice button { min-height: 44px; margin-left: 8px; padding: 0 8px; color: #304d37; background: #fff; border: 1px solid #617b65; border-radius: 6px; }
 @media (max-width: 400px) {
