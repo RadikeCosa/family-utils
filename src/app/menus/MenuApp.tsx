@@ -7,6 +7,7 @@ import { createAuthClient } from "@/lib/family-auth-client";
 import { addDays, getDayInTimeZone, hasMealAttendance, isMenuDateInRange, isValidDate, MEAL_LABELS, MEAL_TYPES, menuDateBounds, startOfWeek, type MealType, type ParticipationStatus } from "@/lib/meals/rules";
 import { canChangePerson, menuSummary, needsMeal, participationSummary, STATUS_LABELS, type DailyIdea, type DailyPerson, type MenuNumber } from "@/lib/meals/daily";
 import type { PlannerMeal, PlannerWeek } from "@/lib/meals/planner-server";
+import { countChosenMeals } from "@/lib/meals/presentation";
 import IdeaBank, { type BankState } from "./IdeaBank";
 import styles from "./menus.module.css";
 
@@ -167,6 +168,7 @@ export default function MenuApp() {
         <button disabled={busy} onClick={() => navigate(today, "day", true)}>Hoy</button>
       </div>
       <p className={styles.dateLabel}>{date === today ? "Hoy · " : ""}{dayLabel(date)}{date < today ? " · Solo lectura" : ""}</p>
+      {view === "day" && weekReady && data && <p className={styles.dailySummary}>{countChosenMeals(data.meals, date)} de 4 comidas elegidas</p>}
       <div className={styles.viewButtons} aria-label="Vista del planificador"><button aria-pressed={view === "day"} disabled={busy} onClick={() => navigate(date, "day", followsToday.current)}>Día</button><button aria-pressed={view === "week"} disabled={busy} onClick={() => navigate(date, "week", followsToday.current)}>Semana</button></div>
       <p className={styles.srOnly} role="status">{busy ? "Guardando…" : loading ? "Actualizando…" : "Plan actualizado"}</p>
       {notice && <p className={styles.notice} role="status">{notice}{undo && <button disabled={busy} onClick={() => {
