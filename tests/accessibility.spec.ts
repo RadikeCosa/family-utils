@@ -192,6 +192,7 @@ test("menús diario despliega comidas y personas y permite agregar desde el repe
     expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
     await dish.click();
     await expect(bank).toBeHidden();
+    await expect(lunch.getByRole("button", { name: "Almuerzo", exact: true })).toBeFocused();
     await expect(lunch.getByText("Tarta de verduras", { exact: true }).first()).toBeVisible();
     const group=lunch.getByRole("group",{name:"Preparación para Alex"});
     await group.getByRole("button",{name:"Come en casa",exact:true}).click();

@@ -13,6 +13,11 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
   onChanged: () => Promise<unknown>; currentMemberId: string; adult: boolean; today: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null), opener = useRef<HTMLElement | null>(null), input = useRef<HTMLInputElement>(null), sequence = useRef(0);
+  const fallbackOpener = useRef<string | undefined>(undefined);
+  const restoreFocus = useCallback(() => {
+    if (opener.current?.isConnected && opener.current.checkVisibility()) opener.current.focus();
+    else if (fallbackOpener.current) document.getElementById(fallbackOpener.current)?.focus();
+  }, []);
   const [items, setItems] = useState<CatalogItem[]>([]), [nextOffset, setNextOffset] = useState<number | null>(null);
   const [query, setQuery] = useState(""), [note, setNote] = useState(""), [archived, setArchived] = useState(false), [manage, setManage] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -31,14 +36,15 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
     finally { if (request === sequence.current) setBusy(false); }
   }, []);
   useEffect(() => {
-    if (!state) { if (dialog.current?.open) dialog.current.close(); return; }
+    if (!state) { if (dialog.current?.open) { dialog.current.close(); restoreFocus(); } return; }
+    fallbackOpener.current = state.fallbackOpenerId;
     opener.current = state.opener; dialog.current?.showModal();
     let cancelled = false;
     queueMicrotask(() => { if (cancelled) return; setQuery(""); setNote(""); setArchived(false); setManage(false); setDraft(null); setHiddenExact(null); input.current?.focus(); void load("", false, 0); });
     return () => { cancelled = true; };
-  }, [state, load]);
+  }, [state, load, restoreFocus]);
   useEffect(() => { if (!state || archived) return; const timer = window.setTimeout(() => void load(query, false, 0), 220); return () => clearTimeout(timer); }, [query, state, archived, load]);
-  function close() { if (!busy) { onClose(); if (opener.current?.isConnected && opener.current.checkVisibility()) opener.current.focus(); else if (state?.fallbackOpenerId) document.getElementById(state.fallbackOpenerId)?.focus(); } }
+  function close() { if (!busy) onClose(); }
   async function saveIdea(event: React.FormEvent) {
     event.preventDefault(); if (!draft?.title.trim() || busy) return;
     setBusy(true); setError("");
