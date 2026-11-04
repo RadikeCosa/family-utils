@@ -1,3 +1,4 @@
+import { recipesEnabled } from "@/lib/recipes/config";
 import Link from "next/link";
 import { libraryEnabled } from "@/lib/library/config";
 import { trainingEnabled } from "@/lib/training/config";
@@ -32,6 +33,9 @@ export default function Home() {
             <span className={styles.cardCopy}>Propongan comidas y organicen la semana entre todos.</span>
             <span className={styles.cardArrow}>Planificar <span aria-hidden="true">→</span></span>
           </Link>
+          {recipesEnabled() && <Link className={styles.appCard} href="/recetas" aria-label="Abrir Recetas">
+            <span className={`${styles.appIcon} ${styles.peach}`} aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4zM7 4v16M10 8h6m-6 4h6" /></svg></span><span className={styles.cardTitle}>Recetas</span><span className={styles.cardCopy}>Los platos de la familia, sus ingredientes y cómo prepararlos.</span><span className={styles.cardArrow}>Cocinar <span aria-hidden="true">→</span></span>
+          </Link>}
           <Link className={styles.appCard} href="/compras" aria-label="Abrir Listas de compras">
             <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">☷</span>
             <span className={styles.cardTitle}>Listas de compras</span>

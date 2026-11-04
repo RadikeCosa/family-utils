@@ -48,6 +48,7 @@ jobs:
       - run: npm run build
       - run: npm run test:routes
       - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:recipes:e2e
       - run: npm run test:e2e
       - run: npm run test:sports-next
       - name: Upload River and UFC UI screenshots

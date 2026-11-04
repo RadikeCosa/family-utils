@@ -64,6 +64,8 @@ gane.
 
 ## Documentación
 
+- [Recetas: catálogo compartido, migraciones y activación](sources/recipes.md)
+
 - [Rediseño de Biblioteca familiar y validación](sources/family-library-redesign.md)
 - [Conversor de cocina: datos, precisión y verificación](sources/kitchen-converter.md)
 - [Menús diarios: cotejo, conservación y publicación](sources/menus-diarios-simples.md)

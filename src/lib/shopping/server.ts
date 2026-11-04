@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, families, memberDevices, members, shoppingEditors, shoppingItems, shoppingLists, shoppingSuggestions } from "@/db/schema";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
-import { normalizeProductName, productInput, shoppingItemOrder, shoppingPermissions, UUID_PATTERN } from "./rules";
+import { productInput, shoppingItemOrder, shoppingPermissions, UUID_PATTERN } from "./rules";
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 type Command = "create" | "manage" | "editors" | "transfer" | "add" | "edit" | "remove" | "purchased" | "reset" | "suggestion";
@@ -160,7 +160,7 @@ export async function mutateShopping(request: Request, command: Command, listId?
         if (typeof body.purchased !== "boolean") fail(400, "INVALID", "Estado inválido.");
         if (body.purchased === item.purchased) return { id: item.id };
         const [updated] = await tx.update(shoppingItems).set({ purchased: body.purchased, purchasedByMemberId: body.purchased ? current.id : null, purchasedAt: body.purchased ? now : null, updatedByMemberId: current.id, updatedAt: now }).where(eq(shoppingItems.id, item.id)).returning();
-        if (body.purchased) await tx.insert(shoppingSuggestions).values({ familyId: actor.familyId, name: item.name, normalizedName: normalizeProductName(item.name) }).onConflictDoNothing();
+        if (body.purchased) await tx.insert(shoppingSuggestions).values({ familyId: actor.familyId, name: item.name, normalizedName: sql`normalize_name_v1(${item.name})` }).onConflictDoNothing();
         await record(tx, actor, "shopping_item", item.id, body.purchased ? "purchased" : "unpurchased", item, updated);
       } else {
         expectVersion(item.version, body.expectedVersion);

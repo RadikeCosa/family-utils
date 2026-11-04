@@ -1,14 +1,16 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MealType } from "@/lib/meals/rules";
 import type { MealIdea } from "@/lib/meals/types";
 import styles from "./menus.module.css";
 
 export type BankState = { date: string; mealType: MealType; menu: 1 | 2; opener: HTMLElement; fallbackOpenerId?: string };
-type CatalogItem = Pick<MealIdea, "id" | "title" | "note" | "authorMemberId" | "authorName" | "version"> & { lastUsedAt: string | null; archivedAt: string | null };
+type CatalogItem = Pick<MealIdea, "id" | "title" | "note" | "authorMemberId" | "authorName" | "version"> & { lastUsedAt: string | null; archivedAt: string | null; exactMatch: boolean };
 type Draft = { id?: string; version?: number; title: string; note: string };
 
-export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemberId, adult, today }: {
+export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemberId, adult, today, recipes = false }: {
+  recipes?: boolean;
   state: BankState | null; onClose: () => void; onUse: (idea: Pick<CatalogItem, "id" | "title" | "note" | "authorName">) => Promise<boolean>;
   onChanged: () => Promise<unknown>; currentMemberId: string; adult: boolean; today: string;
 }) {
@@ -19,6 +21,7 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
     else if (fallbackOpener.current) document.getElementById(fallbackOpener.current)?.focus();
   }, []);
   const [items, setItems] = useState<CatalogItem[]>([]), [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState<{ query: string; archived: boolean } | null>(null);
   const [query, setQuery] = useState(""), [note, setNote] = useState(""), [archived, setArchived] = useState(false), [manage, setManage] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [hiddenExact, setHiddenExact] = useState<CatalogItem | null>(null);
@@ -27,10 +30,10 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
     try {
       const response = await fetch(`/api/meals/catalog?q=${encodeURIComponent(search)}&archived=${showArchived ? 1 : 0}&offset=${offset}`, { cache: "no-store" });
       const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "No se pudo cargar el repertorio.");
-      if (request === sequence.current) { setItems(current => append ? current.concat(body.ideas) : body.ideas); setNextOffset(body.nextOffset); }
+      if (request === sequence.current) { setItems(current => append ? current.concat(body.ideas) : body.ideas); setNextOffset(body.nextOffset); setLoaded({ query: search, archived: showArchived }); }
       if (!showArchived && search.trim()) {
         const hidden = await fetch(`/api/meals/catalog?q=${encodeURIComponent(search.trim())}&archived=1&limit=1`, { cache: "no-store" }).then(r => r.json());
-        if (request === sequence.current) setHiddenExact(hidden.ideas?.find((idea: CatalogItem) => normalize(idea.title) === normalize(search)) ?? null);
+        if (request === sequence.current) setHiddenExact(hidden.ideas?.find((idea: CatalogItem) => idea.exactMatch) ?? null);
       } else if (request === sequence.current) setHiddenExact(null);
     } catch (failure) { if (request === sequence.current) setError(failure instanceof Error ? failure.message : "No se pudo cargar el repertorio."); }
     finally { if (request === sequence.current) setBusy(false); }
@@ -71,6 +74,7 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
     if (ok) close(); else setError("No se pudo agregar la comida. El plato sigue disponible; podés intentar de nuevo.");
     setBusy(false);
   }
+  const queryReady = loaded?.query === query && loaded.archived === archived;
   const canManage = (item: CatalogItem) => adult || item.authorMemberId === currentMemberId;
   return <dialog ref={dialog} className={`${styles.dialog} ${styles.bankDialog}`} aria-labelledby="catalog-title" onCancel={event => { event.preventDefault(); close(); }}>
     <button className={styles.dialogClose} aria-label="Cerrar repertorio" disabled={busy} onClick={close}>×</button>
@@ -87,25 +91,24 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
       <div className={styles.formFields}><label>¿Qué vamos a comer?<input ref={input} type="search" value={query} onChange={event => setQuery(event.target.value)} autoComplete="off" /></label></div>
       <div className={styles.bankToolbar}>
         <div className={styles.viewSwitcher}><button disabled={busy} aria-pressed={!archived} onClick={() => { setArchived(false); void load(query, false, 0); }}>Disponibles</button><button disabled={busy} aria-pressed={archived} onClick={() => { setArchived(true); void load(query, true, 0); }}>Ocultos</button></div>
-        {!hiddenExact && !items.some(item => normalize(item.title) === normalize(query)) && <button className={styles.secondaryButton} disabled={busy} onClick={() => { setDraft({ title: query.trim(), note: "" }); setError(""); }}>Anotar para otro día</button>}
+        {queryReady && !hiddenExact && !items.some(item => item.exactMatch) && <button className={styles.secondaryButton} disabled={busy} onClick={() => { setDraft({ title: query.trim(), note: "" }); setError(""); }}>Anotar para otro día</button>}
       </div>
       {error && <p className={styles.error} role="alert">{error}<button className={styles.expandButton} onClick={() => void load(query, archived, 0)}>Reintentar</button></p>}
-      {busy && <p className={styles.loading} role="status">Buscando…</p>}
+      {(busy || !queryReady) && <p className={styles.loading} role="status">Buscando…</p>}
       {!busy && !items.length && <p className={styles.empty}>{archived ? "No hay platos ocultos." : "Todavía no hay platos en el repertorio."}</p>}
       <div className={styles.bankIdeas}>{items.map(item => <article className={styles.bankIdea} key={item.id}>
-        <h3>{item.title}</h3>{item.note && <p>{item.note}</p>}
+        <h3>{item.title}</h3>{recipes && <Link href={`/recetas/${item.id}`}>Ver receta</Link>}{item.note && <p>{item.note}</p>}
         <div className={styles.suggestionActions}>
-          {!archived && state && state.date >= today && <button disabled={busy} onClick={() => void choose(item)}>{hiddenExact?.id === item.id ? "Volver a usar" : "Agregar"}<span className={styles.srOnly}> {item.title}</span></button>}
-          {canManage(item) && (manage || archived) && <>{!archived && <button disabled={busy} onClick={() => manageItem(item, "edit")}>Editar<span className={styles.srOnly}> {item.title}</span></button>}<button disabled={busy} onClick={() => void manageItem(item, archived ? "restore" : "archive")}>{archived ? "Restaurar" : "Ocultar del repertorio"}<span className={styles.srOnly}> {item.title}</span></button></>}
+          {!archived && state && state.date >= today && <button disabled={busy || !queryReady} onClick={() => void choose(item)}>{hiddenExact?.id === item.id ? "Volver a usar" : "Agregar"}<span className={styles.srOnly}> {item.title}</span></button>}
+          {(recipes || canManage(item)) && (manage || archived) && <>{(!archived || recipes) && <button disabled={busy} onClick={() => manageItem(item, "edit")}>Editar<span className={styles.srOnly}> {item.title}</span></button>}{canManage(item) && <button disabled={busy} onClick={() => void manageItem(item, archived ? "restore" : "archive")}>{archived ? "Restaurar" : "Ocultar del repertorio"}<span className={styles.srOnly}> {item.title}</span></button>}</>}
         </div>
       </article>)}</div>
-      {!archived && state && query.trim() && !items.some(item => normalize(item.title) === normalize(query)) && <div className={styles.newCatalogChoice}>
+      {queryReady && !archived && state && query.trim() && !items.some(item => item.exactMatch) && <div className={styles.newCatalogChoice}>
         {!hiddenExact && <label>Nota opcional<textarea rows={2} maxLength={1000} value={note} onChange={event => setNote(event.target.value)} /></label>}
-        {hiddenExact ? <><p>Este plato está oculto.</p><button className={styles.secondaryButton} disabled={busy} onClick={() => void choose(hiddenExact)}>Volver a usar “{hiddenExact.title}”</button></> : <button className={styles.primaryButton} disabled={busy} onClick={() => void choose({ id: "", title: query.trim(), note: note.trim() || null, authorName: "" })}>Agregar “{query.trim()}”</button>}
+        {hiddenExact ? <><p>Este plato está oculto.</p>{recipes ? <Link href={`/recetas/${hiddenExact.id}`}>Abrir receta para restaurar</Link> : <button className={styles.secondaryButton} disabled={busy} onClick={() => void choose(hiddenExact)}>Volver a usar “{hiddenExact.title}”</button>}</> : <button className={styles.primaryButton} disabled={busy} onClick={() => void choose({ id: "", title: query.trim(), note: note.trim() || null, authorName: "" })}>Agregar “{query.trim()}”</button>}
       </div>}
       {!busy && nextOffset !== null && <button className={styles.expandButton} onClick={() => void load(query, archived, nextOffset, true)}>Ver más platos</button>}
       <button className={styles.inlineAction} disabled={busy} onClick={() => setManage(value => !value)}>{manage ? "Listo" : "Ver todos los platos"}</button>
     </>}
   </dialog>;
 }
-function normalize(value: string) { return value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es-AR").trim().replace(/\s+/g, " "); }
