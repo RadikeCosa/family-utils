@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { UfcView, UfcFightView } from "@/lib/sports/prediction-rules";
 import styles from "./agenda.module.css";
+import FamilyPredictions from "./FamilyPredictions";
 const blocks = [
   { key: "main", label: "Cartelera principal" },
   { key: "preliminaries", label: "Preliminares" },
@@ -226,20 +227,18 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
                   )}
                   <p>{outcomeLabel(fight)}</p>
                   {fight.prodeEligible && !fight.isMainEvent && !fight.isCoMainEvent && <p>1 punto por acertar al ganador.</p>}
-                  {fight.closed && (
-                    <details>
-                      <summary>Elecciones de la familia</summary>
-                      {fight.choices.length ? (
-                        fight.choices.map((choice) => (
-                          <p key={choice.memberId}>
-                            {choice.name}: {winnerName(fight, choice.winnerId)}
-                          </p>
-                        ))
-                      ) : (
-                        <p>No hubo elecciones para esta pelea.</p>
-                      )}
-                    </details>
-                  )}
+                  <FamilyPredictions
+                    context={`${fight.firstFighter} vs ${fight.secondFighter}`}
+                    closed={fight.closed}
+                    points={fight.points}
+                    voided={!fight.prodeEligible || fight.removed || fight.cancelled || (!!fight.result && fight.result.outcome !== "winner")}
+                    choices={fight.choices.map((choice) => ({
+                      memberId: choice.memberId,
+                      name: choice.name,
+                      choice: winnerName(fight, choice.winnerId),
+                      correct: fight.result?.outcome === "winner" ? fight.result.winnerId === choice.winnerId : null,
+                    }))}
+                  />
                 </li>
               ))}
             </ol>

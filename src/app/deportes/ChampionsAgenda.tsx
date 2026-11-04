@@ -10,6 +10,7 @@ import ChampionsResultsImporter from "./ChampionsResultsImporter";
 import ChampionsResolution from "./ChampionsResolution";
 import Comments, { type CommentEditDraft } from "./Comments";
 import styles from "./agenda.module.css";
+import FamilyPredictions from "./FamilyPredictions";
 export type ChampionsThreadDraft = { body:string; edit:CommentEditDraft|null };
 const dayLabel = (d: string | null) => d ? new Intl.DateTimeFormat("es-AR", { dateStyle:"full",timeZone:"America/Argentina/Buenos_Aires" }).format(new Date(`${d}T12:00:00Z`)) : "Fecha a confirmar";
 const timeLabel = (s: string | null) => s ? new Intl.DateTimeFormat("es-AR", { hour:"2-digit",minute:"2-digit",hourCycle:"h23",timeZone:"America/Argentina/Buenos_Aires" }).format(new Date(s)) : "Horario a confirmar";
@@ -52,7 +53,17 @@ export default function ChampionsAgenda({ initial, admin, familyId, currentMembe
       {m.prediction.ownChoice&&<p>Tu pronóstico: {m.prediction.ownChoice==='home'?m.home:m.prediction.ownChoice==='away'?m.away:'Empate'}</p>}
       {m.prediction.canPredict&&m.prediction.ownChoice&&<button disabled={!!busy} onClick={()=>void choose(m.id,null)}>Borrar mi pronóstico de {m.title}</button>}
       {!m.prediction.canPredict&&<p>{m.resolutionKind==="void_for_prode"?"Partido excluido de la tabla del prode.":m.prediction.closed?"Pronósticos cerrados":m.startsAt?"Este partido todavía no admite cambios.":"Sin horario confirmado no se puede pronosticar."}</p>}
-      {m.prediction.closed&&m.prediction.choices.length>0&&<details><summary>Pronósticos del partido</summary><ul>{m.prediction.choices.map(c=><li key={c.memberId}>{c.name}: {c.choice==='home'?m.home:c.choice==='away'?m.away:'Empate'}</li>)}</ul></details>}
+      <FamilyPredictions
+        context={m.title}
+        closed={m.prediction.closed}
+        points={1}
+        voided={m.status === "cancelled" || m.resolutionKind === "void_for_prode"}
+        choices={m.prediction.choices.map(c => {
+          const result = data.table?.results.find(r => r.eventId === m.id);
+          const winner = result ? result.homeGoals === result.awayGoals ? "draw" : result.homeGoals > result.awayGoals ? "home" : "away" : null;
+          return { memberId: c.memberId, name: c.name, choice: c.choice === "home" ? m.home : c.choice === "away" ? m.away : "Empate", correct: winner === null ? null : c.choice === winner };
+        })}
+      />
       {m.checkedAt&&<small>Datos verificados el {dayLabel(sportsNowDay(new Date(m.checkedAt)))}{m.sourceUrl&&<> · <a href={m.sourceUrl} target="_blank" rel="noreferrer">Fuente UEFA</a></>}</small>}
     </article>)}</div></section>)}</section></> : <section className={styles.panel}><h2>No hay jornadas cargadas</h2><p>La próxima agenda de Champions aparecerá acá.</p></section>}
     {round&&data.table&&<section id="champions-table" className={styles.panel} aria-label="Tabla familiar de Champions"><h3>Tabla familiar · {data.table.partial?"Parcial":"Final"}</h3><p>{data.table.resolvedMatches} de {data.table.totalMatches} partidos computables resueltos. Un punto por acertar local, empate o visitante a los 90 minutos más descuento; alargue y penales no suman puntos.</p>{data.table.standings.length>0?<table className={styles.ranking}><caption>{round.name} · los empates comparten puesto</caption><thead><tr><th scope="col">Puesto</th><th scope="col">Integrante</th><th scope="col">Puntos</th></tr></thead><tbody>{data.table.standings.map(row=><tr key={row.memberId}><td>{row.position}</td><th scope="row">{row.name}</th><td>{row.points}</td></tr>)}</tbody></table>:<p>La tabla aparece con el primer resultado computable.</p>}</section>}

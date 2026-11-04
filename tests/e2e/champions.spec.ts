@@ -42,6 +42,7 @@ test('Champions: results preview, 90-minute score and partial/final family table
  const round=await importAgenda(championsBundle());
  await page.goto(`/deportes?sport=champions&round=${round}`);
  const first=page.getByRole('article',{name:'Club Alfa vs Club Beta'});await first.getByRole('button',{name:'Empate',exact:true}).click();await expect(first.getByRole('button',{name:'Empate',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(first.getByRole('region',{name:/^Pronósticos de la familia ·/}).getByText('Champions admin',{exact:true})).toHaveCount(0);
  const events=(await pool.query('SELECT id,title FROM sports_events WHERE family_id=$1 ORDER BY title',[familyId])).rows;
  await pool.query("UPDATE sports_events SET starts_at=clock_timestamp()-interval '2 hours' WHERE id=$1",[events[0].id]);
  await page.reload();await page.getByText('Importar resultados Champions',{exact:true}).click();
@@ -49,6 +50,7 @@ test('Champions: results preview, 90-minute score and partial/final family table
  await page.getByLabel('Contenido JSON de resultados Champions').fill(JSON.stringify(bundle));await page.getByRole('button',{name:'Validar resultados Champions',exact:true}).click();await expect(page.getByRole('region',{name:'Vista previa de resultados Champions'})).toContainText('0–0 a los 90 minutos');expect((await pool.query('SELECT count(*)::int n FROM sports_football_results WHERE family_id=$1',[familyId])).rows[0].n).toBe(0);
  await page.getByRole('button',{name:'Confirmar resultados Champions',exact:true}).click();
  const table=page.getByRole('region',{name:'Tabla familiar de Champions'});await expect(table.getByRole('heading',{name:'Tabla familiar · Parcial'})).toBeVisible();await expect(table.getByRole('row',{name:'1 Champions admin 1'})).toBeVisible();await expect(page.getByText('Resultado a los 90 minutos: 0–0',{exact:true})).toBeVisible();
+ const familyPicks=first.getByRole('region',{name:/^Pronósticos de la familia ·/});await expect(familyPicks.getByText('Champions admin',{exact:true})).toBeVisible();await expect(familyPicks.getByText('Empate',{exact:true})).toBeVisible();await expect(familyPicks.getByText('Acertó · +1 punto',{exact:true})).toBeVisible();
  await pool.query("UPDATE sports_events SET starts_at=clock_timestamp()-interval '2 hours' WHERE id=$1",[events[1].id]);
  bundle.results=[{...bundle.results[0],eventId:events[1].id,homeGoals:1,awayGoals:2}];const preview=await api.post('/api/sports/champions/results',{data:{mode:'preview',bundle}});expect(preview.status(),await preview.text()).toBe(200);expect((await api.post('/api/sports/champions/results',{data:{mode:'import',bundle,token:(await preview.json()).token}})).status()).toBe(200);
  await page.reload();await expect(page.getByRole('heading',{name:'Tabla familiar · Final'})).toBeVisible();await expect(page.getByRole('region',{name:'Tabla familiar de Champions'}).getByRole('row',{name:'1 Champions admin 1'})).toBeVisible();

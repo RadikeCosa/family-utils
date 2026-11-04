@@ -129,3 +129,46 @@ curados usan tres banderas de servidor apagadas por defecto en el código y
 activadas explícitamente en producción el 15 de octubre de 2026. El contrato, las dependencias, la integridad y el procedimiento de
 verificación están en [Entregas A, B y C](deportes-entregas.md). La descripción
 anterior corresponde al flujo que continúa vigente con las banderas apagadas.
+
+## Pronósticos familiares visibles · 4 de noviembre de 2026
+
+UFC y Champions muestran «Pronósticos de la familia» dentro de cada pelea o
+partido, sin desplegables. Cada fila vincula el nombre del integrante con su
+elección y, cuando hay resultado, indica «Acertó» con los puntos obtenidos o
+«No acertó · 0 puntos». La lista está ordenada por nombre y muestra la cantidad
+de pronósticos. Sin elecciones, informa «Nadie hizo un pronóstico».
+
+Antes del cierre, el bloque explica cuándo se revelan las elecciones y no
+muestra nombres ni elecciones ajenas. El servidor conserva la privacidad
+existente: UFC cierra toda la cartelera al comenzar el primer bloque y
+Champions cierra cada partido por separado. No se modifican endpoints,
+contratos, permisos, reglas de cierre ni almacenamiento.
+
+Los estados pendientes se distinguen de los resultados que no puntúan. UFC
+usa el puntaje recibido del servidor (incluye las reglas históricas y los bonos
+de estelar/coestelar); empates, cancelaciones y peleas excluidas no puntúan.
+Champions compara local/empate/visitante con el resultado oficial a los 90
+minutos más descuento y asigna un punto por acierto. Los partidos cancelados o
+anulados para el prode muestran «No puntúa».
+
+La presentación compartida usa texto además del color y permite envolver
+nombres, elecciones y puntajes en pantallas angostas. El estilo de cada pelea
+se limita a los elementos directos de la cartelera, para que no se aplique a
+las filas de pronósticos.
+
+La regresión de interfaz en `tests/e2e/sports-next.spec.ts` comprueba la
+privacidad previa al cierre, la revelación visible tras un intento tardío,
+el estado pendiente, un acierto de cinco puntos y la ausencia de elecciones.
+`tests/e2e/champions.spec.ts` comprueba privacidad y la elección de empate
+visible con su punto correspondiente tras cargar el resultado. Los fixtures
+son sintéticos y las pruebas usan PostgreSQL local descartable.
+
+Esta mejora es de presentación y no requiere migraciones ni cambios de
+configuración. Para revertirla, restaurar el código anterior mediante un nuevo
+despliegue, conservando la base de datos y los pronósticos guardados.
+
+Revisión de publicación: los nombres accesibles de los bloques incluyen la
+pelea o partido para distinguirlos al navegar con lector de pantalla. Se
+verificaron las 50 migraciones y sus hashes en la base temporal; las 149
+pruebas de reglas/base pasaron sin omisiones. Lint, tipos, comprobación de
+migraciones y compilación de producción completados correctamente.
