@@ -769,10 +769,15 @@ test("UFC: one closure reveals all picks, rejects a stale screen and excludes la
   await expect(page.getByText(/Los pronósticos de toda la cartelera cierran/)).toBeVisible();
   const choose = page.getByRole('button', { name: 'Elegir a Alpha', exact: true });
   await expect(choose).toBeEnabled();
+  await expect(page.getByRole('region', { name: /^Pronósticos de la familia ·/ }).getByText('Peer with private choice', { exact: true })).toHaveCount(0);
   await pool.query("UPDATE sports_events SET preliminary_starts_at=clock_timestamp()-interval '1 second' WHERE id=$1", [event.id]);
   await choose.click();
   await expect(page.getByRole('alert').filter({ hasText: 'La cartelera ya cerró. Tu cambio no se guardó.' })).toBeVisible();
   await expect(choose).toBeDisabled();
+  const familyPicks = page.getByRole('region', { name: /^Pronósticos de la familia ·/ }).filter({ hasText: 'Peer with private choice' });
+  await expect(familyPicks).toBeVisible();
+  await expect(familyPicks.getByText('Beta', { exact: true })).toBeVisible();
+  await expect(familyPicks.getByText('Pendiente', { exact: true })).toBeVisible();
   const closed = await (await api.get(endpoint)).json();
   expect(closed.closed).toBe(true);
   expect(closed.fights.find((f: { id: string }) => f.id === fights[1].id).choices).toHaveLength(1);
@@ -790,7 +795,7 @@ test("UFC: one closure reveals all picks, rejects a stale screen and excludes la
 });
 
 
-test("UFC: partial result preview persists first closure and its confirmation stays valid", async () => {
+test("UFC: partial result preview persists first closure and its confirmation stays valid", async ({ page }) => {
   const event = (await pool.query(`INSERT INTO sports_events(family_id,kind,title,event_date,main_card_starts_at,is_current,created_by_member_id,updated_by_member_id)
     VALUES($1,'ufc_card','UFC: Resultados parciales',CURRENT_DATE,clock_timestamp()+interval '1 hour',true,$2,$2) RETURNING id`, [familyId, memberId])).rows[0];
   const fights = [];
@@ -813,6 +818,12 @@ test("UFC: partial result preview persists first closure and its confirmation st
   expect(view.final).toBe(false);
   expect(view.ranking.find((r: { memberId: string }) => r.memberId === memberId).points).toBe(5);
   expect(view.fights.find((f: { id: string }) => f.id === fights[1].id).result).toBeNull();
+  await page.goto(`/deportes?sport=ufc&event=${event.id}`);
+  const familyPicks = page.getByRole('region', { name: /^Pronósticos de la familia ·/ }).filter({ hasText: 'Acertó' });
+  await expect(familyPicks).toBeVisible();
+  await expect(familyPicks.getByText('Second 1', { exact: true })).toBeVisible();
+  await expect(familyPicks.getByText('Acertó · +5 puntos', { exact: true })).toBeVisible();
+  await expect(page.getByText('Nadie hizo un pronóstico.', { exact: true })).toBeVisible();
 });
 
 test("River official lineup: protected publication, conflicts, corrections and refresh preserving drafts", async ({page}) => {
