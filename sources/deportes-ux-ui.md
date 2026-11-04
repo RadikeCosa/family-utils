@@ -172,3 +172,7 @@ pelea o partido para distinguirlos al navegar con lector de pantalla. Se
 verificaron las 50 migraciones y sus hashes en la base temporal; las 149
 pruebas de reglas/base pasaron sin omisiones. Lint, tipos, comprobación de
 migraciones y compilación de producción completados correctamente.
+
+La auditoría de accesibilidad del caso de anulación en Champions espera el
+título esperado después de actualizar la página. Esto evita auditar el estado
+intermedio de metadatos de WebKit sin desactivar ninguna regla de axe.
