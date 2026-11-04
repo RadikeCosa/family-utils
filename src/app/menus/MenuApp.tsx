@@ -20,7 +20,7 @@ type MealDisclosure = { detail: boolean; people: boolean };
 const closedMeal: MealDisclosure = { detail: false, people: false };
 const mealButtonId = (date: string, type: MealType) => `meal-${date}-${type}-toggle`;
 
-export default function MenuApp() {
+export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
   const router = useRouter();
   const [dayState, setDayState] = useState(() => ({ date: familyDay(), meals: {} as Partial<Record<MealType, MealDisclosure>> }));
   const date = dayState.date;
@@ -175,7 +175,7 @@ export default function MenuApp() {
   return <main className={styles.page}>
     <header className={styles.header}>
       <Link className={styles.brand} href="/" aria-label="Family Utils, inicio"><span className={styles.mark} aria-hidden="true">f</span>family<span>utils</span></Link>
-      <nav className={styles.headerLinks} aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link className={styles.activeLink} href="/menus" onClick={e => { e.preventDefault(); navigate(today, "day", true); }}>Menús</Link><Link href="/compras">Compras</Link><Link href="/familia">Mi familia</Link></nav>
+      <nav className={styles.headerLinks} aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link className={styles.activeLink} href="/menus" onClick={e => { e.preventDefault(); navigate(today, "day", true); }}>Menús</Link>{recipes && <Link href="/recetas">Recetas</Link>}<Link href="/compras">Compras</Link><Link href="/familia">Mi familia</Link></nav>
       <button className={styles.exitButton} onClick={() => void authClient.signOut().then(() => router.push("/acceso"))}>Salir</button>
     </header>
     <section className={styles.intro}>
@@ -223,7 +223,7 @@ export default function MenuApp() {
         <div className={styles.dialogActions}><button className={styles.secondaryButton} disabled={busy} onClick={() => { setConfirmation(null); setError(""); }}>Cancelar</button><button className={styles.primaryButton} disabled={busy || (confirmation.kind === "confirm" && !confirmation.menu) || !!currentMeal.readOnly} onClick={() => void confirm()}>{busy ? "Guardando…" : confirmation.kind === "remove-second" ? "Quitar y reasignar" : currentSelection && confirmation.kind === "confirm" ? "Guardar cambio" : "Agregar comida"}</button></div>
       </>}
     </dialog>
-    <IdeaBank state={bank} onClose={() => setBank(null)} onChanged={refresh} currentMemberId={data?.currentMemberId ?? ""} adult={!!adult} today={today} onUse={async idea => {
+    <IdeaBank recipes={recipes} state={bank} onClose={() => setBank(null)} onChanged={refresh} currentMemberId={data?.currentMemberId ?? ""} adult={!!adult} today={today} onUse={async idea => {
       const meal = data?.meals.find(m => m.date === bank?.date && m.mealType === bank.mealType);
       if (!meal || !bank) return false;
       const selection = meal.plan.menus.find(m => m.number === bank.menu)?.selection;
@@ -258,6 +258,7 @@ function DailyMeal({ meal, data, busy, adult, readOnly, disclosure, onToggle, on
       {meal.plan.menus.map(menu => <div className={styles.dailyMenu} key={menu.number}>
         <div>{meal.plan.menus.length > 1 && <small>OPCIÓN {menu.number}</small>}<strong>{menu.selection?.title ?? "Todavía no elegimos qué comer"}</strong>
           {menu.selection?.note && <p>{menu.selection.note}</p>}
+          {menu.selection && meal.recipeLinks?.[menu.selection.suggestionId] && <Link href={`/recetas/${meal.recipeLinks[menu.selection.suggestionId]}`}>Ver receta</Link>}
           {attendance && <span>{menuSummary(meal.plan, menu.number)}</span>}
           {attendance && <small>{meal.plan.people.filter(p => p.menu === menu.number).map(p => data.members.find(m => m.id === p.memberId)?.name).filter(Boolean).join(" · ")}</small>}
         </div>

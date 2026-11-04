@@ -1,0 +1,2 @@
+ALTER TABLE "meal_ideas" ADD CONSTRAINT "meal_ideas_editor_family_fk" FOREIGN KEY ("updated_by_member_id","family_id") REFERENCES "public"."members"("id","family_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "recipe_shopping_operations" ADD CONSTRAINT "recipe_shopping_operations_member_family_fk" FOREIGN KEY ("member_id","family_id") REFERENCES "public"."members"("id","family_id") ON DELETE cascade ON UPDATE no action;

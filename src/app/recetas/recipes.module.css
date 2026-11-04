@@ -1,0 +1,32 @@
+.page { overflow-wrap: anywhere; max-width: 1040px; margin: auto; padding: max(20px, env(safe-area-inset-top)) 20px max(56px, env(safe-area-inset-bottom)); }
+.header, .actions, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.header { justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.header nav { display: flex; flex-wrap: wrap; gap: 16px; }
+.page h1 { font-family: Manrope, sans-serif; font-size: clamp(2rem, 6vw, 3rem); margin-bottom: 12px; }
+.page h2 { font-family: Manrope, sans-serif; }
+.page p { line-height: 1.6; }
+.page a { text-decoration: underline; text-underline-offset: 4px; }
+.page button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--green); background: white; border-radius: 10px; cursor: pointer; }
+.page button:active { background: var(--line); }
+.page button:disabled { cursor: default; opacity: .55; }
+.page .primary { background: var(--green-dark); color: white; }
+.page :is(a, button, input, textarea, select):focus-visible { outline: 3px solid var(--green-dark); outline-offset: 3px; }
+.page label { display: grid; gap: 8px; font-weight: 600; min-width: 0; }
+.page input:not([type=checkbox]), .page textarea, .page select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #a4ada6; border-radius: 8px; padding: 12px; font: inherit; color: var(--ink); background: white; }
+.page input[type=checkbox] { width: 24px; height: 24px; margin: 10px; }
+.form, .stack { display: grid; gap: 20px; }
+.toolbar { margin: 24px 0; align-items: end; }
+.toolbar > label { flex: 1; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.card { background: var(--paper); border: 1px solid #d7ddd6; border-radius: 16px; padding: 20px; overflow-wrap: anywhere; }
+.card h2 { margin-top: 0; }
+.ingredients { display: grid; gap: 16px; padding: 0; list-style: none; }
+.ingredient { display: grid; gap: 12px; padding: 16px; border: 1px solid #d7ddd6; border-radius: 12px; background: var(--paper); }
+.fields { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.check { display: flex !important; align-items: center; gap: 8px !important; min-height: 44px; }
+.error { padding: 16px; color: #842a24; background: #fff0ed; border-radius: 10px; overflow-wrap: anywhere; }
+.notice { padding: 16px; background: #e6eee7; color: #294d34; border-radius: 10px; }
+.muted { color: #526057; }
+.preparation { white-space: pre-wrap; overflow-wrap: anywhere; }
+.changed { border: 2px solid #9c5c17; }
+@media(max-width: 520px) { .page { padding-inline: 16px; } .fields { grid-template-columns: 1fr; } .actions { gap: 8px; } .card { padding: 16px; } }

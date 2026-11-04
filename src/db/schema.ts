@@ -772,12 +772,15 @@ export const mealIdeas = pgTable("meal_ideas", {
   note: varchar("note", { length: 1000 }),
   mealTypes: jsonb("meal_types").$type<(typeof MEAL_TYPES)[number][]>().notNull().default([]),
   packedSuitable: boolean("packed_suitable").notNull().default(false),
+  yieldText: varchar("yield_text", { length: 100 }),
+  preparation: text("preparation"),
+  updatedByMemberId: uuid("updated_by_member_id").references(() => members.id),
   version: integer("version").notNull().default(1),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   mergedIntoId: uuid("merged_into_id"),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   createdAt: createdAt(), updatedAt: updatedAt(),
-}, table => [index("meal_ideas_family_idx").on(table.familyId, table.archivedAt), index("meal_ideas_catalog_order_idx").on(table.familyId, table.lastUsedAt), index("meal_ideas_merged_idx").on(table.mergedIntoId)]);
+}, table => [foreignKey({ columns: [table.updatedByMemberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "meal_ideas_editor_family_fk" }), uniqueIndex("meal_ideas_family_id_unique").on(table.familyId, table.id), index("meal_ideas_family_idx").on(table.familyId, table.archivedAt), index("meal_ideas_catalog_order_idx").on(table.familyId, table.lastUsedAt), index("meal_ideas_merged_idx").on(table.mergedIntoId)]);
 
 export const sportsFootballResults = pgTable("sports_football_results", {
   eventId: uuid("event_id").primaryKey().references(() => sportsEvents.id, { onDelete: "restrict" }),
@@ -969,3 +972,28 @@ export const trainingSessions = pgTable("training_sessions", {
   check("training_sessions_version", sql`${t.version} > 0`),
   check("training_sessions_hash", sql`${t.creationHash} ~ '^[0-9a-f]{64}$'`),
 ]);
+
+
+export const recipeIngredients = pgTable("recipe_ingredients", {
+  id: uuid("id").primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  ideaId: uuid("idea_id").notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  quantity: varchar("quantity", { length: 100 }),
+  position: integer("position").notNull(),
+}, table => [
+  foreignKey({ columns: [table.familyId, table.ideaId], foreignColumns: [mealIdeas.familyId, mealIdeas.id], name: "recipe_ingredients_family_idea_fk" }).onDelete("cascade"),
+  index("recipe_ingredients_idea_order_idx").on(table.ideaId, table.position),
+  check("recipe_ingredients_position_check", sql`${table.position} >= 0 AND ${table.position} < 100`),
+  check("recipe_ingredients_name_check", sql`length(trim(${table.name})) > 0`),
+]);
+
+export const recipeShoppingOperations = pgTable("recipe_shopping_operations", {
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  operationId: uuid("operation_id").notNull(),
+  memberId: uuid("member_id").notNull().references(() => members.id),
+  listId: uuid("list_id").notNull(),
+  fingerprint: varchar("fingerprint", { length: 64 }).notNull(),
+  result: jsonb("result").$type<{ listId: string; added: number; edited: number }>().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, table => [foreignKey({ columns: [table.memberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "recipe_shopping_operations_member_family_fk" }).onDelete("cascade"), uniqueIndex("recipe_shopping_operations_unique").on(table.familyId, table.operationId), index("recipe_shopping_operations_expiry_idx").on(table.expiresAt)]);

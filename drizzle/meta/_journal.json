@@ -323,6 +323,34 @@
       "when": 1792667946240,
       "tag": "0055_meal_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793787848998,
+      "tag": "0056_recipes_base",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793787848999,
+      "tag": "0057_recipe_name_normalization",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793787849000,
+      "tag": "0058_recipes_shopping",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793788988060,
+      "tag": "0059_recipe_family_integrity",
+      "breakpoints": true
     }
   ]
 }

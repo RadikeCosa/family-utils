@@ -1,3 +1,4 @@
+import { recipesEnabled } from "@/lib/recipes/config";
 import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { families, mealAttendance, mealDailyPlans, mealDistributions, mealExceptions, mealGroups, mealSelections, mealSlots, mealSuggestions, members } from "@/db/schema";
 import { MEAL_TYPES, addDays, hasMealAttendance, type MealType } from "./rules";
@@ -7,6 +8,7 @@ import type { MealTransaction } from "./server";
 export type PlannerMeal = {
   date: string; mealType: MealType; slotId: string | null; version: string;
   plan: DailyPlan; readOnly: boolean; reason: string | null;
+  recipeLinks?: Record<string, string>;
   suggestions: DailyIdea[]; previous: LegacyInput | null;
 };
 export type PlannerWeek = {
@@ -51,6 +53,7 @@ export async function loadPlanner(db: MealTransaction, familyId: string, first: 
     const plan = row ? { ...row.plan, people: memberIds.map(id => row.plan.people.find(p => p.memberId === id) ?? { memberId: id, status: "unknown" as const, menu: null }) } : translated.plan;
     if (!hasMealAttendance(mealType)) plan.people = [];
     meals.push({ date, mealType, slotId: slot?.id ?? null, version: row ? `daily:${row.version}` : `legacy:${state[0]?.revision ?? 0}`,
+      ...(recipesEnabled() ? { recipeLinks: Object.fromEntries(slotIdeas.filter(i => i.catalogIdeaId).map(i => [i.id, i.catalogIdeaId!])) } : {}),
       plan, readOnly: !row && translated.readOnly, reason: !row ? translated.reason : null,
       previous: row ? (row.original && typeof row.original === "object" && "memberIds" in row.original ? row.original as LegacyInput : null) : slot && (legacy.groups.length || legacy.participants.length || legacy.attendance.length || legacy.selection) ? legacy : null,
       suggestions: slotIdeas.filter(i => !i.withdrawnAt).map(i => ({ id: i.id, title: i.title, note: i.note, authorName: names.get(i.authorMemberId) ?? "Integrante anterior" })),

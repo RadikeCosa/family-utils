@@ -1,10 +1,12 @@
+import { ingredientsFor, normalizedName, saveRecipe } from "@/lib/recipes/server";
+import { recipesEnabled } from "@/lib/recipes/config";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, mealDailyPlans, mealIdeas, mealSuggestions } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { addDays, getDayInTimeZone, hasMealAttendance, isMealType, isMenuDateInRange, isParticipationStatus, isUuid, isValidDate, menuDateBounds, normalizeMealIdea, startOfWeek } from "@/lib/meals/rules";
-import { addSecondMenu, canChangePerson, changePerson, duplicateMenu, needsMeal, removeSecondMenu, type DailySelection, type MenuNumber } from "@/lib/meals/daily";
+import { addDays, getDayInTimeZone, hasMealAttendance, isMealType, isMenuDateInRange, isParticipationStatus, isUuid, isValidDate, menuDateBounds, startOfWeek } from "@/lib/meals/rules";
+import { addSecondMenu, canChangePerson, changePerson, needsMeal, removeSecondMenu, type DailySelection, type MenuNumber } from "@/lib/meals/daily";
 import { loadPlanner } from "@/lib/meals/planner-server";
 import { bumpMenusRevision, lockFamilyActor, lockMealSlot, MealError } from "@/lib/meals/server";
 
@@ -57,13 +59,13 @@ export async function PUT(request: Request) {
           if (body.catalogIdeaId !== undefined) {
             if (!isUuid(body.catalogIdeaId)) throw new MealError("Idea guardada inválida.");
             const [idea] = await tx.select().from(mealIdeas).where(and(eq(mealIdeas.id, body.catalogIdeaId), eq(mealIdeas.familyId, actor.familyId), isNull(mealIdeas.mergedIntoId))).limit(1);
-            if (!idea || (idea.archivedAt && body.action !== "confirm")) throw new MealError("El plato ya no está disponible.");
+            if (!idea || (idea.archivedAt && (recipesEnabled() || body.action !== "confirm"))) throw new MealError("El plato ya no está disponible.");
             title = idea.title; note = idea.note ?? ""; catalogIdeaId = idea.id;
           }
           const selectedFromCatalog = !!catalogIdeaId;
           if (!title || title.length > 160 || note.length > 1000) throw new MealError("Escribí un plato de hasta 160 caracteres y una nota de hasta 1.000.");
           {
-            const normalizedTitle = normalizeMealIdea(title).replace(/\s+/g, " ");
+            const normalizedTitle = await normalizedName(tx, title);
             let [catalog] = catalogIdeaId
               ? await tx.select().from(mealIdeas).where(and(eq(mealIdeas.id, catalogIdeaId), eq(mealIdeas.familyId, actor.familyId))).limit(1)
               : await tx.select().from(mealIdeas).where(and(eq(mealIdeas.familyId, actor.familyId), eq(mealIdeas.normalizedTitle, normalizedTitle))).limit(1);
@@ -72,13 +74,13 @@ export async function PUT(request: Request) {
             }
             if (catalog) {
               if (catalog.archivedAt) {
+                if (recipesEnabled()) throw new MealError("El plato está oculto. Restauralo desde Recetas antes de usarlo.", 409, "DISH_HIDDEN");
                 const [restored] = await tx.update(mealIdeas).set({ archivedAt: null, version: catalog.version + 1, updatedAt: new Date() }).where(eq(mealIdeas.id, catalog.id)).returning();
-                await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: catalog.id, action: "restored", before: catalog, after: restored });
+                await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: catalog.id, action: "restored", before: { ...catalog, ingredients: await ingredientsFor(tx, catalog.id) }, after: { ...restored, ingredients: await ingredientsFor(tx, catalog.id) } });
               }
               title = catalog.title; note = selectedFromCatalog ? (catalog.note ?? "") : (note || catalog.note || ""); catalogIdeaId = catalog.id;
             } else {
-              const [created] = await tx.insert(mealIdeas).values({ familyId: actor.familyId, authorMemberId: current.memberId, title, note: note || null, normalizedTitle }).returning();
-              await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: created.id, action: "created_from_meal", after: created });
+              const { idea: created } = await saveRecipe(tx, actor, { title, note: note || null });
               catalogIdeaId = created.id;
             }
           }
@@ -91,9 +93,11 @@ export async function PUT(request: Request) {
           if (menu.selection && current.role !== "administrator") throw new MealError("Solo una persona adulta puede cambiar una comida elegida.", 403);
           if (menu.selection && body.replace !== true) throw new MealError("Confirmá el reemplazo del plato actual.", 409, "REPLACE_REQUIRED");
           const selection: DailySelection = { suggestionId: suggestion.id, title: suggestion.title, note: suggestion.note, confirmedByMemberId: current.memberId, confirmedAt: new Date().toISOString() };
-          if (duplicateMenu(plan, menu.number, selection)) throw new MealError("Ese plato ya está en el otro menú. Compartilo asignando allí las personas.", 409, "DUPLICATE_MENU");
+          for (const other of plan.menus) {
+            if (other.number !== menu.number && other.selection && await normalizedName(tx, other.selection.title) === await normalizedName(tx, selection.title)) throw new MealError("Ese plato ya está en el otro menú. Compartilo asignando allí las personas.", 409, "DUPLICATE_MENU");
+          }
           menu.selection = selection;
-          if (suggestion.catalogIdeaId) await tx.update(mealIdeas).set({ lastUsedAt: new Date(), updatedAt: new Date() }).where(eq(mealIdeas.id, suggestion.catalogIdeaId));
+          if (suggestion.catalogIdeaId) await tx.update(mealIdeas).set({ lastUsedAt: new Date() }).where(eq(mealIdeas.id, suggestion.catalogIdeaId));
         }
       } else {
         if (current.role !== "administrator") throw new MealError("Solo una persona adulta puede cambiar los menús.", 403);
