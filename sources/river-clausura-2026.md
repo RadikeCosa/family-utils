@@ -32,3 +32,13 @@ Verificación completada:
 - Revisión visual en móvil y escritorio, navegación por los enlaces de estadísticas, ausencia de desbordamiento horizontal y fuente/fecha visibles.
 
 Fuentes descargadas, respuestas de las fichas, evidencias de la tabla oficial y resultados del ensayo están fuera de Git en `.release-private/river-clausura-2026/`. La verificación inicial fue local. La publicación conjunta de River y Champions del 20/10/2026 se realiza desde la rama de publicación, con CI aprobado antes de integrar en main y comprobar las pantallas en producción. No se requieren migraciones ni una nueva importación de las agendas que ya se cargaron.
+
+## Actualización del 04/11/2026
+
+Se revisaron nuevamente LPF, las tablas de ESPN y las 27 fichas del plantel oficial, seleccionando el mismo calendario del Clausura 2026. LPF y ESPN coinciden: River está 4.º en la zona B, con 23 puntos en 15 partidos (7 ganados, 2 empatados y 6 perdidos), 19 goles a favor y 14 en contra.
+
+Se incorpora Lautaro Rivero entre los goleadores (1), se actualiza Ángel Correa a 3 asistencias y se renuevan las amarillas, incluidas las de Rafael Borré y Ezequiel Centurión. Los rankings quedan con 8 goleadores, 7 asistidores, 17 jugadores amonestados y 2 expulsados: Gonzalo Montiel y Lucas Martínez Quarta, con una roja cada uno. Las dos expulsiones también se verificaron en la pestaña de rojas del sitio oficial de River y en ESPN.
+
+Se mantiene la prioridad de las fichas oficiales para Tobías Andrada (1 asistencia y 2 amarillas), Ezequiel Centurión (2 amarillas), Tobías Ramírez, Agustín Ruberto y Lucas Silva. La lista oficial visible de amarillas continúa limitada a diez jugadores; Joaquín Freitas conserva su último dato verificado el 20/10 y esta limitación se aclara en la pantalla. Los valores ausentes no se convierten en ceros y no se infieren sanciones futuras.
+
+Las respuestas y las tablas oficiales renderizadas de esta revisión se conservan fuera de Git en `.release-private/river-stats-2026-11-04/`. Esta actualización modifica exclusivamente la copia curada y su documentación; no requiere migraciones ni altera resultados, pronósticos o comentarios.

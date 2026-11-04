@@ -3,18 +3,18 @@
   "team": "river",
   "competition": "clausura",
   "year": 2026,
-  "checkedAt": "2026-10-20T20:03:09.694Z",
+  "checkedAt": "2026-11-04T17:53:02.094Z",
   "standing": {
     "zone": "B",
-    "position": 6,
+    "position": 4,
     "teams": 15,
-    "points": 20,
-    "played": 13,
-    "won": 6,
+    "points": 23,
+    "played": 15,
+    "won": 7,
     "drawn": 2,
-    "lost": 5,
-    "goalsFor": 18,
-    "goalsAgainst": 13,
+    "lost": 6,
+    "goalsFor": 19,
+    "goalsAgainst": 14,
     "sourceUrl": "https://www.ligaprofesional.ar/torneo-clausura-mercado-libre-2026/"
   },
   "rankings": {
@@ -45,6 +45,12 @@
           "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/23/statistics"
         },
         {
+          "id": "espn:382912",
+          "name": "Lautaro Rivero",
+          "count": 1,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/13/statistics"
+        },
+        {
           "id": "espn:157557",
           "name": "Marcos Acuña",
           "count": 1,
@@ -69,16 +75,16 @@
     "assists": {
       "items": [
         {
+          "id": "espn:195681",
+          "name": "Ángel Correa",
+          "count": 3,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/10/statistics"
+        },
+        {
           "id": "espn:280381",
           "name": "Lucas Beltrán",
           "count": 3,
           "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/18/statistics"
-        },
-        {
-          "id": "espn:195681",
-          "name": "Ángel Correa",
-          "count": 2,
-          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/10/statistics"
         },
         {
           "id": "espn:228262",
@@ -112,7 +118,7 @@
         }
       ],
       "sourceUrl": "https://www.riverplate.com/futbol/futbol-profesional/masculino/estadisticas",
-      "note": "Se priorizan las fichas oficiales de River, incluida la asistencia de Tobías Andrada que ESPN aún no informa."
+      "note": "Se priorizan las fichas oficiales de River; ESPN aún omite la asistencia de Tobías Andrada."
     },
     "yellowCards": {
       "items": [
@@ -129,10 +135,28 @@
           "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/6/statistics"
         },
         {
+          "id": "espn:254324",
+          "name": "Ezequiel Centurión",
+          "count": 2,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/33/statistics"
+        },
+        {
           "id": "espn:272319",
           "name": "Fausto Vera",
           "count": 2,
           "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/15/statistics"
+        },
+        {
+          "id": "espn:421516",
+          "name": "Lucas Silva",
+          "count": 2,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/44/statistics"
+        },
+        {
+          "id": "espn:157557",
+          "name": "Marcos Acuña",
+          "count": 2,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/21/statistics"
         },
         {
           "id": "espn:199775",
@@ -165,12 +189,6 @@
           "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/32/statistics"
         },
         {
-          "id": "espn:254324",
-          "name": "Ezequiel Centurión",
-          "count": 1,
-          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/33/statistics"
-        },
-        {
           "id": "espn:228262",
           "name": "Gonzalo Montiel",
           "count": 1,
@@ -178,7 +196,7 @@
         },
         {
           "id": "espn:414769",
-          "name": "Joaquin Freitas",
+          "name": "Joaquín Freitas",
           "count": 1,
           "sourceUrl": "https://www.riverplate.com/futbol/futbol-profesional/masculino/estadisticas"
         },
@@ -195,16 +213,10 @@
           "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/18/statistics"
         },
         {
-          "id": "espn:421516",
-          "name": "Lucas Silva",
+          "id": "espn:197052",
+          "name": "Rafael Borré",
           "count": 1,
-          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/44/statistics"
-        },
-        {
-          "id": "espn:157557",
-          "name": "Marcos Acuña",
-          "count": 1,
-          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/21/statistics"
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/19/statistics"
         },
         {
           "id": "espn:277208",
@@ -214,12 +226,25 @@
         }
       ],
       "sourceUrl": "https://www.riverplate.com/futbol/futbol-profesional/masculino/estadisticas",
-      "note": "Se priorizan las fichas y el ranking oficiales de River cuando difieren de ESPN. Incluye amonestaciones a suplentes."
+      "note": "Se priorizan las fichas oficiales de River cuando difieren de ESPN. Incluye amonestaciones a suplentes. Joaquín Freitas conserva su último registro oficial verificado el 20/10; ya no figura en el plantel actual."
     },
     "redCards": {
-      "items": [],
-      "sourceUrl": "https://www.espn.com.ar/futbol/equipo/estadisticas/_/id/16/liga/ARG.1/temporada/2026/vista/tarjetas",
-      "note": "ESPN no informa rojas en su listado del Clausura. Las fichas de River sin un valor publicado no se interpretan como cero."
+      "items": [
+        {
+          "id": "espn:228262",
+          "name": "Gonzalo Montiel",
+          "count": 1,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/29/statistics"
+        },
+        {
+          "id": "espn:219086",
+          "name": "Lucas Martínez Quarta",
+          "count": 1,
+          "sourceUrl": "https://www.riverplate.com/api/v1/sports/male-professional-football/squad/28/statistics"
+        }
+      ],
+      "sourceUrl": "https://www.riverplate.com/futbol/futbol-profesional/masculino/estadisticas",
+      "note": "Expulsiones confirmadas en las fichas oficiales de River y contrastadas con ESPN. Los valores no publicados no se interpretan como cero."
     }
   }
 }
