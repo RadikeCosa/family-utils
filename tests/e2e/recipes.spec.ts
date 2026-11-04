@@ -28,7 +28,8 @@ test("mobile recipe → Menus → reviewed Shopping, reorder announcements and a
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/recetas"); await page.getByLabel("Nombre del nuevo plato").fill("Tarta familiar"); await page.getByRole("button", { name: "Crear receta", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Tarta familiar", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/recetas\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: "Tarta familiar", level: 1, exact: true })).toBeVisible();
   const recipeURL = page.url();
   await page.getByRole("button", { name: "Editar receta", exact: true }).click();
   await page.getByLabel("Porciones o rendimiento").fill("4 personas"); await page.getByRole("textbox", { name: "Preparación", exact: true }).fill("Mezclar y cocinar.");
