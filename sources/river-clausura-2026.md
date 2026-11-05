@@ -42,3 +42,13 @@ Se incorpora Lautaro Rivero entre los goleadores (1), se actualiza Ángel Correa
 Se mantiene la prioridad de las fichas oficiales para Tobías Andrada (1 asistencia y 2 amarillas), Ezequiel Centurión (2 amarillas), Tobías Ramírez, Agustín Ruberto y Lucas Silva. La lista oficial visible de amarillas continúa limitada a diez jugadores; Joaquín Freitas conserva su último dato verificado el 20/10 y esta limitación se aclara en la pantalla. Los valores ausentes no se convierten en ceros y no se infieren sanciones futuras.
 
 Las respuestas y las tablas oficiales renderizadas de esta revisión se conservan fuera de Git en `.release-private/river-stats-2026-11-04/`. Esta actualización modifica exclusivamente la copia curada y su documentación; no requiere migraciones ni altera resultados, pronósticos o comentarios.
+
+## Actualización del 05/11/2026
+
+River ganó 2–0 como visitante ante Aldosivi en la fecha 16. La tabla oficial de LPF y ESPN coinciden: 4.º en la zona B, 26 puntos, 16 partidos, 8 victorias, 2 empates y 6 derrotas, 21 goles a favor y 14 en contra. Es la posición al momento de la revisión; otros equipos todavía tienen pendiente su última fecha.
+
+Se volvieron a consultar las 27 fichas del plantel oficial y los rankings acumulados de ESPN. Ambos conservan los totales anteriores al encuentro (por ejemplo, Correa continúa con 4 goles y Beltrán sin goles). Para incorporar el partido sin esperar esa actualización, se reconciliaron los totales verificados el 4/11 con los eventos explícitos de la [planilla final de ESPN](https://www.espn.com.ar/futbol/partido/_/juegoId/401841659): Correa pasa de 4 a 5 goles; Lucas Beltrán suma su primer gol; Francisco Ortega suma una asistencia; Santiago Espíndola, una amarilla. La procedencia y la demora del acumulado se explicitan en cada lista. No se dedujeron asistencias ni tarjetas de valores ausentes. Se mantienen las discrepancias oficiales resueltas en la revisión anterior y el registro histórico de Freitas.
+
+La planilla confirma a Santiago Espíndola como titular, pese a que una crónica inicial lo identifica como Esteban. Se usa el nombre de la planilla, coincidente con TNT Sports. Se conserva la grafía oficial de Lautaro Rivero frente al error “Lautaruo” del proveedor.
+
+Resultado, once inicial (4-3-1-2), 15 estadísticas y 6 curiosidades se cargan en el partido existente, con fuentes y auditoría, conservando pronósticos, comentarios y propuestas de formación. La estadística agregada de penales de ESPN presenta un cero incompatible con el gol de penal del minuto 76: se omite esa fila y se usa el evento explícito confirmado en el relato. Las respuestas consultadas, la copia previa de la base y la verificación de la carga se guardan fuera de Git en `.release-private/river-2026-11-05/`.
