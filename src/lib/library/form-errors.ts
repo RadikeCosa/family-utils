@@ -13,16 +13,11 @@ const messages: Record<string, string> = {
 export function libraryIssueMessage(code: unknown) {
   return typeof code === "string" && Object.hasOwn(messages, code) ? messages[code] : "No pudimos completar la operación. Conservamos tu borrador. Intentá de nuevo.";
 }
-export function workFieldErrors(draft: { title: string; creator: string; year: string; referenceUrl: string }): FieldErrors {
+export function workFieldErrors(draft: { title: string; creator: string; year: string; referenceUrl?: string }): FieldErrors {
   const errors: FieldErrors = {};
   if (!draft.title.trim() || codePointLength(draft.title.trim()) > 200) errors.title = "Escribí un título de entre 1 y 200 caracteres.";
   if (codePointLength(draft.creator.trim()) > 200) errors.creator = "La dirección admite hasta 200 caracteres.";
   if (draft.year && (!Number.isInteger(Number(draft.year)) || Number(draft.year) < 1 || Number(draft.year) > 9999)) errors.year = "Ingresá un año entero entre 1 y 9999.";
-  const link = draft.referenceUrl.trim();
-  if (link) {
-    try { const url = new URL(link); if (!['http:', 'https:'].includes(url.protocol) || /\s/u.test(link) || codePointLength(link) > 2048) errors.referenceUrl = "Ingresá un enlace http o https válido, de hasta 2048 caracteres."; }
-    catch { errors.referenceUrl = "Ingresá un enlace http o https válido, de hasta 2048 caracteres."; }
-  }
   return errors;
 }
 export function contributionFieldErrors(draft: { body: string; year: string; month: string; day: string }, today = familyDay()): FieldErrors {

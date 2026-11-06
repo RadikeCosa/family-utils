@@ -46,3 +46,28 @@ contra producción. Para publicar, aplicar primero la migración aditiva y despu
 el código. Al revertir código se conservan columna y datos. El código anterior
 ignora géneros; el cambio de revisión puede causar una revalidación de ETag, lo
 cual es aceptable.
+
+## Colección y formulario
+
+Mostrar unifica Todas (sin status/view), Quiero ver (pending), Viendo
+(in_progress), Vistas (finished), Sin estado (none) y Pendientes en común
+(view=common_pending sin status). Todas no incluye archivadas: Solo archivadas
+cambia exclusivamente el archivo. Género y archivo son independientes de Mostrar.
+No hay panel de filtros adicionales. Limpiar filtros elimina búsqueda y filtros,
+conservando parámetros ajenos. Los selectores tienen como máximo 16 rem; en móvil
+se apilan para no cortar nombres. Se retiró la frase introductoria para recuperar
+altura sin reducir el texto de los controles.
+
+En páginas, vista común válida prevalece; view inválido se elimina y se conserva
+status válido. No se reconocen watching/common como alias. Género vacío,
+desconocido o repetido se elimina por completo mediante replace, junto con
+kind/type/cursor. Se conservan redirecciones 308 y parámetros ajenos. Cambiar un
+filtro o búsqueda reinicia las páginas cargadas; los cursores iniciales se ignoran.
+
+El formulario muestra título, Director/a y año. Géneros usa details/summary
+cerrado, con dos nombres y +N. A 320 px las etiquetas se distribuyen en dos
+columnas, permiten saltos de línea y mantienen 44 px de alto; con texto ampliado
+se redistribuyen a una. Los géneros aparecen en ficha y tarjetas cuando existen.
+El enlace deja de aparecer. Al crear se envía null y al editar se envía el enlace
+del registro actual, nunca el valor oculto de un borrador recuperado. La API y el
+almacenamiento del enlace no se retiran.

@@ -79,7 +79,7 @@ test("page filters canonicalize defaults and mutually exclusive modes without lo
   }
   for (const status of ["", "wrong"]) assert.equal(canonicalLibrarySearch(new URLSearchParams({ status, view: "invalid", archived: "false", kind: "book", type: "music", cursor: "old" })), "");
   const query = new URLSearchParams("view=common_pending&status=finished&archived=true&q=cine&extra=a&extra=b");
-  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine" });
+  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine", genre: "" });
   assert.equal(canonicalLibrarySearch(query), "extra=a&extra=b&q=cine&view=common_pending&archived=true");
 });
 
@@ -99,7 +99,7 @@ test("form validation identifies fields without changing API rules and only reva
   assert.deepEqual(Object.keys(workFieldErrors(empty)), ["title"]);
   assert.deepEqual(workFieldErrors({ ...empty, title: "Película", year: "2000", referenceUrl: "https://example.com" }), {});
   assert.ok(workFieldErrors({ ...empty, title: "Película", year: "1.5", referenceUrl: "javascript:alert(1)" }).year);
-  assert.ok(workFieldErrors({ ...empty, title: "Película", referenceUrl: "javascript:alert(1)" }).referenceUrl);
+  assert.deepEqual(workFieldErrors({ ...empty, title: "Película", referenceUrl: "javascript:alert(1)" }), {});
   assert.ok(workFieldErrors({ ...empty, title: "a".repeat(201) }).title);
   assert.deepEqual(revalidateFieldErrors({ title: "err" }, { year: "other" }), {});
   assert.deepEqual(revalidateFieldErrors({}, { year: "other" }), {});
@@ -134,4 +134,15 @@ test("genre draft recovery distinguishes absence, empty and malformed values wit
   assert.deepEqual(recover(["terror", "invalid", 5, "drama", "terror"]).genres, ["drama", "terror"]);
   assert.deepEqual(recover(["invalid"]).genres, []);
   for (const invalid of [null, "drama", {}]) assert.deepEqual(recover(invalid).genres, ["drama"]);
+});
+
+test("genre page normalization handles aliases, repeated parameters and legacy scope together", () => {
+  assert.equal(canonicalLibrarySearch(new URLSearchParams("status=watching&view=common")), "");
+  assert.equal(canonicalLibrarySearch(new URLSearchParams("status=watching&view=common_pending")), "view=common_pending");
+  assert.equal(canonicalLibrarySearch(new URLSearchParams("status=finished&view=invalid")), "status=finished");
+  for (const genre of ["", "unknown", "drama&genre=terror", "drama&genre=drama"]) {
+    const old = cinematecaUrl({ kind: "movie", type: "book", cursor: "old", extra: ["a", "b"] });
+    assert.equal(canonicalLibrarySearch(new URLSearchParams(old.split("?")[1] + `&genre=${genre}`)), "extra=a&extra=b");
+  }
+  for (const genre of ["none", ...GENRES.map(g => g.id)]) assert.equal(readLibraryFilters(new URLSearchParams({ genre })).genre, genre);
 });
