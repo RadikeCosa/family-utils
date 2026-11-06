@@ -106,3 +106,18 @@
   .heading { margin:16px 0 12px; }
   .heading p { font-size:.9375rem; line-height:1.4; }
 }
+
+.ratingField legend { margin-bottom:8px; font-size:1rem; }
+.stars { display:flex; flex-wrap:wrap; gap:4px; }
+.page .starChoice { position:relative; display:inline-flex; margin:0; min-width:44px; min-height:44px; cursor:pointer; }
+.page .starInput { position:absolute; width:1px; min-height:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); }
+.starFace { display:grid; place-items:center; min-width:44px; min-height:44px; border:1px solid transparent; border-radius:8px; color:var(--library-accent); }
+.starInput:checked + .starFace { border:3px double currentColor; }
+.starInput:focus-visible + .starFace { outline:3px solid var(--library-accent); outline-offset:2px; }
+.starInput:disabled + .starFace { opacity:.6; cursor:default; }
+.ratingActions { display:flex; align-items:center; gap:8px 16px; flex-wrap:wrap; margin:8px 0 14px; }
+@media(forced-colors:active) {
+  .starInput:checked + .starFace { border-color:Highlight; }
+  .starInput:focus-visible + .starFace { outline-color:Highlight; }
+  .page .commonFilter[aria-pressed="true"] { border:3px double Highlight; }
+}

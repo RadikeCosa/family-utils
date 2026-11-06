@@ -224,12 +224,12 @@ test("mobile personal experience can be set and cleared", async ({ page }) => {
   const id = (await response.json()).id;
   await page.goto(`/cinemateca/${id}`);
   await page.getByRole("combobox", { name: "Mi estado", exact: true }).selectOption("in_progress");
-  await page.getByRole("combobox", { name: "Mi valoración", exact: true }).selectOption("4");
+  await page.getByRole("radio", { name: "4 de 5 estrellas", exact: true }).press("Space");
   await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
   await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
   await expect(page.getByText("Viendo · 4/5 estrellas", { exact: false })).toBeVisible();
   await page.getByRole("combobox", { name: "Mi estado", exact: true }).selectOption("");
-  await page.getByRole("combobox", { name: "Mi valoración", exact: true }).selectOption("");
+  await page.getByRole("button", { name: "Quitar valoración", exact: true }).click();
   await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
   await expect(page.getByText("Sin estado · Sin valorar", { exact: false })).toBeVisible();
 });
@@ -371,4 +371,33 @@ test("compact collection and canonical filters retain archive and common semanti
   await expect(page).not.toHaveURL(/view=/); await expect(page).toHaveURL(/status=none/);
   await page.goto("/cinemateca?view=common_pending&status=finished&extra=keep");
   await expect(page).not.toHaveURL(/status=/); await expect(page).toHaveURL(/extra=keep/);
+});
+
+test("rating uses native keyboard radios, explicit clearing and manual save", async ({ page }) => {
+  const response = await api.post("/api/library", { data: { title: "Mi experiencia primero" } });
+  const id = (await response.json()).id;
+  await page.goto(`/cinemateca/${id}`);
+  const experience = page.getByRole("heading", { name: "Mi experiencia", exact: true });
+  const family = page.getByRole("heading", { name: "Las miradas de la familia", exact: true });
+  await expect(experience).toBeVisible();
+  expect((await experience.boundingBox())!.y).toBeLessThan((await family.boundingBox())!.y);
+  const first = page.getByRole("radio", { name: "1 de 5 estrellas", exact: true });
+  await first.focus(); await first.press("Space"); await first.press("ArrowRight");
+  const second = page.getByRole("radio", { name: "2 de 5 estrellas", exact: true });
+  await expect(second).toBeChecked(); await expect(second).toBeFocused();
+  await second.press("ArrowDown");
+  const third = page.getByRole("radio", { name: "3 de 5 estrellas", exact: true });
+  await expect(third).toBeChecked();
+  await third.press("Space"); await expect(third).toBeChecked();
+  expect((await (await api.get(`/api/library/${id}`)).json()).work.personal).toHaveLength(0);
+  await page.getByRole("button", { name: "Guardar mi experiencia", exact: true }).click();
+  await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
+  expect((await (await api.get(`/api/library/${id}`)).json()).work.personal[0].rating).toBe(3);
+  await page.getByRole("button", { name: "Quitar valoración", exact: true }).click();
+  await expect(first).toBeFocused();
+  await expect(page.getByRole("button", { name: "Quitar valoración", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: /^Sin valorar$/ })).toBeVisible();
+  await page.getByRole("button", { name: "Guardar mi experiencia", exact: true }).click();
+  await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
+  expect((await (await api.get(`/api/library/${id}`)).json()).work.personal[0].rating).toBeNull();
 });
