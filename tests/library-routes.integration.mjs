@@ -60,6 +60,17 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       const state = await request(owner);
       assert.equal((await request(owner, "", "GET", undefined, { "If-None-Match": state.etag })).status, 304);
     });
+    await t.test("pre-genre representation ETags revalidate without changing cursor scope", async () => {
+      const current = await request(owner);
+      const { cursorScope } = await import("../src/lib/library/cursor.ts");
+      const scope = cursorScope([familyId, "collection", "", "", "", false, "", null]);
+      const oldEtag = `"library-${cursorScope([scope, owner.id, current.body.revision, current.body.accessRevision, null])}"`;
+      const refreshed = await request(owner, "", "GET", undefined, { "If-None-Match": oldEtag });
+      assert.equal(refreshed.status, 200, "an old cached body without genres must not receive 304");
+      assert.notEqual(refreshed.etag, oldEtag);
+      assert.ok(refreshed.body.works.every(work => Array.isArray(work.genres)));
+      assert.equal((await request(owner, "", "GET", undefined, { "If-None-Match": refreshed.etag })).status, 304);
+    });
     await t.test("legacy pages redirect permanently and canonical pages gate access", async () => {
       for (const status of ["pending", "in_progress", "finished", "none"]) {
         for (const suffix of ["", `/${workId}`]) {

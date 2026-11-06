@@ -125,3 +125,12 @@ repetidos por película. La última medición local fue 379,35 ms y 41,43 ms,
 respectivamente. No es un compromiso de latencia de producción.
 
 No se publicaron cambios ni se aplicaron migraciones en producción.
+
+
+## Revisión previa a producción: caché de respuestas
+
+La representación con `genres` utiliza ETags con prefijo `library-v2-`. El prefijo
+invalida cuerpos cacheados anteriores sin cambiar el alcance de los cursores ni
+los contadores familiares. La prueba de regresión reprodujo un 304 incorrecto
+con el ETag anterior; tras versionar la representación, devuelve 200 con géneros
+y vuelve a admitir 304 para el ETag actual. Esto también protege la ficha.

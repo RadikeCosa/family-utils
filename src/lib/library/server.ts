@@ -62,7 +62,8 @@ export async function readLibrary(request: Request, workId?: string) {
     await tx.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     await activeActor(tx, actor);
     const rev = await revision(tx, actor);
-    const etag = `"library-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
+    // Version the response shape independently of the pagination scope.
+    const etag = `"library-v2-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
     const headers = { ETag: etag, "Cache-Control": "private, no-cache", Vary: "Cookie" };
     if (request.headers.get("if-none-match") === etag) { await tx.query("COMMIT"); return new NextResponse(null, { status: 304, headers }); }
     const members = await profiles(tx, actor.familyId);
