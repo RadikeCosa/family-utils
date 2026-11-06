@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { libraryIssueMessage, type OperationIssue } from "@/lib/library/form-errors";
 import type { LibraryCollection, LibraryDetail } from "@/lib/library/types";
 import { clearLibraryDrafts } from "@/lib/library/drafts";
 export type LibraryData = LibraryCollection | LibraryDetail;
@@ -9,7 +10,7 @@ export function useLibrary(workId: string | undefined, filters: string) {
   const [data, setData] = useState<LibraryData | null>(null);
   const [error, setError] = useState("");
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; archivedAt: string | null }[]>([]);
-  const [operationIssue, setOperationIssue] = useState<{ code: string; status: number } | null>(null);
+  const [operationIssue, setOperationIssue] = useState<OperationIssue | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
@@ -28,18 +29,20 @@ export function useLibrary(workId: string | undefined, filters: string) {
     if (mode === "more" && cursor) params.set("cursor", cursor);
     if (mode === "probe" && current.current) params.set("revisionOnly", "true");
     if (mode !== "probe") setLoading(true);
+    let readIssueCode: unknown;
     try {
       const response = await fetch(`${endpoint}?${params}`, { signal: controller.signal, headers: mode === "probe" && etag.current ? { "If-None-Match": etag.current } : {} });
       if (serial !== generation.current) return;
       if (response.status === 304) return;
       const body = await response.json();
       if (!response.ok) {
+        readIssueCode = body.code;
         if (body.code === "NOT_FOUND" && workId) {
-          setOperationIssue({ code: "NOT_FOUND", status: 404 });
+          setOperationIssue({ code: "NOT_FOUND", status: 404, path: `/${workId}` });
           throw new Error("Este contenido ya no está disponible. Conservamos tu borrador.");
         }
         if (response.status === 403) { clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); }
-        throw new Error(body.error || "No se pudo cargar la cinemateca.");
+        throw new Error(libraryIssueMessage(body.code));
       }
       clearLibraryDrafts(`${body.familyId}:${body.currentMemberId}`);
       if (current.current && (body.familyId !== current.current.familyId || body.currentMemberId !== current.current.currentMemberId)) {
@@ -55,7 +58,7 @@ export function useLibrary(workId: string | undefined, filters: string) {
         incoming.accessRevision = current.current.accessRevision;
       } else { etag.current = response.headers.get("etag") ?? ""; setHasChanges(false); }
       current.current = incoming; setData(incoming); setError(""); setOperationIssue(null);
-    } catch (cause) { if (!controller.signal.aborted && serial === generation.current) setError(cause instanceof Error ? cause.message : "No se pudo conectar."); }
+    } catch { if (!controller.signal.aborted && serial === generation.current) setError(libraryIssueMessage(readIssueCode)); }
     finally { if (serial === generation.current) setLoading(false); if (pending.current === controller) pending.current = null; }
   }, [endpoint, filters, router, workId]);
   useEffect(() => {
@@ -73,24 +76,28 @@ export function useLibrary(workId: string | undefined, filters: string) {
   const writing = useRef(false);
   async function mutate(path: string, method: string, body: unknown): Promise<{ id: string } | null> {
     if (writing.current) return null;
-    let handledInline = false;
+    const inline = !(body && typeof body === "object" && "action" in body && ["archive", "restore"].includes(String(body.action)));
     writing.current = true;
     setBusy(true); setError(""); setDuplicates([]); setOperationIssue(null);
     try {
       const response = await fetch(`/api/library${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json();
       if (!response.ok) {
-        setOperationIssue({ code: result.code ?? "UNKNOWN", status: response.status });
-        handledInline = ["DUPLICATE", "CONFLICT", "ARCHIVED", "NOT_FOUND"].includes(result.code);
-        if (result.code === "DUPLICATE") setDuplicates(result.duplicates);
-        else if (response.status === 409 || result.code === "ARCHIVED" || result.code === "NOT_FOUND") await read();
+        const code = typeof result.code === "string" ? result.code : "UNAVAILABLE";
+        if (code === "DUPLICATE") setDuplicates(result.duplicates);
+        else if (response.status === 409 || code === "ARCHIVED" || code === "NOT_FOUND") await read();
+        setOperationIssue({ code, status: response.status, path });
+        if (!inline) setError(libraryIssueMessage(code));
         if (response.status === 403) void read("probe");
-        throw new Error(result.error || "No se pudo guardar.");
+        return null;
       }
-      setOperationIssue(null);
       await read(); return result;
-    } catch (cause) { if (!handledInline) setError(cause instanceof Error ? cause.message : "No se pudo guardar. Conservamos tu borrador."); return null; }
-    finally { writing.current = false; setBusy(false); }
+    } catch {
+      setOperationIssue({ code: "UNAVAILABLE", status: 0, path });
+      if (!inline) setError(libraryIssueMessage("UNAVAILABLE"));
+      return null;
+    } finally { writing.current = false; setBusy(false); }
   }
+
   return { data, error, setError, duplicates, operationIssue, clearDuplicates: () => setDuplicates([]), busy, loading, hasChanges, refresh: () => read(), more: () => read("more"), mutate };
 }

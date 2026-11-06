@@ -59,14 +59,55 @@ test("movie-only input accepts omission and rejects every other kind", () => {
 import { familyRating } from "./presentation.ts";
 import { cinematecaUrl } from "./urls.ts";
 test("family averages exclude null and format one decimal with vote counts", () => {
-  assert.equal(familyRating([]), "Sin valoraciones");
-  assert.equal(familyRating([{ rating: null }]), "Sin valoraciones");
-  assert.equal(familyRating([{ rating: 5 }]), "5.0 / 5 · 1 valoración");
-  assert.equal(familyRating([{ rating: 5 }, { rating: 4 }, { rating: 4 }, { rating: null }]), "4.3 / 5 · 3 valoraciones");
+  assert.equal(familyRating([]), "Familia · Sin valoraciones");
+  assert.equal(familyRating([{ rating: null }]), "Familia · Sin valoraciones");
+  assert.equal(familyRating([{ rating: 5 }]), "Familia · 5,0/5 · 1 valoración");
+  assert.equal(familyRating([{ rating: 5 }, { rating: 4 }, { rating: 4 }, { rating: null }]), "Familia · 4,3/5 · 3 valoraciones");
 });
 test("legacy URLs preserve status codes and unknown parameters but drop obsolete scope", () => {
   for (const status of ["pending", "in_progress", "finished", "none"]) {
     assert.equal(cinematecaUrl({ status, kind: "book", type: "music", cursor: "old", q: "cine", extra: ["a", "b"] }), `/cinemateca?status=${status}&q=cine&extra=a&extra=b`);
   }
   assert.equal(cinematecaUrl({}, "123"), "/cinemateca/123");
+});
+
+import { readLibraryFilters, canonicalLibrarySearch } from "./filters.ts";
+test("page filters canonicalize defaults and mutually exclusive modes without losing other parameters", () => {
+  for (const status of ["pending", "in_progress", "finished", "none"]) {
+    assert.equal(readLibraryFilters(new URLSearchParams({ status })).status, status);
+    assert.equal(canonicalLibrarySearch(new URLSearchParams({ status })), `status=${status}`);
+  }
+  for (const status of ["", "wrong"]) assert.equal(canonicalLibrarySearch(new URLSearchParams({ status, view: "invalid", archived: "false", kind: "book", type: "music", cursor: "old" })), "");
+  const query = new URLSearchParams("view=common_pending&status=finished&archived=true&q=cine&extra=a&extra=b");
+  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine" });
+  assert.equal(canonicalLibrarySearch(query), "extra=a&extra=b&q=cine&view=common_pending&archived=true");
+});
+
+import { orderCompanions, selectedCompanionsSummary } from "./presentation.ts";
+test("companion summaries have stable Spanish ordering, include archived profiles and never reorder source data", () => {
+  const members = [{ id: "z", name: "Álex", archivedAt: null }, { id: "a", name: "Alex", archivedAt: "2026-01-01" }, { id: "b", name: "Vicky", archivedAt: null }];
+  const ordered = orderCompanions(members);
+  assert.deepEqual(ordered.map(member => member.id), ["a", "z", "b"]);
+  assert.equal(members[0].id, "z");
+  assert.equal(selectedCompanionsSummary(ordered, []), "Opcional");
+  assert.equal(selectedCompanionsSummary(ordered, ["b", "z", "a"]), "Alex, Álex +1");
+});
+
+import { workFieldErrors, contributionFieldErrors, revalidateFieldErrors, libraryIssueMessage } from "./form-errors.ts";
+test("form validation identifies fields without changing API rules and only revalidates existing errors", () => {
+  const empty = { title: "", creator: "", year: "", referenceUrl: "" };
+  assert.deepEqual(Object.keys(workFieldErrors(empty)), ["title"]);
+  assert.deepEqual(workFieldErrors({ ...empty, title: "Película", year: "2000", referenceUrl: "https://example.com" }), {});
+  assert.ok(workFieldErrors({ ...empty, title: "Película", year: "1.5", referenceUrl: "javascript:alert(1)" }).year);
+  assert.ok(workFieldErrors({ ...empty, title: "Película", referenceUrl: "javascript:alert(1)" }).referenceUrl);
+  assert.ok(workFieldErrors({ ...empty, title: "a".repeat(201) }).title);
+  assert.deepEqual(revalidateFieldErrors({ title: "err" }, { year: "other" }), {});
+  assert.deepEqual(revalidateFieldErrors({}, { year: "other" }), {});
+  const date = { body: "Un recuerdo", year: "2024", month: "2", day: "30" };
+  assert.ok(contributionFieldErrors(date, "2026-11-06").day);
+  assert.deepEqual(contributionFieldErrors({ ...date, day: "29" }, "2026-11-06"), {});
+  assert.ok(contributionFieldErrors({ ...date, year: "9999", month: "", day: "" }, "2026-11-06").year);
+  assert.deepEqual(contributionFieldErrors({ ...date, year: "2026", month: "", day: "" }, "2026-11-06"), {});
+  for (const code of ["SQL detail: secret", "constructor", "__proto__", null]) assert.equal(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
+  for (const code of ["CONFLICT", "DUPLICATE", "NO_ACCESS", "NOT_AUTHOR", "ARCHIVED", "NOT_FOUND", "INVALID"]) assert.notEqual(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
 });
