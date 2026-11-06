@@ -92,3 +92,22 @@ test("companion summaries have stable Spanish ordering, include archived profile
   assert.equal(selectedCompanionsSummary(ordered, []), "Opcional");
   assert.equal(selectedCompanionsSummary(ordered, ["b", "z", "a"]), "Alex, Álex +1");
 });
+
+import { workFieldErrors, contributionFieldErrors, revalidateFieldErrors, libraryIssueMessage } from "./form-errors.ts";
+test("form validation identifies fields without changing API rules and only revalidates existing errors", () => {
+  const empty = { title: "", creator: "", year: "", referenceUrl: "" };
+  assert.deepEqual(Object.keys(workFieldErrors(empty)), ["title"]);
+  assert.deepEqual(workFieldErrors({ ...empty, title: "Película", year: "2000", referenceUrl: "https://example.com" }), {});
+  assert.ok(workFieldErrors({ ...empty, title: "Película", year: "1.5", referenceUrl: "javascript:alert(1)" }).year);
+  assert.ok(workFieldErrors({ ...empty, title: "Película", referenceUrl: "javascript:alert(1)" }).referenceUrl);
+  assert.ok(workFieldErrors({ ...empty, title: "a".repeat(201) }).title);
+  assert.deepEqual(revalidateFieldErrors({ title: "err" }, { year: "other" }), {});
+  assert.deepEqual(revalidateFieldErrors({}, { year: "other" }), {});
+  const date = { body: "Un recuerdo", year: "2024", month: "2", day: "30" };
+  assert.ok(contributionFieldErrors(date, "2026-11-06").day);
+  assert.deepEqual(contributionFieldErrors({ ...date, day: "29" }, "2026-11-06"), {});
+  assert.ok(contributionFieldErrors({ ...date, year: "9999", month: "", day: "" }, "2026-11-06").year);
+  assert.deepEqual(contributionFieldErrors({ ...date, year: "2026", month: "", day: "" }, "2026-11-06"), {});
+  for (const code of ["SQL detail: secret", "constructor", "__proto__", null]) assert.equal(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
+  for (const code of ["CONFLICT", "DUPLICATE", "NO_ACCESS", "NOT_AUTHOR", "ARCHIVED", "NOT_FOUND", "INVALID"]) assert.notEqual(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
+});

@@ -117,3 +117,7 @@ verificada en PostgreSQL 18:
 [ejecución 42001786273](https://github.com/RadikeCosa/family-utils-backups/actions/runs/42001786273).
 La publicación y la migración fueron autorizadas explícitamente en esta sesión.
 Se registrarán commit, CI, despliegue y comprobación posterior al finalizar.
+
+
+El [pulido de UX/UI](./cinemateca-ux.md) describe la colección compacta, estrellas,
+acompañantes plegables y validación de formularios sin cambios de API ni esquema.
