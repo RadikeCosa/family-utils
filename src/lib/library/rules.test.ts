@@ -82,3 +82,13 @@ test("page filters canonicalize defaults and mutually exclusive modes without lo
   assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine" });
   assert.equal(canonicalLibrarySearch(query), "extra=a&extra=b&q=cine&view=common_pending&archived=true");
 });
+
+import { orderCompanions, selectedCompanionsSummary } from "./presentation.ts";
+test("companion summaries have stable Spanish ordering, include archived profiles and never reorder source data", () => {
+  const members = [{ id: "z", name: "Álex", archivedAt: null }, { id: "a", name: "Alex", archivedAt: "2026-01-01" }, { id: "b", name: "Vicky", archivedAt: null }];
+  const ordered = orderCompanions(members);
+  assert.deepEqual(ordered.map(member => member.id), ["a", "z", "b"]);
+  assert.equal(members[0].id, "z");
+  assert.equal(selectedCompanionsSummary(ordered, []), "Opcional");
+  assert.equal(selectedCompanionsSummary(ordered, ["b", "z", "a"]), "Alex, Álex +1");
+});

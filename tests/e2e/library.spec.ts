@@ -243,6 +243,7 @@ test("mobile memories preserve partial dates, drafts, accessible spoilers and re
   await expect(page.getByLabel("Tu aporte",{exact:true})).toHaveValue("Una tarde inolvidable 👨‍👩‍👧‍👦");
   await page.getByLabel("Contiene spoilers").check();
   await page.getByLabel("Año",{exact:true}).fill("2015");
+  await page.getByText("¿Con quién la viste?", { exact: false }).click();
   await page.getByLabel("Alex",{exact:true}).check();
   await page.getByRole("button",{name:"Publicar aporte",exact:true}).click();
   const show=page.getByRole("button",{name:"Mostrar spoiler"});
@@ -400,4 +401,32 @@ test("rating uses native keyboard radios, explicit clearing and manual save", as
   await page.getByRole("button", { name: "Guardar mi experiencia", exact: true }).click();
   await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
   expect((await (await api.get(`/api/library/${id}`)).json()).work.personal[0].rating).toBeNull();
+});
+
+test("companions fold compactly, preserve drafts, sort names and include archived profiles", async ({ page }) => {
+  await pool.query("INSERT INTO members(family_id,name,archived_at) VALUES($1,'Vicky',NULL),($1,'Bea',NULL),($1,'Carla',NULL),($1,'Diego',NULL),($1,'Eva',now())", [familyId]);
+  const response = await api.post("/api/library", { data: { title: "Acompañantes" } }); const id = (await response.json()).id;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/cinemateca/${id}`);
+  const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: "¿Con quién la viste?" }) });
+  const summary = details.locator("summary");
+  await expect(details).not.toHaveAttribute("open", "");
+  expect((await details.boundingBox())!.height).toBeLessThanOrEqual(80);
+  await summary.focus(); await summary.press("Enter");
+  const checks = details.getByRole("checkbox"); await expect(checks).toHaveCount(6);
+  const labels = await details.locator("label").allTextContents();
+  expect(labels).toEqual(["Alex", "Bea", "Carla", "Diego", "Eva (perfil archivado)", "Vicky"]);
+  for (const checkbox of await checks.all()) await checkbox.check();
+  await summary.click(); await expect(summary).toContainText("Alex, Bea +4");
+  expect((await details.boundingBox())!.height).toBeLessThanOrEqual(80);
+  await page.reload(); await expect(summary).toContainText("Alex, Bea +4");
+  await expect(details).not.toHaveAttribute("open", "");
+  await summary.click(); for (const checkbox of await checks.all()) await expect(checkbox).toBeChecked();
+  await page.getByLabel("Tu aporte", { exact: true }).fill("Una noche juntos");
+  await page.getByRole("button", { name: "Publicar aporte", exact: true }).click();
+  await expect(page.getByText("Una noche juntos", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Editar mi aporte", exact: true }).click();
+  const editing = page.getByRole("listitem").filter({ hasText: "Una noche juntos" }).locator("details");
+  await expect(editing.locator("summary")).toContainText("Alex, Bea +4");
+  await expect(editing).not.toHaveAttribute("open", "");
 });

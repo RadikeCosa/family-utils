@@ -2,6 +2,7 @@
 import { useId, useState } from "react";
 import { codePointLength } from "@/lib/library/rules";
 import type { Contribution, LibraryDetail } from "@/lib/library/types";
+import CompanionsField from "./CompanionsField";
 import { useDraft } from "./useDraft";
 import styles from "./library.module.css";
 type Save = (path: string, method: string, input: Record<string, unknown>) => Promise<{ id: string } | null>;
@@ -23,7 +24,7 @@ function ContributionForm({ data, entry, busy, save, close }: { data: LibraryDet
       <label>Mes<select disabled={!draft.year} value={draft.month} onChange={(event) => setDraft({ ...draft, month: event.target.value, ...(!event.target.value ? { day: "" } : {}) })}><option value="">No recuerdo</option>{Array.from({ length: 12 }, (_, i) => <option key={i} value={i+1}>{new Intl.DateTimeFormat("es-AR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2000,i,1)))}</option>)}</select></label>
       <label>Día<input type="number" min="1" max="31" inputMode="numeric" disabled={!draft.month} value={draft.day} onChange={(event) => setDraft({ ...draft, day: event.target.value })} /></label>
     </div></fieldset>
-    <fieldset><legend>¿Con quién? (opcional)</legend>{data.members.map((member) => <label className={styles.check} key={member.id}><input type="checkbox" checked={draft.companionIds.includes(member.id)} onChange={(event) => setDraft({ ...draft, companionIds: event.target.checked ? [...draft.companionIds, member.id] : draft.companionIds.filter((id) => id !== member.id) })} />{member.name}{member.archivedAt ? " (perfil archivado)" : ""}</label>)}</fieldset>
+    <CompanionsField members={data.members} selected={draft.companionIds} onChange={(companionIds) => setDraft({ ...draft, companionIds })} />
     {conflict && <div className={styles.notice}><p>Este aporte cambió. Versión guardada:</p><p className={styles.body}>{entry.body}</p><button type="button" onClick={() => setDraft({ ...draft, expectedVersion: entry.version })}>Revisé el aporte: habilitar reintento</button></div>}
     {invalid && <p role="alert">{invalid}</p>}
     <div className={styles.actions}><button className={styles.primary} type="submit" disabled={conflict}>{entry ? "Guardar aporte" : "Publicar aporte"}</button><button type="button" onClick={() => { clearDraft(); close(); }}>Descartar borrador</button></div>
