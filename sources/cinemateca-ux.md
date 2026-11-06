@@ -1,5 +1,8 @@
 # Pulido de UX/UI de Cinemateca
 
+Registro de la entrega anterior. La evolución de filtros, géneros y valoración
+se documenta en [cinemateca-generos.md](./cinemateca-generos.md).
+
 Entrega en cuatro commits: colección y filtros; ficha y estrellas; acompañantes;
 validación y errores. Colores y familias tipográficas conservados. Sin cambios en
 rutas, contratos públicos, base de datos ni migraciones.

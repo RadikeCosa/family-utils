@@ -22,6 +22,8 @@ import { MEAL_TYPES, type Participation, type WeeklyParticipation } from "@/lib/
 import type { DailyPlan } from "@/lib/meals/daily";
 import { FAMILY_TIME_ZONE, type CarryPolicy, type FamilyRole, type OccurrenceStatus, type TaskStatus } from "@/lib/tasks/rules";
 
+import { genresCheckSql } from "@/lib/library/genre-schema";
+
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
@@ -631,6 +633,7 @@ export const libraryWorks = pgTable("library_works", {
   title: text("title").notNull(),
   normalizedTitle: text("titulo_normalizado").notNull(),
   kind: text("kind").notNull(),
+  genres: text("genres").array().notNull().default(sql`'{}'::text[]`),
   creator: text("creator"),
   normalizedCreator: text("creador_normalizado").notNull().default(""),
   year: integer("year"),
@@ -651,6 +654,7 @@ export const libraryWorks = pgTable("library_works", {
   check("library_works_creator_length", sql`${t.creator} IS NULL OR char_length(${t.creator}) BETWEEN 1 AND 200`),
   check("library_works_url", sql`${t.referenceUrl} IS NULL OR (char_length(${t.referenceUrl}) BETWEEN 1 AND 2048 AND ${t.referenceUrl} ~* '^https?://[^[:space:]]+$')`),
   check("library_works_year", sql`${t.year} IS NULL OR ${t.year} BETWEEN 1 AND 9999`),
+  check("library_works_genres", sql.raw(genresCheckSql())),
   check("library_works_kind", sql`${t.kind} = 'movie'`),
   check("library_works_version", sql`${t.version} > 0`),
 ]);

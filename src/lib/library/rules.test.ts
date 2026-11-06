@@ -79,7 +79,7 @@ test("page filters canonicalize defaults and mutually exclusive modes without lo
   }
   for (const status of ["", "wrong"]) assert.equal(canonicalLibrarySearch(new URLSearchParams({ status, view: "invalid", archived: "false", kind: "book", type: "music", cursor: "old" })), "");
   const query = new URLSearchParams("view=common_pending&status=finished&archived=true&q=cine&extra=a&extra=b");
-  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine" });
+  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine", genre: "" });
   assert.equal(canonicalLibrarySearch(query), "extra=a&extra=b&q=cine&view=common_pending&archived=true");
 });
 
@@ -99,7 +99,7 @@ test("form validation identifies fields without changing API rules and only reva
   assert.deepEqual(Object.keys(workFieldErrors(empty)), ["title"]);
   assert.deepEqual(workFieldErrors({ ...empty, title: "Película", year: "2000", referenceUrl: "https://example.com" }), {});
   assert.ok(workFieldErrors({ ...empty, title: "Película", year: "1.5", referenceUrl: "javascript:alert(1)" }).year);
-  assert.ok(workFieldErrors({ ...empty, title: "Película", referenceUrl: "javascript:alert(1)" }).referenceUrl);
+  assert.deepEqual(workFieldErrors({ ...empty, title: "Película", referenceUrl: "javascript:alert(1)" }), {});
   assert.ok(workFieldErrors({ ...empty, title: "a".repeat(201) }).title);
   assert.deepEqual(revalidateFieldErrors({ title: "err" }, { year: "other" }), {});
   assert.deepEqual(revalidateFieldErrors({}, { year: "other" }), {});
@@ -110,4 +110,39 @@ test("form validation identifies fields without changing API rules and only reva
   assert.deepEqual(contributionFieldErrors({ ...date, year: "2026", month: "", day: "" }, "2026-11-06"), {});
   for (const code of ["SQL detail: secret", "constructor", "__proto__", null]) assert.equal(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
   for (const code of ["CONFLICT", "DUPLICATE", "NO_ACCESS", "NOT_AUTHOR", "ARCHIVED", "NOT_FOUND", "INVALID"]) assert.notEqual(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
+});
+
+import { GENRES, normalizeGenres, genreInput } from "./genres.ts";
+import { restoreLibraryDraft } from "./drafts.ts";
+test("genres use the shared catalog, canonical order and strict API input", () => {
+  assert.equal(GENRES.length, 18);
+  assert.equal(new Set(GENRES.map(g => g.id)).size, 18);
+  assert.ok(!GENRES.some(g => String(g.id) === "none"));
+  assert.deepEqual(genreInput(["terror", "drama", "terror"]), ["drama", "terror"]);
+  for (const invalid of [null, "drama", ["unknown"], [null], [["drama"]]]) assert.equal(genreInput(invalid), null);
+  assert.deepEqual(workInput({ title: "One", genres: ["terror", "drama", "terror"] })?.genres, ["drama", "terror"]);
+  assert.equal(workInput({ title: "One", genres: null }), null);
+  assert.equal(workInput({ title: "One" })?.genres, undefined);
+  assert.deepEqual(normalizeGenres(["unknown", "terror", 1, "drama"]), ["drama", "terror"]);
+});
+test("genre draft recovery distinguishes absence, empty and malformed values without losing known fields", () => {
+  const initial = { title: "Saved", kind: "movie", expectedVersion: 2, genres: ["drama"] };
+  const saved = { title: "Draft", kind: "book", expectedVersion: 1, unknown: "ignored" };
+  const recover = (genres: unknown) => restoreLibraryDraft(initial, { ...saved, genres });
+  assert.deepEqual(restoreLibraryDraft(initial, saved), { ...initial, title: "Draft", expectedVersion: 1 });
+  assert.deepEqual(recover([]).genres, []);
+  assert.deepEqual(recover(["terror", "invalid", 5, "drama", "terror"]).genres, ["drama", "terror"]);
+  assert.deepEqual(recover(["invalid"]).genres, []);
+  for (const invalid of [null, "drama", {}]) assert.deepEqual(recover(invalid).genres, ["drama"]);
+});
+
+test("genre page normalization handles aliases, repeated parameters and legacy scope together", () => {
+  assert.equal(canonicalLibrarySearch(new URLSearchParams("status=watching&view=common")), "");
+  assert.equal(canonicalLibrarySearch(new URLSearchParams("status=watching&view=common_pending")), "view=common_pending");
+  assert.equal(canonicalLibrarySearch(new URLSearchParams("status=finished&view=invalid")), "status=finished");
+  for (const genre of ["", "unknown", "drama&genre=terror", "drama&genre=drama"]) {
+    const old = cinematecaUrl({ kind: "movie", type: "book", cursor: "old", extra: ["a", "b"] });
+    assert.equal(canonicalLibrarySearch(new URLSearchParams(old.split("?")[1] + `&genre=${genre}`)), "extra=a&extra=b");
+  }
+  for (const genre of ["none", ...GENRES.map(g => g.id)]) assert.equal(readLibraryFilters(new URLSearchParams({ genre })).genre, genre);
 });

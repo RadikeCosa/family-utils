@@ -60,6 +60,17 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       const state = await request(owner);
       assert.equal((await request(owner, "", "GET", undefined, { "If-None-Match": state.etag })).status, 304);
     });
+    await t.test("pre-genre representation ETags revalidate without changing cursor scope", async () => {
+      const current = await request(owner);
+      const { cursorScope } = await import("../src/lib/library/cursor.ts");
+      const scope = cursorScope([familyId, "collection", "", "", "", false, "", null]);
+      const oldEtag = `"library-${cursorScope([scope, owner.id, current.body.revision, current.body.accessRevision, null])}"`;
+      const refreshed = await request(owner, "", "GET", undefined, { "If-None-Match": oldEtag });
+      assert.equal(refreshed.status, 200, "an old cached body without genres must not receive 304");
+      assert.notEqual(refreshed.etag, oldEtag);
+      assert.ok(refreshed.body.works.every(work => Array.isArray(work.genres)));
+      assert.equal((await request(owner, "", "GET", undefined, { "If-None-Match": refreshed.etag })).status, 304);
+    });
     await t.test("legacy pages redirect permanently and canonical pages gate access", async () => {
       for (const status of ["pending", "in_progress", "finished", "none"]) {
         for (const suffix of ["", `/${workId}`]) {
@@ -138,6 +149,35 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       const crossed = await request(owner, `?q=Paged&cursor=${encodeURIComponent(first.nextCursor)}`);
       assert.equal(crossed.status, 400); assert.equal(crossed.body.code, "INVALID");
       await pool.query("DELETE FROM library_personal WHERE work_id IN (SELECT id FROM library_works WHERE family_id=$1 AND title LIKE 'Paged %')", [familyId]);
+    });
+    await t.test("genre contracts filter before pagination, preserve omission and scope cursors and ETags", async () => {
+      const id = (await ok(owner, "", "POST", { title: "Genre contracts", genres: ["terror", "drama", "terror"], referenceUrl: "https://example.com" })).id;
+      const read = async () => (await ok(owner, `/${id}`)).work;
+      assert.deepEqual((await read()).genres, ["drama", "terror"]);
+      const initial = await read();
+      await ok(owner, `/${id}`, "PATCH", { action: "edit", title: initial.title, referenceUrl: initial.referenceUrl, expectedVersion: initial.version });
+      assert.deepEqual((await read()).genres, ["drama", "terror"]);
+      await pool.query("UPDATE library_works SET genres=ARRAY['terror','drama'] WHERE id=$1", [id]);
+      assert.deepEqual((await read()).genres, ["drama", "terror"]);
+      for (const genre of ["", "unknown", "drama&genre=terror", "drama&genre=drama"]) {
+        const result = await request(owner, `?genre=${genre}`); assert.equal(result.status, 400); assert.equal(result.body.code, "INVALID");
+      }
+      for (const genres of [null, "drama", ["unknown"], [null]]) assert.equal((await request(owner, "", "POST", { title: "Invalid", genres })).status, 400);
+      assert.ok((await ok(owner, "?genre=drama")).works.some(w => w.id === id));
+      assert.ok(!(await ok(outsider, "?genre=drama")).works.some(w => w.id === id));
+      const state = await request(owner, "?genre=drama");
+      assert.equal((await request(owner, "?genre=drama", "GET", undefined, { "If-None-Match": state.etag })).status, 304);
+      assert.equal((await request(owner, "?genre=terror", "GET", undefined, { "If-None-Match": state.etag })).status, 200);
+      await pool.query("UPDATE library_works SET genres=ARRAY['drama'] WHERE family_id=$1 AND title LIKE 'Paged %'", [familyId]);
+      const first = await ok(owner, "?q=Paged&genre=drama"); assert.equal(first.works.length, 50);
+      const second = await ok(owner, `?q=Paged&genre=drama&cursor=${encodeURIComponent(first.nextCursor)}`); assert.equal(second.works.length, 50);
+      for (const genre of ["terror", "none", ""]) assert.equal((await request(owner, `?q=Paged${genre ? `&genre=${genre}` : ""}&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
+      const plain = await ok(owner, "?q=Paged");
+      const { cursorScope, decodeCursor } = await import("../src/lib/library/cursor.ts");
+      assert.ok(decodeCursor(plain.nextCursor, cursorScope([familyId, "collection", "paged", "", "", false, "", null])));
+      await ok(owner, `/${id}`, "PATCH", { action: "edit", title: initial.title, referenceUrl: initial.referenceUrl, genres: [], expectedVersion: (await read()).version });
+      assert.deepEqual((await read()).genres, []);
+      assert.ok((await ok(owner, "?genre=none")).works.some(w => w.id === id));
     });
     await t.test("duplicate warnings, shared edits, conflicts and archive rules", async () => {
       const duplicate = await request(peer, "", "POST", { title: " CANCION del verano ", kind: "movie" });

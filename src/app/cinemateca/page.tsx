@@ -11,6 +11,6 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   if (!await getMemberContext(await headers())) redirect("/acceso");
   const params = await searchParams;
   const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value !== undefined) query.set(key, Array.isArray(value) ? value[0] ?? "" : value);
+  for (const [key, value] of Object.entries(params)) if (value !== undefined) for (const item of Array.isArray(value) ? value : [value]) query.append(key, item);
   return <LibraryApp initialFilters={readLibraryFilters(query)} />;
 }

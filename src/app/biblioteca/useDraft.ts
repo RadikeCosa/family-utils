@@ -1,13 +1,13 @@
 "use client";
 import { useState } from "react";
-import { libraryDraftKey } from "@/lib/library/drafts";
+import { libraryDraftKey, restoreLibraryDraft } from "@/lib/library/drafts";
 export function useDraft<T extends Record<string, unknown>>(scope: string, initial: T) {
   const key = libraryDraftKey(scope);
   const [storageError, setStorageError] = useState(() => { try { sessionStorage.getItem(key); return false; } catch { return true; } });
   const [draft, update] = useState<T>(() => {
     try {
       const value = JSON.parse(sessionStorage.getItem(key) ?? "null");
-      if (value && Object.keys(initial).every((field) => typeof value[field] === typeof initial[field] && Array.isArray(value[field]) === Array.isArray(initial[field]))) return Object.fromEntries(Object.keys(initial).map((field) => [field, field === "kind" ? "movie" : value[field]])) as T;
+      return restoreLibraryDraft(initial, value);
     } catch { /* Keep an in-memory draft. */ }
     return initial;
   });

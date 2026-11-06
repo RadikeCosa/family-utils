@@ -1,3 +1,4 @@
+import { genreInput } from "./genres.ts";
 import { PERSONAL_STATUSES, WORK_KINDS, type ExperienceDate, type WorkInput } from "./types.ts";
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const codePointLength = (value: string) => Array.from(value).length;
@@ -14,7 +15,9 @@ export function workInput(body: Record<string, unknown>): WorkInput | null {
     if (codePointLength(referenceUrl) > 2048 || /\s/u.test(referenceUrl)) return null;
     try { const url = new URL(referenceUrl); if (!["http:", "https:"].includes(url.protocol)) return null; } catch { return null; }
   }
-  return { title, kind: "movie", creator, year: year as number | null, referenceUrl };
+  const genres = body.genres === undefined ? undefined : genreInput(body.genres);
+  if (genres === null) return null;
+  return { title, kind: "movie", creator, year: year as number | null, referenceUrl, ...(genres === undefined ? {} : { genres }) };
 }
 export function personalInput(body: Record<string, unknown>) {
   if (body.status !== null && !PERSONAL_STATUSES.includes(body.status as never)) return null;
