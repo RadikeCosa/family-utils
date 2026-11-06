@@ -121,3 +121,5 @@ Se registrarán commit, CI, despliegue y comprobación posterior al finalizar.
 
 El [pulido de UX/UI](./cinemateca-ux.md) describe la colección compacta, estrellas,
 acompañantes plegables y validación de formularios sin cambios de API ni esquema.
+
+El cambio posterior de filtros, géneros y valoración está documentado en [cinemateca-generos.md](./cinemateca-generos.md).

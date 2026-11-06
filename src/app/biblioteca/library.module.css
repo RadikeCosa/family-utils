@@ -170,3 +170,14 @@
   .filters .searchLabel { grid-column:1/-1; }
 }
 @media(forced-colors:active) { .genreChoice:has(input:checked) { border-color:Highlight; } }
+
+.personalLayout { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; }
+.personalState { min-width:0; }
+.personalState .chips { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr)); max-width:20rem; }
+.personalState .chip span { width:100%; padding-inline:8px; }
+.unsaved { color:var(--library-muted); font-size:.875rem; margin:4px 0 14px; }
+@media(min-width:768px) { .personalLayout { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px; } }
+/* Keep the native radio itself under the entire visible status target. */
+.page .personalState .chip input { inset:0; width:100%; min-height:44px; height:100%; margin:0; padding:0; clip:auto; clip-path:none; opacity:0; z-index:1; cursor:pointer; }
+.personalState .chip input:checked + span { border-style:double; border-width:3px; padding:6px; }
+@media(forced-colors:active) { .personalState .chip input:checked + span { border-color:Highlight; } }

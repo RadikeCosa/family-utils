@@ -71,3 +71,57 @@ se redistribuyen a una. Los géneros aparecen en ficha y tarjetas cuando existen
 El enlace deja de aparecer. Al crear se envía null y al editar se envía el enlace
 del registro actual, nunca el valor oculto de un borrador recuperado. La API y el
 almacenamiento del enlace no se retiran.
+
+## Estado y valoración
+
+Mi estado y valoración presenta radios nativos para Sin estado, Quiero ver,
+Viendo y Vista, en dos columnas a 320 px y con redistribución al ampliar texto.
+Las estrellas conservan radios nativos, foco y Quitar valoración. En escritorio
+ambos bloques comparten fila; el botón Guardar estado y valoración sigue siendo
+necesario para persistir. Cambios sin guardar se deriva de la diferencia con los
+datos guardados, incluso cuando proviene de un borrador recuperado.
+
+Marcar Vista solo escribe el estado personal: no crea fecha ni aporte. Las
+pruebas verifican guardado, recuperación, limpieza de la nota y errores seguros.
+Un recorrido con dos clientes cambia el enlace mientras el formulario está
+abierto: la versión antigua se rechaza sin escribir y el reintento revisado
+conserva el enlace nuevo y el título local. El enlace de un borrador antiguo no
+participa de esa escritura.
+
+## Verificación final
+
+A 390 × 844 px, con fuentes cargadas, todos los filtros visibles, título y
+Director/a de hasta 40 caracteres, año y dos categorías:
+
+| Medida | Chromium | WebKit | Criterio |
+| --- | ---: | ---: | ---: |
+| Inicio de primera tarjeta | 543,19 px | 543,19 px | menor que 560 px |
+| Final de primera tarjeta | 703,77 px | 709,78 px | hasta 844 px |
+
+La suite contiene 31 recorridos por tres perfiles (dos Chromium y uno WebKit):
+93 escenarios cubiertos. La corrida completa aprobó 92; el restante detectó una
+precarga del enlace de navegación, independiente de buscar. Se corrigió la
+observación del test para limitarla a la búsqueda concreta y navegación real,
+y sus tres perfiles aprobaron sin cambios adicionales en la aplicación.
+
+También aprobaron 14 pruebas de reglas, 5 de PostgreSQL, 12 de rutas autenticadas
+y 3 recorridos generales de accesibilidad. Se verificaron tipos, lint,
+compilación, coherencia de snapshots de Drizzle, orden/hashes de 52 migraciones
+y ausencia de errores de whitespace en el diff.
+
+Los navegadores cubren 320, 390, 768 y 1280 px, texto al 200 %, zoom CSS al 200 %,
+teclado, análisis axe y contraste forzado en Chromium. Se inspeccionaron capturas
+de colección, géneros y valoración. Son comprobaciones automatizadas, no una
+prueba con lector de pantalla real ni Safari en un dispositivo físico.
+
+WebKit necesitó contener el texto seleccionado del select (con el menú nativo
+intacto) para evitar desbordamiento con zoom; no se oculta desbordamiento en la
+página. La recuperación de filtros al volver atrás lee la URL actual, evitando
+restaurar parámetros iniciales de una página conservada por el navegador.
+
+Con 10.000 películas, 20 integrantes y otra familia, EXPLAIN (ANALYZE, BUFFERS)
+verificó primera página y siguientes sin recorridos completos de library_personal
+repetidos por película. La última medición local fue 379,35 ms y 41,43 ms,
+respectivamente. No es un compromiso de latencia de producción.
+
+No se publicaron cambios ni se aplicaron migraciones en producción.
