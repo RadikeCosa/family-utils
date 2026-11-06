@@ -27,24 +27,23 @@ test.afterEach(async () => {
   await pool?.end();
 });
 test("mobile library: create, restore draft, find accented titles and accessible navigation", async ({ page }) => {
-  await page.goto("/biblioteca");
+  await page.goto("/cinemateca");
   await expect(page.getByRole("heading", { name: "Nuestra colección empieza acá" })).toBeVisible();
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Agregar a la biblioteca" })).toBeVisible();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Agregar película" })).toBeVisible();
   await page.getByLabel(/^Título/).fill("Canción del verano");
   await page.reload();
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   await expect(page.getByLabel(/^Título/)).toHaveValue("Canción del verano");
-  await page.getByRole("dialog").getByText("Música", { exact: true }).click();
   await page.getByText("Agregar más detalles", { exact: true }).click();
-  await page.getByLabel("Autor o creador", { exact: true }).fill("María");
+  await page.getByLabel("Dirección (director/a)", { exact: true }).fill("María");
   await page.getByLabel("Enlace", { exact: true }).fill("https://example.com/music");
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).last().click();
-  await expect(page).toHaveURL(/\/biblioteca\/[a-f0-9-]+$/);
+  await page.getByRole("button", { name: "Agregar película", exact: true }).last().click();
+  await expect(page).toHaveURL(/\/cinemateca\/[a-f0-9-]+$/);
   await expect(page.getByRole("heading", { name: "Canción del verano" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Abrir enlace de referencia/ })).toHaveAttribute("rel", "noopener noreferrer");
-  await page.getByRole("link", { name: "← Volver a la biblioteca" }).click();
-  await page.getByLabel("Buscar en la biblioteca").fill("cancion");
+  await page.getByRole("link", { name: "← Volver a la cinemateca" }).click();
+  await page.getByLabel("Buscar en la cinemateca").fill("cancion");
   await expect(page).toHaveURL(/q=cancion/);
   await expect(page.getByRole("heading", { name: "Canción del verano" })).toBeVisible();
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
@@ -53,16 +52,15 @@ test("mobile library: create, restore draft, find accented titles and accessible
 });
 
 test("mobile shared management: duplicate confirmation, edit and archive/restore", async ({ page }) => {
-  const seeded = await api.post("/api/library", { data: { title: "La obra", kind: "book" } });
+  const seeded = await api.post("/api/library", { data: { title: "La obra", kind: "movie" } });
   expect(seeded.status()).toBe(201);
-  await page.goto("/biblioteca");
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.goto("/cinemateca");
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   await page.getByLabel(/^Título/).fill("LA OBRA");
-  await page.getByRole("dialog").getByText("Libro", { exact: true }).click();
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).last().click();
-  await expect(page.getByText("Ya hay algo parecido en la biblioteca.")).toBeVisible();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).last().click();
+  await expect(page.getByText("Ya hay algo parecido en la cinemateca.")).toBeVisible();
   await page.getByRole("button", { name: "Agregar de todos modos" }).click();
-  await expect(page).toHaveURL(/\/biblioteca\/[a-f0-9-]+$/);
+  await expect(page).toHaveURL(/\/cinemateca\/[a-f0-9-]+$/);
   await page.getByRole("button", { name: "Editar datos", exact: true }).click();
   await page.getByLabel(/^Título/).fill("Otra mirada");
   await page.getByRole("button", { name: "Guardar cambios", exact: true }).click();
@@ -77,16 +75,16 @@ test("mobile shared management: duplicate confirmation, edit and archive/restore
 });
 
 test("work dialog preserves drafts on close and requires an explicit discard", async ({ page }) => {
-  await page.goto("/biblioteca");
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Agregar a la biblioteca" });
+  await page.goto("/cinemateca");
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Agregar película" });
   const title = page.getByLabel(/^Título/);
   await title.fill("Un borrador que quiero conservar");
   const a11y = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(a11y.violations).toEqual([]);
   await title.press("Escape");
   await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   await expect(page.getByLabel(/^Título/)).toHaveValue("Un borrador que quiero conservar");
   await page.getByRole("button", { name: "Descartar borrador" }).click();
   await expect(page.getByRole("group", { name: "Confirmar descarte" })).toBeVisible();
@@ -95,7 +93,7 @@ test("work dialog preserves drafts on close and requires an explicit discard", a
   await page.getByRole("button", { name: "Descartar borrador" }).click();
   await page.getByRole("button", { name: "Descartar y cerrar" }).click();
   await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   await expect(page.getByLabel(/^Título/)).toHaveValue("");
 });
 
@@ -107,17 +105,17 @@ test("work form warns when browser storage cannot keep a draft", async ({ page }
       return original.call(this, key, value);
     };
   });
-  await page.goto("/biblioteca");
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.goto("/cinemateca");
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   await page.getByLabel(/^Título/).fill("Sigue siendo posible guardar");
   await expect(page.getByRole("status").filter({ hasText: "No podemos conservar tu borrador al cerrar o recargar." })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).last()).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Agregar película", exact: true }).last()).toBeEnabled();
 });
 
 test("dialog keeps its CSS fallback and ignores invalid visual viewport dimensions", async ({ page }) => {
-  await page.goto("/biblioteca");
+  await page.goto("/cinemateca");
   await page.evaluate(() => Object.defineProperty(window, "visualViewport", { configurable: true, value: undefined }));
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   expect(await dialog.evaluate((element) => element.style.getPropertyValue("--dialog-available-height"))).toBe("");
@@ -128,7 +126,7 @@ test("dialog keeps its CSS fallback and ignores invalid visual viewport dimensio
     Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
     Object.defineProperty(window, "__testViewport", { configurable: true, value: viewport });
   });
-  await page.getByRole("button", { name: "Agregar a la biblioteca", exact: true }).click();
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   expect(await dialog.evaluate((element) => element.style.getPropertyValue("--dialog-available-height"))).toBe("");
   await page.evaluate(() => {
     const viewport = (window as typeof window & { __testViewport: EventTarget & { height: number } }).__testViewport;
@@ -142,22 +140,21 @@ test("dialog keeps its CSS fallback and ignores invalid visual viewport dimensio
 });
 
 test("collection chips restore URL filters and text search avoids server navigations", async ({ page }) => {
-  const created = await api.post("/api/library", { data: { title: "Lectura consultada", kind: "book" } });
+  const created = await api.post("/api/library", { data: { title: "Lectura consultada", kind: "movie" } });
   const id = (await created.json()).id;
   await api.put(`/api/library/${id}/personal`, { data: { status: "finished", rating: null, expectedVersion: 0 } });
-  await page.goto("/biblioteca?kind=book&status=finished");
-  await expect(page.getByRole("radio", { name: "Libro", exact: true })).toBeChecked();
-  await expect(page.getByRole("radio", { name: "Terminada", exact: true })).toBeChecked();
+  await page.goto("/cinemateca?kind=book&status=finished");
+  await expect(page.getByRole("radio", { name: "Vista", exact: true })).toBeChecked();
   await expect(page.getByText("Más filtros (1)")).toBeVisible();
   const serverNavigations: string[] = [];
   page.on("request", (request) => { if (request.url().includes("_rsc")) serverNavigations.push(request.url()); });
-  const search = page.getByLabel("Buscar en la biblioteca");
+  const search = page.getByLabel("Buscar en la cinemateca");
   await search.fill("consultada");
   await expect(page).toHaveURL(/q=consultada/);
   expect(serverNavigations).toHaveLength(0);
   await page.getByRole("button", { name: "Limpiar filtros adicionales" }).click();
-  await expect(page.getByRole("radio", { name: "Terminada", exact: true })).not.toBeChecked();
-  await expect(page).toHaveURL(/kind=book/);
+  await expect(page.getByRole("radio", { name: "Vista", exact: true })).not.toBeChecked();
+  await expect(page).not.toHaveURL(/kind=/);
   await expect(page).toHaveURL(/q=consultada/);
   await expect(page.getByRole("heading", { name: "Lectura consultada" })).toBeVisible();
 });
@@ -165,7 +162,7 @@ test("collection chips restore URL filters and text search avoids server navigat
 test("collection cards keep fixed columns and readable content at four widths", async ({ page }, testInfo) => {
   const response = await api.post("/api/library", { data: { title: "Una película", kind: "movie", creator: "Equipo familiar", year: 2024 } });
   expect(response.status()).toBe(201);
-  await page.goto("/biblioteca");
+  await page.goto("/cinemateca");
   for (const [width, columns] of [[320, 1], [390, 1], [768, 2], [1280, 3]]) {
     await page.setViewportSize({ width, height: 900 });
     const grid = page.locator("ul").filter({ has: page.getByRole("link", { name: /Una película/ }) }).first();
@@ -181,8 +178,8 @@ test("collection cards keep fixed columns and readable content at four widths", 
 });
 
 test("text input waits for IME composition to finish", async ({ page }) => {
-  await page.goto("/biblioteca");
-  const search = page.getByLabel("Buscar en la biblioteca");
+  await page.goto("/cinemateca");
+  const search = page.getByLabel("Buscar en la cinemateca");
   await search.dispatchEvent("compositionstart", { data: "" });
   await search.fill("kana");
   await expect(page).not.toHaveURL(/q=kana/);
@@ -191,10 +188,10 @@ test("text input waits for IME composition to finish", async ({ page }) => {
 });
 
 test("editing compares current values before accepting a newer version", async ({ page }) => {
-  const response = await api.post("/api/library", { data: { title: "Versión inicial", kind: "book", creator: "Autora", year: 2001 } });
+  const response = await api.post("/api/library", { data: { title: "Versión inicial", kind: "movie", creator: "Autora", year: 2001 } });
   const id = (await response.json()).id;
   await pool.query("UPDATE library_works SET version=3 WHERE id=$1", [id]);
-  await page.goto(`/biblioteca/${id}`);
+  await page.goto(`/cinemateca/${id}`);
   await page.getByRole("button", { name: "Editar datos" }).click();
   await page.getByLabel(/^Título/).fill("Mi borrador nuevo");
   await pool.query("UPDATE library_works SET title='Título actualizado',titulo_normalizado='titulo actualizado',version=5,updated_at=now() WHERE id=$1", [id]);
@@ -211,7 +208,7 @@ test("editing compares current values before accepting a newer version", async (
 test("editing keeps its draft and blocks saving when the work disappears", async ({ page }) => {
   const response = await api.post("/api/library", { data: { title: "Contenido compartido", kind: "movie" } });
   const id = (await response.json()).id;
-  await page.goto(`/biblioteca/${id}`);
+  await page.goto(`/cinemateca/${id}`);
   await page.getByRole("button", { name: "Editar datos" }).click();
   await page.getByLabel(/^Título/).fill("Borrador local");
   await pool.query("DELETE FROM library_works WHERE id=$1", [id]);
@@ -223,14 +220,14 @@ test("editing keeps its draft and blocks saving when the work disappears", async
 });
 
 test("mobile personal experience can be set and cleared", async ({ page }) => {
-  const response = await api.post("/api/library", { data: { title: "Mi lectura", kind: "book" } });
+  const response = await api.post("/api/library", { data: { title: "Mi lectura", kind: "movie" } });
   const id = (await response.json()).id;
-  await page.goto(`/biblioteca/${id}`);
+  await page.goto(`/cinemateca/${id}`);
   await page.getByRole("combobox", { name: "Mi estado", exact: true }).selectOption("in_progress");
   await page.getByRole("combobox", { name: "Mi valoración", exact: true }).selectOption("4");
   await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
   await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
-  await expect(page.getByText("En curso · 4/5 estrellas", { exact: false })).toBeVisible();
+  await expect(page.getByText("Viendo · 4/5 estrellas", { exact: false })).toBeVisible();
   await page.getByRole("combobox", { name: "Mi estado", exact: true }).selectOption("");
   await page.getByRole("combobox", { name: "Mi valoración", exact: true }).selectOption("");
   await page.getByRole("button", { name: "Guardar mi experiencia" }).click();
@@ -238,9 +235,9 @@ test("mobile personal experience can be set and cleared", async ({ page }) => {
 });
 
 test("mobile memories preserve partial dates, drafts, accessible spoilers and retirement", async ({ page }) => {
-  const response=await api.post("/api/library",{data:{title:"Nuestro juego",kind:"tabletop_game"}});
+  const response=await api.post("/api/library",{data:{title:"Nuestro juego",kind:"movie"}});
   const id=(await response.json()).id;
-  await page.goto(`/biblioteca/${id}`);
+  await page.goto(`/cinemateca/${id}`);
   await page.getByLabel("Tu aporte",{exact:true}).fill("Una tarde inolvidable 👨‍👩‍👧‍👦");
   await page.reload();
   await expect(page.getByLabel("Tu aporte",{exact:true})).toHaveValue("Una tarde inolvidable 👨‍👩‍👧‍👦");
@@ -266,16 +263,81 @@ test("mobile memories preserve partial dates, drafts, accessible spoilers and re
 });
 
 test("drafts are isolated by identity and cleared on sign out", async ({page}) => {
-  await page.goto("/biblioteca");
+  await page.goto("/cinemateca");
   await page.evaluate(() => sessionStorage.setItem("family-library-draft:v1:other-family:other-profile:new-work", JSON.stringify({title:"Privado"})));
   await page.reload();
   await expect(page.getByRole("heading",{name:"Nuestra colección empieza acá"})).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem("family-library-draft:v1:other-family:other-profile:new-work"))).toBeNull();
-  await page.getByRole("button",{name:"Agregar a la biblioteca",exact:true}).click();
+  await page.getByRole("button",{name:"Agregar película",exact:true}).click();
   await page.getByLabel(/^Título/).fill("Mi borrador privado");
   expect(await page.evaluate(() => Object.keys(sessionStorage).some((key)=>key.startsWith("family-library-draft:v1:")))).toBe(true);
   await page.goto("/familia");
   await page.getByRole("button",{name:"Salir",exact:true}).click();
   await expect(page).toHaveURL(/\/acceso/);
   expect(await page.evaluate(() => Object.keys(sessionStorage).some((key)=>key.startsWith("family-library-draft:v1:")))).toBe(false);
+});
+
+test("legacy drafts become movies and unknown fields never reach writes", async ({ page }) => {
+  await page.goto("/cinemateca");
+  await expect(page.getByRole("heading", { name: "Cinemateca familiar", exact: true })).toBeVisible();
+  await page.evaluate(({ familyId, memberId }) => sessionStorage.setItem(`family-library-draft:v1:${familyId}:${memberId}:new-work`, JSON.stringify({ title: "Old draft", kind: "book", creator: "Director", year: "2000", referenceUrl: "", expectedVersion: 0, unexpected: "discard me" })), { familyId, memberId });
+  await page.getByRole("button", { name: "Agregar película", exact: true }).click();
+  await expect(page.getByLabel(/^Título/)).toHaveValue("Old draft");
+  await expect(page.getByRole("dialog").getByRole("radio")).toHaveCount(0);
+  const write = page.waitForRequest((request) => request.url().endsWith("/api/library") && request.method() === "POST");
+  await page.getByRole("dialog").getByRole("button", { name: "Agregar película", exact: true }).click();
+  const body = (await write).postDataJSON();
+  expect(body.kind).toBe("movie"); expect(body.unexpected).toBeUndefined();
+  await expect(page.getByRole("heading", { name: "Old draft", exact: true })).toBeVisible();
+});
+
+test("common view explains empty results and displays family ratings", async ({ page }) => {
+  const response = await api.post("/api/library", { data: { title: "Para esta noche" } });
+  const id = (await response.json()).id;
+  await page.goto("/cinemateca");
+  await expect(page.getByRole("heading", { name: "Para esta noche" })).toBeVisible();
+  await page.getByText("Pendientes en común", { exact: true }).click();
+  await expect(page.getByText("Aparecen cuando todos los integrantes activos las marcan como Quiero ver")).toBeVisible();
+  await api.put(`/api/library/${id}/personal`, { data: { status: "pending", rating: 4, expectedVersion: 0 } });
+  await page.reload();
+  const card = page.getByRole("link", { name: /Para esta noche/ });
+  await expect(card).toContainText("Quiero ver");
+  await expect(card).toContainText("4.0 / 5 · 1 valoración");
+  await expect(page).toHaveURL(/view=common_pending/);
+});
+
+test("canonical cursor normalization replaces history and handles popstate", async ({ page }) => {
+  await page.goto("/cinemateca?cursor=old&kind=book&type=music&q=history");
+  await expect(page).toHaveURL(/\/cinemateca\?q=history$/);
+  await expect(page.getByText(/Cursor inválido/)).toHaveCount(0);
+  const length = await page.evaluate(() => history.length);
+  await page.evaluate(() => { history.pushState({}, "", "/cinemateca?cursor=older&q=back"); window.dispatchEvent(new PopStateEvent("popstate")); });
+  await expect(page).toHaveURL(/\/cinemateca\?q=back$/);
+  expect(await page.evaluate(() => history.length)).toBe(length + 1);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/cinemateca\?q=history$/);
+  await expect(page.getByLabel("Buscar en la cinemateca")).toHaveValue("history");
+});
+
+test("membership-only revisions show refresh notice without discarding loaded cards", async ({ page }) => {
+  await api.post("/api/library", { data: { title: "Loaded card" } });
+  await page.goto("/cinemateca");
+  await expect(page.getByRole("heading", { name: "Loaded card" })).toBeVisible();
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByText("Hay cambios. Actualizá para ver la colección al día.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Loaded card" })).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+  await expect(page.getByText("Hay cambios. Actualizá para ver la colección al día.", { exact: false })).toHaveCount(0);
+});
+
+test("loading another page notices membership changes and retains both pages", async ({ page }) => {
+  await pool.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,created_by_member_id,updated_by_member_id) SELECT $1,'Paginated '||n,'paginated '||n,'movie',$2,$2 FROM generate_series(1,55) n", [familyId, memberId]);
+  await page.goto("/cinemateca");
+  const cards = page.getByRole("link", { name: /Paginated/ });
+  await expect(cards).toHaveCount(50);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.getByRole("button", { name: "Cargar más películas", exact: true }).click();
+  await expect(cards).toHaveCount(55);
+  await expect(page.getByText("Hay cambios. Actualizá para ver la colección al día.", { exact: false })).toBeVisible();
 });

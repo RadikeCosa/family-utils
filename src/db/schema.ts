@@ -651,7 +651,7 @@ export const libraryWorks = pgTable("library_works", {
   check("library_works_creator_length", sql`${t.creator} IS NULL OR char_length(${t.creator}) BETWEEN 1 AND 200`),
   check("library_works_url", sql`${t.referenceUrl} IS NULL OR (char_length(${t.referenceUrl}) BETWEEN 1 AND 2048 AND ${t.referenceUrl} ~* '^https?://[^[:space:]]+$')`),
   check("library_works_year", sql`${t.year} IS NULL OR ${t.year} BETWEEN 1 AND 9999`),
-  check("library_works_kind", sql`${t.kind} IN ('movie', 'series', 'book', 'music', 'art', 'video_game', 'tabletop_game')`),
+  check("library_works_kind", sql`${t.kind} = 'movie'`),
   check("library_works_version", sql`${t.version} > 0`),
 ]);
 

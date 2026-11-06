@@ -39,19 +39,20 @@ export function useLibrary(workId: string | undefined, filters: string) {
           throw new Error("Este contenido ya no está disponible. Conservamos tu borrador.");
         }
         if (response.status === 403) { clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); }
-        throw new Error(body.error || "No se pudo cargar la biblioteca.");
+        throw new Error(body.error || "No se pudo cargar la cinemateca.");
       }
       clearLibraryDrafts(`${body.familyId}:${body.currentMemberId}`);
       if (current.current && (body.familyId !== current.current.familyId || body.currentMemberId !== current.current.currentMemberId)) {
         clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); router.refresh(); return;
       }
-      if (mode === "probe" && current.current) { if (body.revision !== current.current.revision) setHasChanges(true); return; }
+      if (mode === "probe" && current.current) { if (body.revision !== current.current.revision || body.accessRevision !== current.current.accessRevision) setHasChanges(true); return; }
       const incoming = body as LibraryData;
       if (mode === "more" && current.current) {
-        if (incoming.revision !== current.current.revision) setHasChanges(true);
+        if (incoming.revision !== current.current.revision || incoming.accessRevision !== current.current.accessRevision) setHasChanges(true);
         if ("works" in incoming && "works" in current.current) incoming.works = [...new Map([...current.current.works, ...incoming.works].map((value) => [value.id, value])).values()];
         if ("contributions" in incoming && "contributions" in current.current) incoming.contributions = [...new Map([...current.current.contributions, ...incoming.contributions].map((value) => [value.id, value])).values()];
         incoming.revision = current.current.revision;
+        incoming.accessRevision = current.current.accessRevision;
       } else { etag.current = response.headers.get("etag") ?? ""; setHasChanges(false); }
       current.current = incoming; setData(incoming); setError(""); setOperationIssue(null);
     } catch (cause) { if (!controller.signal.aborted && serial === generation.current) setError(cause instanceof Error ? cause.message : "No se pudo conectar."); }

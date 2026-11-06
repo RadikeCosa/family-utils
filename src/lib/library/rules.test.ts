@@ -50,3 +50,23 @@ test("server flag is enabled only by exact true", () => {
     process.env.LIBRARY_ENABLED = "true"; assert.equal(libraryEnabled(), true);
   } finally { if (old === undefined) delete process.env.LIBRARY_ENABLED; else process.env.LIBRARY_ENABLED = old; }
 });
+
+test("movie-only input accepts omission and rejects every other kind", () => {
+  assert.equal(workInput({ title: "One" })?.kind, "movie");
+  for (const kind of ["book", "series", "music", "art", "video_game", "tabletop_game", null, ""]) assert.equal(workInput({ title: "One", kind }), null);
+});
+
+import { familyRating } from "./presentation.ts";
+import { cinematecaUrl } from "./urls.ts";
+test("family averages exclude null and format one decimal with vote counts", () => {
+  assert.equal(familyRating([]), "Sin valoraciones");
+  assert.equal(familyRating([{ rating: null }]), "Sin valoraciones");
+  assert.equal(familyRating([{ rating: 5 }]), "5.0 / 5 · 1 valoración");
+  assert.equal(familyRating([{ rating: 5 }, { rating: 4 }, { rating: 4 }, { rating: null }]), "4.3 / 5 · 3 valoraciones");
+});
+test("legacy URLs preserve status codes and unknown parameters but drop obsolete scope", () => {
+  for (const status of ["pending", "in_progress", "finished", "none"]) {
+    assert.equal(cinematecaUrl({ status, kind: "book", type: "music", cursor: "old", q: "cine", extra: ["a", "b"] }), `/cinemateca?status=${status}&q=cine&extra=a&extra=b`);
+  }
+  assert.equal(cinematecaUrl({}, "123"), "/cinemateca/123");
+});

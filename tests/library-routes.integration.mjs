@@ -20,8 +20,8 @@ async function start(port, enabled) {
 test("library gates and real authenticated family endpoints", { skip: !connectionString && "requires isolated PostgreSQL", timeout: 120_000 }, async (t) => {
   const disabled = await start(3340, false);
   try {
-    for (const [path, method] of [["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"], ["/api/library/123", "PATCH"], ["/api/library/123/personal", "PUT"], ["/api/library/123/contributions", "POST"], ["/api/library/123/contributions/123", "PATCH"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
-    assert.ok(!(await fetch(disabled.origin).then((value) => value.text())).includes('href="/biblioteca"'));
+    for (const [path, method] of [["/cinemateca", "GET"], ["/cinemateca/123", "GET"], ["/biblioteca", "GET"], ["/biblioteca/123", "GET"], ["/api/library", "GET"], ["/api/library", "POST"], ["/api/library/123", "GET"], ["/api/library/123", "PATCH"], ["/api/library/123/personal", "PUT"], ["/api/library/123/contributions", "POST"], ["/api/library/123/contributions/123", "PATCH"]]) assert.equal((await fetch(disabled.origin + path, { method })).status, 404, path);
+    assert.ok(!(await fetch(disabled.origin).then((value) => value.text())).includes('href="/cinemateca"'));
   } finally { disabled.server.kill(); }
   const { server, origin } = await start(3341, true);
   const pool = new pg.Pool({ connectionString });
@@ -47,41 +47,110 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
     const detail = async () => (await ok(owner, `/${workId}`)).work;
     await t.test("anonymous profiles participate and family boundaries hold", async () => {
       assert.equal((await request(null)).status, 403);
-      assert.ok((await fetch(origin).then((value) => value.text())).includes('href="/biblioteca"'));
-      workId = (await ok(owner, "", "POST", { title: "Canción del verano", creator: "María", kind: "music" })).id;
+      assert.ok((await fetch(origin).then((value) => value.text())).includes('href="/cinemateca"'));
+      workId = (await ok(owner, "", "POST", { title: "Canción del verano", creator: "María", kind: "movie" })).id;
       assert.equal((await detail()).title, "Canción del verano");
       assert.equal((await ok(peer)).works.length, 1);
       assert.equal((await ok(outsider)).works.length, 0);
       assert.equal((await request(outsider, `/${workId}`)).status, 404);
       assert.equal((await request(owner, "", "POST", { title: "x", kind: "invalid" })).status, 400);
-      assert.equal((await request(owner, "", "POST", { title: "x", kind: "book", referenceUrl: "javascript:alert(1)" })).status, 400);
+      assert.equal((await request(owner, "", "POST", { title: "x", kind: "movie", referenceUrl: "javascript:alert(1)" })).status, 400);
       assert.equal((await ok(owner, "?q=cancion")).works.length, 1);
       assert.equal((await ok(owner, "?q=MARIA")).works.length, 1);
       const state = await request(owner);
       assert.equal((await request(owner, "", "GET", undefined, { "If-None-Match": state.etag })).status, 304);
     });
+    await t.test("legacy pages redirect permanently and canonical pages gate access", async () => {
+      for (const status of ["pending", "in_progress", "finished", "none"]) {
+        for (const suffix of ["", `/${workId}`]) {
+          const response = await fetch(`${origin}/biblioteca${suffix}?status=${status}&kind=book&type=music&cursor=old&extra=yes`, { headers: { Cookie: owner.cookie }, redirect: "manual" });
+          assert.equal(response.status, 308);
+          assert.equal(response.headers.get("location"), `/cinemateca${suffix}?status=${status}&extra=yes`);
+        }
+      }
+      assert.equal((await fetch(`${origin}/cinemateca`, { headers: { Cookie: owner.cookie } })).status, 200);
+      for (const kind of ["book", "series", "music", "art", "video_game", "tabletop_game", null]) {
+        const result = await request(owner, "", "POST", { title: "Rejected", kind });
+        assert.equal(result.status, 400); assert.equal(result.body.code, "INVALID");
+      }
+    });
+    await t.test("common pending, complete ratings and revisions have independent archive and membership semantics", async () => {
+      const id = (await ok(owner, "", "POST", { title: "Common fixture" })).id;
+      const common = async (archived = false) => (await ok(owner, `?view=common_pending${archived ? "&archived=true" : ""}`)).works.some((work) => work.id === id);
+      assert.equal(await common(), false);
+      for (const [person, rating] of [[owner, 5], [peer, 3]]) await ok(person, `/${id}/personal`, "PUT", { status: "pending", rating, expectedVersion: 0 });
+      assert.equal(await common(), false, "admin has no state");
+      await ok(admin, `/${id}/personal`, "PUT", { status: "pending", rating: null, expectedVersion: 0 });
+      assert.equal(await common(), true);
+      const first = await request(owner, "?view=common_pending");
+      assert.equal(first.body.works.find((work) => work.id === id).personal.length, 3);
+      for (const filters of ["?status=pending", "?q=Common", "?view=common_pending"]) assert.equal((await ok(owner, filters)).works.find((work) => work.id === id).personal.length, 3);
+      await ok(owner, `/${id}`, "PATCH", { action: "archive", expectedVersion: 1 });
+      assert.equal(await common(), false); assert.equal(await common(true), true);
+      await ok(owner, `/${id}`, "PATCH", { action: "restore", expectedVersion: 2 });
+      for (const status of ["pending", "none", "finished", "in_progress"]) {
+        const result = await request(owner, `?view=common_pending&status=${status}`);
+        assert.equal(result.status, 400); assert.equal(result.body.code, "INVALID");
+      }
+      assert.equal((await request(owner, "?view=unknown")).status, 400);
+      // Exercise actual member endpoints, which already increment families.revision.
+      const memberRequest = (path, method, body) => fetch(`${origin}/api/members${path}`, { method, headers: { Cookie: admin.cookie, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const created = await memberRequest("", "POST", { name: "New common viewer", role: "member" });
+      assert.equal(created.status, 201);
+      const newcomer = await created.json();
+      const changed = await request(owner, "?view=common_pending&revisionOnly=true", "GET", undefined, { "If-None-Match": first.etag });
+      assert.equal(changed.status, 200);
+      assert.equal(changed.body.accessRevision, first.body.accessRevision + 1);
+      assert.equal(await common(), false);
+      const archived = await memberRequest(`/${newcomer.id}`, "PATCH", { action: "archive", expectedVersion: newcomer.version });
+      assert.equal(archived.status, 200);
+      assert.equal(await common(), true);
+      assert.equal((await ok(owner, `/${id}`)).accessRevision, first.body.accessRevision + 2);
+      const restored = await memberRequest(`/${newcomer.id}`, "PATCH", { action: "restore", expectedVersion: newcomer.version + 1 });
+      assert.equal(restored.status, 200);
+      assert.equal(await common(), false);
+      await memberRequest(`/${newcomer.id}`, "PATCH", { action: "archive", expectedVersion: newcomer.version + 2 });
+      await pool.query("UPDATE members SET archived_at=now() WHERE id=$1", [peer.id]);
+      const rated = (await ok(owner, "?status=pending")).works.find((work) => work.id === id);
+      assert.equal(rated.personal.find((entry) => entry.memberId === peer.id).rating, 3, "archived member ratings are retained in filtered collection");
+      assert.equal((await ok(owner, `/${id}`)).work.personal.length, rated.personal.length);
+      await pool.query("UPDATE members SET archived_at=NULL WHERE id=$1", [peer.id]);
+    });
     await t.test("collection keyset pages remain usable when revision changes", async () => {
-      await pool.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,created_by_member_id,updated_by_member_id) SELECT $1,'Paged '||n,'paged '||n,'book',$2,$2 FROM generate_series(1,110) n", [familyId, owner.id]);
-      const first = await ok(owner, "?kind=book"); assert.equal(first.works.length, 50); assert.ok(first.nextCursor);
+      await pool.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,created_by_member_id,updated_by_member_id) SELECT $1,'Paged '||n,'paged '||n,'movie',$2,$2 FROM generate_series(1,110) n", [familyId, owner.id]);
+      const first = await ok(owner, "?kind=movie&q=Paged"); assert.equal(first.works.length, 50); assert.ok(first.nextCursor);
       await ok(peer, "", "POST", { title: "New activity", kind: "movie" });
-      const second = await ok(owner, `?kind=book&cursor=${encodeURIComponent(first.nextCursor)}`); assert.equal(second.works.length, 50);
+      const second = await ok(owner, `?kind=movie&q=Paged&cursor=${encodeURIComponent(first.nextCursor)}`); assert.equal(second.works.length, 50);
       assert.equal(new Set([...first.works, ...second.works].map((work) => work.id)).size, 100);
-      assert.equal((await request(owner, `?kind=music&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
-      assert.equal((await request(outsider, `?kind=book&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
-      const third = await ok(owner, `?kind=book&cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.works.length, 10); assert.equal(third.nextCursor, null);
+      assert.equal((await request(owner, `?kind=movie&q=Paged&view=common_pending&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
+      assert.equal((await request(outsider, `?kind=movie&q=Paged&cursor=${encodeURIComponent(first.nextCursor)}`)).status, 400);
+      const third = await ok(owner, `?kind=movie&q=Paged&cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.works.length, 10); assert.equal(third.nextCursor, null);
+    });
+    await t.test("common pagination preserves full personal entries and rejects cross-view cursors", async () => {
+      await pool.query("INSERT INTO library_personal(family_id,work_id,member_id,status,rating) SELECT w.family_id,w.id,m.id,'pending',4 FROM library_works w JOIN members m ON m.family_id=w.family_id WHERE w.family_id=$1 AND w.title LIKE 'Paged %' AND m.archived_at IS NULL", [familyId]);
+      const first = await ok(owner, "?view=common_pending&q=Paged");
+      assert.equal(first.works.length, 50); assert.ok(first.nextCursor);
+      assert.ok(first.works.every((work) => work.personal.length === 3));
+      const second = await ok(owner, `?view=common_pending&q=Paged&cursor=${encodeURIComponent(first.nextCursor)}`);
+      assert.equal(second.works.length, 50);
+      assert.ok(second.works.every((work) => work.personal.length === 3));
+      assert.equal(new Set([...first.works, ...second.works].map((work) => work.id)).size, 100);
+      const crossed = await request(owner, `?q=Paged&cursor=${encodeURIComponent(first.nextCursor)}`);
+      assert.equal(crossed.status, 400); assert.equal(crossed.body.code, "INVALID");
+      await pool.query("DELETE FROM library_personal WHERE work_id IN (SELECT id FROM library_works WHERE family_id=$1 AND title LIKE 'Paged %')", [familyId]);
     });
     await t.test("duplicate warnings, shared edits, conflicts and archive rules", async () => {
-      const duplicate = await request(peer, "", "POST", { title: " CANCION del verano ", kind: "music" });
+      const duplicate = await request(peer, "", "POST", { title: " CANCION del verano ", kind: "movie" });
       assert.equal(duplicate.status, 409); assert.equal(duplicate.body.code, "DUPLICATE"); assert.equal(duplicate.body.duplicates[0].id, workId);
-      const another = (await ok(peer, "", "POST", { title: "Canción del verano", kind: "music", confirmDuplicate: true })).id;
+      const another = (await ok(peer, "", "POST", { title: "Canción del verano", kind: "movie", confirmDuplicate: true })).id;
       const before = await detail();
-      const outcomes = await Promise.all([peer, admin].map((person, index) => request(person, `/${workId}`, "PATCH", { action: "edit", title: `New ${index}`, kind: "music", expectedVersion: before.version })));
+      const outcomes = await Promise.all([peer, admin].map((person, index) => request(person, `/${workId}`, "PATCH", { action: "edit", title: `New ${index}`, kind: "movie", expectedVersion: before.version })));
       assert.deepEqual(outcomes.map((value) => value.status).sort(), [200, 409]);
       const current = await detail();
-      const warning = await request(peer, `/${workId}`, "PATCH", { action: "edit", title: "Cancion del verano", kind: "music", expectedVersion: current.version });
+      const warning = await request(peer, `/${workId}`, "PATCH", { action: "edit", title: "Cancion del verano", kind: "movie", expectedVersion: current.version });
       assert.equal(warning.body.code, "DUPLICATE");
       await ok(peer, `/${workId}`, "PATCH", { action: "archive", expectedVersion: current.version });
-      assert.equal((await request(owner, `/${workId}`, "PATCH", { action: "edit", title: "Forbidden", kind: "book", expectedVersion: current.version + 1 })).status, 403);
+      assert.equal((await request(owner, `/${workId}`, "PATCH", { action: "edit", title: "Forbidden", kind: "movie", expectedVersion: current.version + 1 })).status, 403);
       assert.ok(!(await ok(owner)).works.some((value) => value.id === workId));
       assert.ok((await ok(owner, "?archived=true")).works.some((value) => value.id === workId));
       await ok(owner, `/${workId}`, "PATCH", { action: "restore", expectedVersion: current.version + 1 });
@@ -143,7 +212,7 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       const third=await ok(owner,`/${workId}?cursor=${encodeURIComponent(second.nextCursor)}`); assert.equal(third.contributions.length,5);
     });
     await t.test("archive lock wins before publication and personal write", async () => {
-      const id=(await ok(owner,"","POST",{title:"Concurrent archive",kind:"book"})).id;
+      const id=(await ok(owner,"","POST",{title:"Concurrent archive",kind:"movie"})).id;
       const blocker=await pool.connect();
       try {
         await blocker.query("BEGIN"); await blocker.query("SELECT id FROM library_works WHERE id=$1 FOR UPDATE",[id]);
@@ -155,7 +224,7 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
         assert.equal((await publish).status,403); assert.equal((await personal).status,403);
         assert.equal(Number((await pool.query("SELECT count(*) n FROM library_contributions WHERE work_id=$1",[id])).rows[0].n),0);
       } finally { await blocker.query("ROLLBACK");blocker.release(); }
-      const second=(await ok(owner,"","POST",{title:"Dependent lock",kind:"music"})).id;
+      const second=(await ok(owner,"","POST",{title:"Dependent lock",kind:"movie"})).id;
       const shared=await pool.connect();
       try { await shared.query("BEGIN"); await shared.query("SELECT id FROM library_works WHERE id=$1 FOR SHARE",[second]);
         let resolved=false; const archive=request(peer,`/${second}`,"PATCH",{action:"archive",expectedVersion:1}).then((result)=>{resolved=true;return result;});
@@ -166,7 +235,7 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
     await t.test("revoked device loses library access", async () => {
       await pool.query("UPDATE member_devices SET revoked_at=now() WHERE auth_user_id=$1", [peer.userId]);
       assert.equal((await request(peer)).status, 403);
-      assert.equal((await request(peer, "", "POST", { title: "Denied", kind: "book" })).status, 403);
+      assert.equal((await request(peer, "", "POST", { title: "Denied", kind: "movie" })).status, 403);
     });
     void admin;
   } finally {
