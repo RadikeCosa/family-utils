@@ -111,3 +111,27 @@ test("form validation identifies fields without changing API rules and only reva
   for (const code of ["SQL detail: secret", "constructor", "__proto__", null]) assert.equal(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
   for (const code of ["CONFLICT", "DUPLICATE", "NO_ACCESS", "NOT_AUTHOR", "ARCHIVED", "NOT_FOUND", "INVALID"]) assert.notEqual(libraryIssueMessage(code), libraryIssueMessage("UNAVAILABLE"));
 });
+
+import { GENRES, normalizeGenres, genreInput } from "./genres.ts";
+import { restoreLibraryDraft } from "./drafts.ts";
+test("genres use the shared catalog, canonical order and strict API input", () => {
+  assert.equal(GENRES.length, 18);
+  assert.equal(new Set(GENRES.map(g => g.id)).size, 18);
+  assert.ok(!GENRES.some(g => String(g.id) === "none"));
+  assert.deepEqual(genreInput(["terror", "drama", "terror"]), ["drama", "terror"]);
+  for (const invalid of [null, "drama", ["unknown"], [null], [["drama"]]]) assert.equal(genreInput(invalid), null);
+  assert.deepEqual(workInput({ title: "One", genres: ["terror", "drama", "terror"] })?.genres, ["drama", "terror"]);
+  assert.equal(workInput({ title: "One", genres: null }), null);
+  assert.equal(workInput({ title: "One" })?.genres, undefined);
+  assert.deepEqual(normalizeGenres(["unknown", "terror", 1, "drama"]), ["drama", "terror"]);
+});
+test("genre draft recovery distinguishes absence, empty and malformed values without losing known fields", () => {
+  const initial = { title: "Saved", kind: "movie", expectedVersion: 2, genres: ["drama"] };
+  const saved = { title: "Draft", kind: "book", expectedVersion: 1, unknown: "ignored" };
+  const recover = (genres: unknown) => restoreLibraryDraft(initial, { ...saved, genres });
+  assert.deepEqual(restoreLibraryDraft(initial, saved), { ...initial, title: "Draft", expectedVersion: 1 });
+  assert.deepEqual(recover([]).genres, []);
+  assert.deepEqual(recover(["terror", "invalid", 5, "drama", "terror"]).genres, ["drama", "terror"]);
+  assert.deepEqual(recover(["invalid"]).genres, []);
+  for (const invalid of [null, "drama", {}]) assert.deepEqual(recover(invalid).genres, ["drama"]);
+});
