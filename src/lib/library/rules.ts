@@ -7,14 +7,14 @@ export function workInput(body: Record<string, unknown>): WorkInput | null {
   const creator = typeof body.creator === "string" ? body.creator.trim() || null : body.creator == null ? null : undefined;
   const referenceUrl = typeof body.referenceUrl === "string" ? body.referenceUrl.trim() || null : body.referenceUrl == null ? null : undefined;
   const year = body.year === "" || body.year == null ? null : body.year;
-  if (!title || codePointLength(title) > 200 || !WORK_KINDS.includes(body.kind as never) || creator === undefined || referenceUrl === undefined) return null;
+  if (!title || codePointLength(title) > 200 || (body.kind !== undefined && !WORK_KINDS.includes(body.kind as never)) || creator === undefined || referenceUrl === undefined) return null;
   if (creator && codePointLength(creator) > 200) return null;
   if (year !== null && (!Number.isInteger(year) || Number(year) < 1 || Number(year) > 9999)) return null;
   if (referenceUrl) {
     if (codePointLength(referenceUrl) > 2048 || /\s/u.test(referenceUrl)) return null;
     try { const url = new URL(referenceUrl); if (!["http:", "https:"].includes(url.protocol)) return null; } catch { return null; }
   }
-  return { title, kind: body.kind as WorkInput["kind"], creator, year: year as number | null, referenceUrl };
+  return { title, kind: "movie", creator, year: year as number | null, referenceUrl };
 }
 export function personalInput(body: Record<string, unknown>) {
   if (body.status !== null && !PERSONAL_STATUSES.includes(body.status as never)) return null;

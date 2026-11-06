@@ -7,7 +7,7 @@ export function useDraft<T extends Record<string, unknown>>(scope: string, initi
   const [draft, update] = useState<T>(() => {
     try {
       const value = JSON.parse(sessionStorage.getItem(key) ?? "null");
-      if (value && Object.keys(initial).every((field) => typeof value[field] === typeof initial[field] && Array.isArray(value[field]) === Array.isArray(initial[field]))) return value;
+      if (value && Object.keys(initial).every((field) => typeof value[field] === typeof initial[field] && Array.isArray(value[field]) === Array.isArray(initial[field]))) return Object.fromEntries(Object.keys(initial).map((field) => [field, field === "kind" ? "movie" : value[field]])) as T;
     } catch { /* Keep an in-memory draft. */ }
     return initial;
   });

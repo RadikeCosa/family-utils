@@ -1,3 +1,4 @@
+import { commonPendingSql } from "./queries";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
@@ -46,9 +47,11 @@ export async function readLibrary(request: Request, workId?: string) {
     const url = new URL(request.url);
     const q = normalizeLibraryText(url.searchParams.get("q") ?? "");
     const kind = url.searchParams.get("kind") ?? "", status = url.searchParams.get("status") ?? "";
+    const view = url.searchParams.get("view") ?? "";
     const archived = url.searchParams.get("archived") === "true";
+    if ((view && view !== "common_pending") || (view && status)) fail(400, "INVALID", "Filtros incompatibles o vista inválida.");
     if (Array.from(q).length > 200 || (kind && !WORK_KINDS.includes(kind as never)) || (status && !PERSONAL_STATUSES.includes(status as never) && status !== "none")) fail(400, "INVALID", "Filtros inválidos.");
-    const scope = cursorScope([actor.familyId, workId ?? "collection", q, kind, status, archived, status ? actor.memberId : null]);
+    const scope = cursorScope([actor.familyId, workId ?? "collection", q, kind, status, archived, view, status ? actor.memberId : null]);
     let cursor;
     try { cursor = decodeCursor(url.searchParams.get("cursor"), scope); } catch (error) { fail(400, "INVALID", (error as Error).message); }
     tx = await getPool().connect();
@@ -59,7 +62,7 @@ export async function readLibrary(request: Request, workId?: string) {
     const headers = { ETag: etag, "Cache-Control": "private, no-cache", Vary: "Cookie" };
     if (request.headers.get("if-none-match") === etag) { await tx.query("COMMIT"); return new NextResponse(null, { status: 304, headers }); }
     const members = await profiles(tx, actor.familyId);
-    const base = { currentMemberId: actor.memberId, familyId: actor.familyId, revision: rev.revision, members };
+    const base = { currentMemberId: actor.memberId, familyId: actor.familyId, revision: rev.revision, accessRevision: rev.accessRevision, members };
     if (url.searchParams.get("revisionOnly") === "true") {
       await tx.query("COMMIT"); return NextResponse.json({ ...base }, { headers });
     }
@@ -85,6 +88,7 @@ export async function readLibrary(request: Request, workId?: string) {
     const arg = (value: unknown) => { values.push(value); return `$${values.length}`; };
     if (q) { const query = arg(q); where.push(`(strpos(w.titulo_normalizado,${query})>0 OR strpos(w.creador_normalizado,${query})>0)`); }
     if (kind) where.push(`w.kind=${arg(kind)}`);
+    if (view === "common_pending") where.push(commonPendingSql);
     if (status) {
       const person = arg(actor.memberId);
       where.push(status === "none" ? `NOT EXISTS(SELECT 1 FROM library_personal p WHERE p.work_id=w.id AND p.member_id=${person} AND p.status IS NOT NULL)` : `EXISTS(SELECT 1 FROM library_personal p WHERE p.work_id=w.id AND p.member_id=${person} AND p.status=${arg(status)})`);
@@ -182,7 +186,7 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
       if (current.archived_at) fail(403, "ARCHIVED", "Restaurá este contenido antes de editarlo.");
     }
     const input = workInput(body);
-    if (!input) fail(400, "INVALID", "Revisá título, tipo y datos opcionales.");
+    if (!input) fail(400, "INVALID", "Solo se admiten películas. Revisá el título y los datos opcionales.");
     const changedIdentity = !current || current.title !== input.title || current.kind !== input.kind;
     if (changedIdentity && body.confirmDuplicate !== true) {
       const { rows: duplicates } = await tx.query('SELECT id,title,archived_at AS "archivedAt" FROM library_works WHERE family_id=$1 AND kind=$2 AND titulo_normalizado=$3 AND ($4::uuid IS NULL OR id<>$4) ORDER BY created_at DESC,id DESC LIMIT 20', [actor.familyId, input.kind, normalizeLibraryText(input.title), current?.id ?? null]);

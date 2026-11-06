@@ -1,7 +1,7 @@
 # Family Utils
 
 Plataforma privada de aplicaciones útiles para una familia. Incluye **Tareas y
-rutinas**, **Planificador de menús**, **Listas de compras**, **Biblioteca familiar**
+rutinas**, **Planificador de menús**, **Listas de compras**, **Cinemateca familiar**
 y **Conversor de cocina**. El producto está
 pensado como una PWA para Android y iPhone.
 
@@ -18,7 +18,7 @@ cambios que alteren su esquema.
 
 Conversor de cocina está implementado en `/cocina` con acceso sin sesión desde
 la portada pública. Convierte medidas, ingredientes y temperaturas sin guardar
-consultas ni requerir migraciones. Biblioteca familiar conserva su activación
+consultas ni requerir migraciones. Cinemateca familiar conserva su activación
 mediante `LIBRARY_ENABLED`.
 
 El [estado operativo y orden del repositorio](sources/shopping-lists.md#estado-operativo-y-orden-del-repositorio--2026-10-12)
@@ -85,6 +85,7 @@ Utilidad personal en `/entrenamiento`, controlada por `TRAINING_ENABLED=true`.
 Requiere la migración `0053_training` y el cierre operativo de respaldo y ensayo.
 Contratos, límites, pruebas y activación en [Entrenamiento](sources/training.md).
 
-## Biblioteca familiar
+## Cinemateca familiar
 
-Implementación por etapas y estado operativo en [Biblioteca familiar](sources/family-library.md).
+Funcionamiento actual y operación en [Cinemateca familiar](sources/cinemateca-familiar.md).
+Historial de implementación en [Biblioteca familiar](sources/family-library.md).
