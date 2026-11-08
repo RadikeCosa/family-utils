@@ -2,6 +2,7 @@ import Link from "next/link";
 import { genreLabels } from "@/lib/library/genres";
 import { familyRating } from "@/lib/library/presentation";
 import { STATUS_LABELS, type LibraryWork } from "@/lib/library/types";
+import Runtime from "./Runtime";
 import styles from "./library.module.css";
 
 const starPath = "m12 2 3.1 6.3 7 .9-5.1 4.9 1.2 7L12 17.8l-6.2 3.3 1.2-7L1.9 9.2l7-.9Z";
@@ -27,9 +28,9 @@ export default function MovieCard({ work, memberId }: { work: LibraryWork; membe
     <div className={styles.workContent}>
       <div className={styles.movieHeading}>
         <h2>{work.title}</h2>
-        <p>{[work.creator, work.year].filter(Boolean).join(" · ") || "Por descubrir"}</p>
+        <p>{[work.creator, work.year].filter(Boolean).join(" · ") || "Por descubrir"}{work.runtimeMinutes != null && <> · <Runtime minutes={work.runtimeMinutes} /></>}</p>
       </div>
-      {work.genres.length > 0 && <p className={styles.movieGenres}>{genreLabels(work.genres).join(" · ")}</p>}
+      {work.genres.length > 0 && <div className={styles.genreBadges} aria-label="Géneros">{genreLabels(work.genres).map(label => <span className={styles.genreBadge} key={label}>{label}</span>)}</div>}
       <div className={styles.movieBadges}>
         <span className={styles.statusBadge} data-status={mine?.status ?? "none"}>{mine?.status ? STATUS_LABELS[mine.status] : "Sin estado"}</span>
         {work.archivedAt && <span className={styles.archiveBadge}>Archivada</span>}

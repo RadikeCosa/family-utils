@@ -194,3 +194,50 @@
 .page .personalState .chip input { inset:0; width:100%; min-height:44px; height:100%; margin:0; padding:0; clip:auto; clip-path:none; opacity:0; z-index:1; cursor:pointer; }
 .personalState .chip input:checked + span { border-style:double; border-width:3px; padding:6px; }
 @media(forced-colors:active) { .personalState .chip input:checked + span { border-color:Highlight; } }
+
+/* Manual movie entry: primary metadata first, optional editorial content second. */
+.workForm { padding:20px; gap:20px; }
+.workForm .dialogHeader { margin:-20px -20px 0; padding:20px 20px 12px; }
+.workForm .dialogHeader h2 { font-size:1.75rem; outline:none; }
+.workForm .dialogHeader p { font-size:.875rem; }
+.workForm > fieldset { gap:18px; }
+.workForm > fieldset > legend { margin-bottom:16px; font-size:1rem; font-weight:700; }
+.workForm .dialogActions,.workForm .discardConfirm { margin:0 -20px -20px; padding:12px 20px max(12px,env(safe-area-inset-bottom)); }
+.workForm .dialogActions { justify-content:flex-end; }
+.workForm .dialogActions .primary { margin-right:0; }
+.workForm .movieMetadata { grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr)); }
+.workForm h3 { margin:0 0 8px; font-size:1rem; }
+.workForm label { font-size:.875rem; }
+.workForm small:not(.srStatus) { display:block; margin-top:5px; }
+.workForm .genreField,.workForm .moreMovieData { border-top:0; padding:0; }
+.workForm .genreField > summary,.workForm .moreMovieData > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--library-line); border-radius:8px; background:white; font-size:.9375rem; }
+.disclosureArrow { flex-shrink:0; }
+details[open] > summary .disclosureArrow { transform:rotate(180deg); }
+.genrePicker { min-width:0; }
+.genreBadges { display:flex; flex-wrap:wrap; gap:6px; }
+.genreBadge { display:inline-block; max-width:100%; padding:4px 9px; border:1px solid var(--library-line); border-radius:6px; background:#f3f4ef; color:var(--library-muted); font-size:.75rem; line-height:1.4; overflow-wrap:anywhere; }
+.genrePicker .genreBadges { margin-bottom:10px; }
+.optionalMovieData { display:grid; gap:24px; padding:18px 0 4px; }
+.fieldHelp { margin:0 0 8px; color:var(--library-muted); font-size:.875rem; line-height:1.5; }
+.castField { min-width:0; }
+.page .castField textarea { min-height:5rem; }
+.castList { margin:12px 0; padding-left:1.5rem; }
+.castList li { padding:4px 0; overflow-wrap:anywhere; }
+.castList li > span { margin-right:8px; }
+.page .castList button { padding:6px 10px; font-size:.8125rem; }
+.page .addCast { margin-top:10px; }
+.workForm > .discardButton { align-self:flex-start; padding:8px 0; border-color:transparent; background:transparent; font-size:.875rem; text-decoration:underline; text-underline-offset:3px; }
+.fieldComparisons { display:grid; gap:16px; }
+.fieldComparisons > section { padding:12px; border:1px solid var(--library-line); border-radius:8px; background:white; min-width:0; }
+.fieldComparisons h4 { margin:0 0 12px; font-size:1rem; }
+.fieldComparisons > section > div + div { margin-top:12px; padding-top:12px; border-top:1px solid var(--library-line); }
+.fieldComparisons strong { font-size:.8125rem; color:var(--library-muted); }
+.fieldComparisons p { margin:6px 0 0; }
+.fieldComparisons ol,.detailCast { padding-left:1.5rem; overflow-wrap:anywhere; line-height:1.6; }
+@media(max-width:600px) {
+  .workForm { padding:env(safe-area-inset-top) 16px 0; }
+  .workForm .dialogHeader { margin:calc(-1 * env(safe-area-inset-top)) -16px 0; padding:calc(16px + env(safe-area-inset-top)) 16px 10px; }
+  .workForm .dialogActions,.workForm .discardConfirm { margin:0 -16px; padding:12px 16px max(12px,env(safe-area-inset-bottom)); }
+  .workForm .dialogActions .primary { flex:1 1 auto; }
+}
+@media(forced-colors:active) { .genreBadge { border-color:CanvasText; } }

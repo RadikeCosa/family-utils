@@ -12,6 +12,7 @@ import Contributions, { NewContribution } from "./Contributions";
 import PersonalForm from "./PersonalForm";
 import WorkIcon from "./WorkIcon";
 import MovieCard from "./MovieCard";
+import Runtime from "./Runtime";
 import WorkDialog from "./WorkDialog";
 import styles from "./library.module.css";
 const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "Quiero ver" }, { value: "in_progress", label: "Viendo" }, { value: "finished", label: "Vistas" }, { value: "none", label: "Sin estado" }, { value: "common_pending", label: "Pendientes en común" }];
@@ -86,7 +87,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
   return <main className={styles.page}>
     <header className={styles.header}><Link className={styles.brand} href="/">family utils</Link><nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/cinemateca" aria-current="page">Cinemateca</Link><Link href="/familia">Mi familia</Link></nav></header>
     {workId && <Link className={styles.back} href="/cinemateca">← Volver a la cinemateca</Link>}
-    <div className={styles.heading}><div><h1 ref={detailHeading} tabIndex={work ? -1 : undefined}>{work?.title ?? "Cinemateca familiar"}</h1></div>{!workId && data && <button className={styles.primary} disabled={adding && busy} onClick={() => { if (!adding) skipDialogFocusReturn.current = false; setAdding(!adding); }}>{adding ? "Cerrar formulario" : "Agregar película"}</button>}</div>
+    <div className={styles.heading}><div><h1 ref={detailHeading} tabIndex={-1}>{work?.title ?? "Cinemateca familiar"}</h1></div>{!workId && data && <button className={styles.primary} disabled={adding && busy} onClick={() => { if (!adding) skipDialogFocusReturn.current = false; setAdding(!adding); }}>{adding ? "Cerrar formulario" : "Agregar película"}</button>}</div>
     {error && <p className={styles.error} role="alert">{error} <button onClick={() => void library.refresh()}>Reintentar</button></p>}
     {library.hasChanges && <p className={styles.notice} role="status">Hay cambios. Actualizá para ver la colección al día. <button onClick={() => void library.refresh()}>Actualizar</button></p>}
     {loading && !data && <p role="status">Cargando cinemateca…</p>}
@@ -125,7 +126,9 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
       </div>
       {work.archivedAt && <p className={styles.notice}>Este contenido está archivado. Podés restaurarlo o retirar tus aportes.</p>}
       {editing && <WorkDialog busy={busy} shouldRestoreFocus={shouldRestoreDialogFocus} onRequestClose={() => { setEditing(false); library.clearDuplicates(); }}><WorkForm key={`${data.familyId}:${data.currentMemberId}:${work.id}`} scope={`${data.familyId}:${data.currentMemberId}:${work.id}:edit-work`} work={work} busy={busy} duplicates={library.duplicates} issue={library.operationIssue} onIdentityChange={library.clearDuplicates} onCancel={() => { setEditing(false); library.clearDuplicates(); }} onSave={async (input) => { if (!await library.mutate(`/${work.id}`, "PATCH", { ...input, action: "edit" })) return false; skipDialogFocusReturn.current = true; focusAfterEdit.current = true; setEditing(false); return true; }} /></WorkDialog>}
-      <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.genres.length > 0 && <p>{genreLabels(work.genres).join(" · ")}</p>}</section>
+      <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.runtimeMinutes != null && <p>Duración: <Runtime minutes={work.runtimeMinutes} /></p>}{work.genres.length > 0 && <p>{genreLabels(work.genres).join(" · ")}</p>}</section>
+      {work.synopsis && <section className={styles.card}><h2>Sinopsis</h2><p className={styles.body}>{work.synopsis}</p></section>}
+      {work.cast.length > 0 && <section className={styles.card}><h2>Reparto</h2><ol className={styles.detailCast}>{work.cast.map(name => <li key={name}>{name}</li>)}</ol></section>}
       <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} issue={library.operationIssue} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
       <section className={styles.card}><h2>Las miradas de la familia</h2><p>{familyRating(work.personal)}</p>{work.personal.length ? <ul>{work.personal.map((entry) => <li key={entry.memberId}><strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>: {entry.status ? STATUS_LABELS[entry.status] : "Sin estado"} · {entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</li>)}</ul> : <p>Todavía no hay estados ni valoraciones.</p>}</section>
       {"contributions" in data && <Contributions data={data} issue={library.operationIssue} busy={busy} loading={loading} save={library.mutate} more={library.more} />}

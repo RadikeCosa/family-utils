@@ -8,9 +8,11 @@ export default function WorkDialog({ busy, shouldRestoreFocus = () => true, onRe
     const element = dialog.current;
     if (!element) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const openerText = opener?.textContent?.trim();
     const bodyOverflow = document.body.style.overflow;
     const scrollY = window.scrollY;
     document.body.style.overflow = "hidden";
+    element.querySelector("h2")?.setAttribute("autofocus", "");
     element.showModal();
     const viewport = window.visualViewport;
     let restored = false;
@@ -49,7 +51,11 @@ export default function WorkDialog({ busy, shouldRestoreFocus = () => true, onRe
       element.style.removeProperty("transform");
       document.body.style.overflow = bodyOverflow;
       window.scrollTo(0, scrollY);
-      if (shouldRestoreFocus() && opener?.isConnected) opener.focus();
+      if (shouldRestoreFocus()) requestAnimationFrame(() => {
+        const replacement = [...document.querySelectorAll<HTMLButtonElement>("main button")].find(button => !button.closest("dialog") && button.textContent?.trim() === openerText);
+        const target = opener?.isConnected ? opener : replacement ?? document.querySelector<HTMLElement>("main h1");
+        target?.focus();
+      });
     };
     element.addEventListener("close", restore, { once: true });
     return () => {
