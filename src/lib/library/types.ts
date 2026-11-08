@@ -1,3 +1,4 @@
+import type { Availability, AvailabilitySummary } from "./availability";
 import type { Genre } from "./genres.ts";
 export const WORK_KINDS = ["movie"] as const;
 export type WorkKind = typeof WORK_KINDS[number];
@@ -9,7 +10,7 @@ export type ExperienceDate = { year: number | null; month: number | null; day: n
 export type WorkInput = { title: string; kind: WorkKind; creator: string | null; year: number | null; referenceUrl: string | null; genres?: Genre[]; runtimeMinutes?: number | null; cast?: string[]; synopsis?: string | null };
 export type LibraryProfile = { id: string; name: string; archivedAt: string | null };
 export type PersonalEntry = { memberId: string; status: PersonalStatus | null; rating: number | null; version: number };
-export type LibraryWork = WorkInput & { genres: Genre[]; runtimeMinutes: number | null; cast: string[]; synopsis: string | null; id: string; version: number; archivedAt: string | null; createdAt: string; updatedAt: string; activityAt: string; personal: PersonalEntry[] };
+export type LibraryWork = WorkInput & { genres: Genre[]; runtimeMinutes: number | null; cast: string[]; synopsis: string | null; availability?: Availability; id: string; version: number; archivedAt: string | null; createdAt: string; updatedAt: string; activityAt: string; personal: PersonalEntry[] };
 export type Contribution = { id: string; authorMemberId: string; body: string; spoiler: boolean; experience: ExperienceDate; companionIds: string[]; version: number; createdAt: string; updatedAt: string };
-export type LibraryCollection = { currentMemberId: string; familyId: string; revision: number; accessRevision: number; members: LibraryProfile[]; commonPendingCounts: { memberId: string; count: number }[]; works: LibraryWork[]; nextCursor: string | null };
+export type LibraryCollection = { availabilityEnabled?: boolean; availabilityDay?: string; canManagePlatforms?: boolean; availabilitySummary?: AvailabilitySummary; currentMemberId: string; familyId: string; revision: number; accessRevision: number; members: LibraryProfile[]; commonPendingCounts: { memberId: string; count: number }[]; works: LibraryWork[]; nextCursor: string | null };
 export type LibraryDetail = Omit<LibraryCollection, "works" | "commonPendingCounts"> & { work: LibraryWork; contributions: Contribution[] };

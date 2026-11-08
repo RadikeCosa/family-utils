@@ -1,10 +1,12 @@
+import { availabilitySummary, offerFilterSql, readAvailabilities } from "./availability-store";
+import { familyDay } from "./rules";
 import { isGenre, normalizeGenres } from "./genres";
 import { commonPendingSql, commonPendingCountsSql } from "./queries";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
-import { libraryEnabled } from "./config";
+import { availabilityEnabled, libraryEnabled } from "./config";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor";
 import { contributionInput, normalizeLibraryText, personalInput, UUID_PATTERN, workInput } from "./rules";
 import { PERSONAL_STATUSES, WORK_KINDS, type LibraryWork, type WorkKind, type PersonalEntry } from "./types";
@@ -35,7 +37,8 @@ const activitySql = "greatest(w.created_at, coalesce((SELECT max(c.created_at) F
 const activityColumn = `to_char(${activitySql} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS activity_at`;
 async function mapWorks(tx: PoolClient, rows: WorkRow[]): Promise<LibraryWork[]> {
   const personalRows = rows.length ? (await tx.query('SELECT work_id,member_id AS "memberId",status,rating,version FROM library_personal WHERE work_id=ANY($1::uuid[])', [rows.map((row) => row.id)])).rows : [];
-  return rows.map((row) => ({ id: row.id, title: row.title, kind: row.kind, genres: normalizeGenres(row.genres), creator: row.creator, year: row.year, referenceUrl: row.reference_url, runtimeMinutes: row.runtime_minutes, cast: row.cast, synopsis: row.synopsis, version: row.version, archivedAt: row.archived_at?.toISOString() ?? null, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), activityAt: row.activity_at,
+  const availability = availabilityEnabled() ? await readAvailabilities(tx, rows[0]?.family_id ?? "", rows.map(row => row.id)) : null;
+  return rows.map((row) => ({ ...(availability ? { availability: availability.get(row.id) } : {}), id: row.id, title: row.title, kind: row.kind, genres: normalizeGenres(row.genres), creator: row.creator, year: row.year, referenceUrl: row.reference_url, runtimeMinutes: row.runtime_minutes, cast: row.cast, synopsis: row.synopsis, version: row.version, archivedAt: row.archived_at?.toISOString() ?? null, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), activityAt: row.activity_at,
     personal: personalRows.filter((entry) => entry.work_id === row.id).map(({ memberId, status, rating, version }) => ({ memberId, status, rating, version }) as PersonalEntry) }));
 }
 export async function readLibrary(request: Request, workId?: string) {
@@ -58,7 +61,11 @@ export async function readLibrary(request: Request, workId?: string) {
       || (view === "pair_pending" ? !UUID_PATTERN.test(withMember) || withMember === actor.memberId : url.searchParams.has("withMember"))
       || url.searchParams.getAll("withMember").length > 1) fail(400, "INVALID", "Filtros incompatibles o vista inválida.");
     if (Array.from(q).length > 200 || (kind && !WORK_KINDS.includes(kind as never)) || (status && !PERSONAL_STATUSES.includes(status as never) && status !== "none")) fail(400, "INVALID", "Filtros inválidos.");
-    const scope = cursorScope([actor.familyId, workId ?? "collection", q, kind, status, archived, view, status ? actor.memberId : null, ...(genre ? ["genre", genre] : []), ...(view === "pair_pending" ? ["pair", actor.memberId, withMember] : [])]);
+    const enabled = availabilityEnabled();
+    const selectedPlatforms = enabled ? [...new Set(url.searchParams.getAll("platform").map(id => id.toLowerCase()))].sort() : [];
+    const free = enabled && url.searchParams.get("free") === "true";
+    if (selectedPlatforms.length > 100 || selectedPlatforms.some(id => !UUID_PATTERN.test(id)) || (enabled && (url.searchParams.getAll("free").length > 1 || (url.searchParams.has("free") && !["true","false"].includes(url.searchParams.get("free")!))))) fail(400,"INVALID","Filtros de disponibilidad inválidos.");
+    const scope = cursorScope([actor.familyId, ...(enabled ? ["availability",selectedPlatforms,free] : []), workId ?? "collection", q, kind, status, archived, view, status ? actor.memberId : null, ...(genre ? ["genre", genre] : []), ...(view === "pair_pending" ? ["pair", actor.memberId, withMember] : [])]);
     let cursor;
     try { cursor = decodeCursor(url.searchParams.get("cursor"), scope); } catch (error) { fail(400, "INVALID", (error as Error).message); }
     tx = await getPool().connect();
@@ -66,10 +73,12 @@ export async function readLibrary(request: Request, workId?: string) {
     await activeActor(tx, actor);
     const rev = await revision(tx, actor);
     // Version the response shape independently of the pagination scope.
-    const etag = `"library-v4-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
+    const today = enabled ? familyDay() : undefined;
+    const etag = `"library-v5-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, enabled, today, url.searchParams.get("cursor")])}"`;
     const headers = { ETag: etag, "Cache-Control": "private, no-cache", Vary: "Cookie" };
     const members = await profiles(tx, actor.familyId);
-    const base = { currentMemberId: actor.memberId, familyId: actor.familyId, revision: rev.revision, accessRevision: rev.accessRevision, members };
+    if (enabled && selectedPlatforms.length && (await tx.query("SELECT id FROM streaming_platforms WHERE family_id=$1 AND id=ANY($2::uuid[])",[actor.familyId,selectedPlatforms])).rows.length !== selectedPlatforms.length) fail(400,"INVALID","Las plataformas deben pertenecer a tu familia.");
+    const base = { availabilityEnabled: enabled, availabilityDay: today, canManagePlatforms: actor.role === "administrator", currentMemberId: actor.memberId, familyId: actor.familyId, revision: rev.revision, accessRevision: rev.accessRevision, members };
     if (view === "pair_pending") {
       const member = members.find(member => member.id === withMember);
       if (!member) fail(400, "INVALID", "La persona debe pertenecer a tu familia.");
@@ -108,10 +117,12 @@ export async function readLibrary(request: Request, workId?: string) {
     const countArg = (value: unknown) => { countValues.push(value); return `$${countValues.length}`; };
     if (q) { const query = countArg(q); countWhere.push(`(strpos(w.titulo_normalizado,${query})>0 OR strpos(w.creador_normalizado,${query})>0)`); }
     if (genre) countWhere.push(genre === "none" ? "w.genres = '{}'::text[]" : `w.genres @> ARRAY[${countArg(genre)}]::text[]`);
+    if (enabled && (selectedPlatforms.length || free)) countWhere.push(offerFilterSql(selectedPlatforms.length ? countArg(selectedPlatforms) : null, free));
     const counts = (await tx.query<{ memberId: string; count: number }>(commonPendingCountsSql(countWhere.join(" AND ")), countValues)).rows;
     const countByMember = new Map(counts.map(entry => [entry.memberId, entry.count]));
     const commonPendingCounts = members.filter(member => member.id !== actor.memberId && !member.archivedAt)
       .map(member => ({ memberId: member.id as string, count: countByMember.get(member.id) ?? 0 }));
+    if (enabled && (selectedPlatforms.length || free)) where.push(offerFilterSql(selectedPlatforms.length ? arg(selectedPlatforms) : null, free));
     if (view === "common_pending") where.push(commonPendingSql);
     if (view === "pair_pending") {
       for (const memberId of [actor.memberId, withMember]) where.push(`EXISTS(SELECT 1 FROM library_personal p WHERE p.work_id=w.id AND p.family_id=w.family_id AND p.member_id=${arg(memberId)} AND p.status='pending')`);
@@ -124,9 +135,10 @@ export async function readLibrary(request: Request, workId?: string) {
     const { rows } = await tx.query<WorkRow>(`SELECT w.*,${activityColumn} FROM library_works w WHERE ${where.join(" AND ")} ORDER BY ${activitySql} DESC,w.id DESC LIMIT 51`, values);
     const page = rows.slice(0, 50), last = page.at(-1);
     const works = await mapWorks(tx, page);
+    const summary = enabled ? await availabilitySummary(tx, actor.familyId, archived, today) : null;
     const nextCursor = rows.length > 50 && last ? encodeCursor(scope, last.activity_at, last.id) : null;
     await tx.query("COMMIT");
-    return NextResponse.json({ ...base, works, nextCursor, commonPendingCounts }, { headers });
+    return NextResponse.json({ ...base, works, nextCursor, commonPendingCounts, ...(summary ? { availabilitySummary: summary } : {}) }, { headers });
   } catch (error) { if (tx) await tx.query("ROLLBACK"); return errorResponse(error); }
   finally { tx?.release(); }
 }
