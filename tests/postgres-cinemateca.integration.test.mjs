@@ -8,7 +8,7 @@ import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { GENRES } from "../src/lib/library/genres.ts";
-import { commonPendingSql } from "../src/lib/library/queries.ts";
+import { commonPendingSql, commonPendingCountsSql } from "../src/lib/library/queries.ts";
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATABASE_URL required");
 const options = { skip: !connectionString && "requires isolated PostgreSQL", timeout: 120_000 };
@@ -106,6 +106,18 @@ test("common pending SQL handles membership, archive independently and scales wi
     await client.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,created_by_member_id,updated_by_member_id) SELECT $1,'Other '||n,'other '||n,'movie',$2,$2 FROM generate_series(1,1000) n", [other, otherMember]);
     await client.query("UPDATE library_works SET genres=ARRAY['drama','terror'] WHERE family_id=$1", [family]);
     for (const table of ["library_works", "library_personal", "members"]) await client.query(`ANALYZE ${table}`);
+    const countQuery = commonPendingCountsSql("w.family_id=$1 AND w.archived_at IS NULL AND w.genres @> ARRAY['drama']::text[]");
+    const counts = (await client.query(countQuery, [family, members[0].id])).rows;
+    assert.equal(counts.length, 19);
+    assert.ok(counts.every(entry => entry.count === 10000));
+    const aggregatePlan = (await client.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${countQuery}`, [family, members[0].id])).rows[0]["QUERY PLAN"][0];
+    function checkAggregate(node) {
+      if (node["Relation Name"] === "library_personal") t.diagnostic(`personal scan: ${node["Node Type"]}, parallel=${node["Parallel Aware"]}, loops=${node["Actual Loops"]}`);
+      assert.ok(!(node["Relation Name"] === "library_personal" && node["Node Type"] === "Seq Scan" && node["Actual Loops"] > 1 && !node["Parallel Aware"]), "aggregate must not repeat full personal scans");
+      for (const child of node.Plans ?? []) checkAggregate(child);
+    }
+    checkAggregate(aggregatePlan.Plan);
+    t.diagnostic(`pair counts: ${aggregatePlan["Execution Time"]} ms; ${aggregatePlan.Plan["Shared Hit Blocks"]} buffer hits`);
     const activity = "greatest(w.created_at,coalesce((SELECT max(c.created_at) FROM library_contributions c WHERE c.work_id=w.id),w.created_at))";
     const query = `SELECT w.id,${activity} AS activity FROM library_works w WHERE w.family_id=$1 AND w.archived_at IS NULL AND w.genres @> ARRAY['drama']::text[] AND ${commonPendingSql}`;
     const first = (await client.query(`${query} ORDER BY ${activity} DESC,w.id DESC LIMIT 50`, [family])).rows;

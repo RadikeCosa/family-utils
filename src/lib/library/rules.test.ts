@@ -79,7 +79,7 @@ test("page filters canonicalize defaults and mutually exclusive modes without lo
   }
   for (const status of ["", "wrong"]) assert.equal(canonicalLibrarySearch(new URLSearchParams({ status, view: "invalid", archived: "false", kind: "book", type: "music", cursor: "old" })), "");
   const query = new URLSearchParams("view=common_pending&status=finished&archived=true&q=cine&extra=a&extra=b");
-  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine", genre: "" });
+  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine", genre: "", withMember: "" });
   assert.equal(canonicalLibrarySearch(query), "extra=a&extra=b&q=cine&view=common_pending&archived=true");
 });
 
@@ -145,4 +145,27 @@ test("genre page normalization handles aliases, repeated parameters and legacy s
     assert.equal(canonicalLibrarySearch(new URLSearchParams(old.split("?")[1] + `&genre=${genre}`)), "extra=a&extra=b");
   }
   for (const genre of ["none", ...GENRES.map(g => g.id)]) assert.equal(readLibraryFilters(new URLSearchParams({ genre })).genre, genre);
+});
+
+test("pair filters survive canonical URLs and remove obsolete cursors", () => {
+  const params = new URLSearchParams("view=pair_pending&withMember=person&status=finished&q=terror&genre=terror&cursor=old&extra=yes");
+  const filters = readLibraryFilters(params);
+  assert.equal(filters.withMember, "person");
+  assert.equal(filters.status, "");
+  assert.equal(canonicalLibrarySearch(params), "extra=yes&q=terror&view=pair_pending&genre=terror&withMember=person");
+  assert.equal(readLibraryFilters(new URLSearchParams("withMember=person")).withMember, "");
+  assert.equal(readLibraryFilters(new URLSearchParams("view=pair_pending")).view, "pair_pending", "missing person reaches API validation");
+});
+
+import { commonMemberLabels } from "./presentation.ts";
+test("common member labels preserve family order, disambiguate duplicates and exclude self and archived", () => {
+  const members = [
+    { id: "self", name: "Me", archivedAt: null },
+    { id: "a", name: "Ana", archivedAt: null },
+    { id: "old", name: "Ana", archivedAt: "2026-01-01" },
+    { id: "b", name: "Ana", archivedAt: null },
+    { id: "c", name: "Nombre largo", archivedAt: null },
+  ];
+  assert.deepEqual(commonMemberLabels(members, "self").map(m => [m.id, m.label]), [["a", "Ana (1)"], ["b", "Ana (2)"], ["c", "Nombre largo"]]);
+  assert.deepEqual(commonMemberLabels([members[0]], "self"), []);
 });

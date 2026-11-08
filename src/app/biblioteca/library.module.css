@@ -251,3 +251,5 @@ details[open] > summary .disclosureArrow { transform:rotate(180deg); }
   .workForm .dialogActions .primary { flex:1 1 auto; }
 }
 @media(forced-colors:active) { .genreBadge { border-color:CanvasText; } }
+
+.commonSection { display:grid; gap:8px; min-width:0; }

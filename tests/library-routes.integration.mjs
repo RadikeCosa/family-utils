@@ -85,6 +85,53 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
         assert.equal(result.status, 400); assert.equal(result.body.code, "INVALID");
       }
     });
+    await t.test("pair pending counts, parameter contracts, pagination and peer-only revisions", async () => {
+      const fid = await family(), me = await identity(fid, "administrator"), other = await identity(fid), third = await identity(fid);
+      const pair = `?view=pair_pending&withMember=${other.id}`;
+      const seeded = (await pool.query(`INSERT INTO library_works(family_id,title,titulo_normalizado,kind,genres,archived_at,created_by_member_id,updated_by_member_id)
+        SELECT $1,'Pair '||n,'pair '||n,'movie',CASE WHEN n<=3 THEN ARRAY['terror'] ELSE '{}'::text[] END,
+        CASE WHEN n=52 THEN now() END,$2,$2 FROM generate_series(1,54) n RETURNING id,title`, [fid, me.id])).rows;
+      await pool.query(`INSERT INTO library_personal(family_id,work_id,member_id,status)
+        SELECT $1,id,$2,'pending' FROM library_works WHERE family_id=$1 AND title NOT IN ('Pair 53','Pair 54')`, [fid, me.id]);
+      await pool.query("INSERT INTO library_personal(family_id,work_id,member_id,status) SELECT $1,id,$2,'pending' FROM library_works WHERE family_id=$1 AND title<>'Pair 54'", [fid, other.id]);
+      const firstId = seeded.find(w => w.title === "Pair 1").id;
+      await ok(third, `/${firstId}/personal`, "PUT", { status: "pending", rating: null, expectedVersion: 0 });
+      const initial = await request(me, pair);
+      assert.equal(initial.status, 200);
+      const previousRepresentation = await request(me, pair, "GET", undefined, { "If-None-Match": initial.etag.replace("library-v4-", "library-v3-") });
+      assert.equal(previousRepresentation.status, 200);
+      assert.ok(Array.isArray(previousRepresentation.body.commonPendingCounts));
+      assert.deepEqual(initial.body.commonPendingCounts, [{ memberId: other.id, count: 51 }, { memberId: third.id, count: 1 }]);
+      assert.equal(initial.body.works.length, 50); assert.ok(initial.body.nextCursor);
+      const next = await ok(me, `${pair}&cursor=${encodeURIComponent(initial.body.nextCursor)}`);
+      assert.equal(next.works.length, 1); assert.deepEqual(next.commonPendingCounts, initial.body.commonPendingCounts);
+      assert.equal(new Set([...initial.body.works, ...next.works].map(w => w.id)).size, 51);
+      assert.equal((await ok(me, `${pair}&archived=true`)).commonPendingCounts[0].count, 1);
+      assert.equal((await ok(me, `${pair}&genre=terror`)).commonPendingCounts[0].count, 3);
+      assert.equal((await ok(me, `${pair}&q=pair%201`)).commonPendingCounts[0].count, 11);
+      assert.deepEqual((await ok(me, "?status=finished")).commonPendingCounts, initial.body.commonPendingCounts);
+      assert.deepEqual((await ok(me, `?view=pair_pending&withMember=${third.id}`)).commonPendingCounts, initial.body.commonPendingCounts);
+      assert.equal((await ok(me, "?view=common_pending")).works.length, 1, "all-family is a subset of pair");
+      assert.ok(![...initial.body.works, ...next.works].some(w => ["Pair 53", "Pair 54"].includes(w.title)), "other pending alone does not match");
+      for (const query of ["?view=pair_pending", `${pair}&status=pending`, `?withMember=${other.id}`, `?view=common_pending&withMember=${other.id}`, "?view=pair_pending&withMember=bad", `?view=pair_pending&withMember=${me.id}`, `?view=pair_pending&withMember=${me.id.toUpperCase()}`, `?view=pair_pending&withMember=${outsider.id}`, `?view=pair_pending&withMember=${randomUUID()}`, `${pair}&withMember=${other.id}`, `?view=pair_pending&withMember=${third.id}&cursor=${encodeURIComponent(initial.body.nextCursor)}`]) {
+        const result = await request(me, query); assert.equal(result.status, 400, query); assert.equal(result.body.code, "INVALID");
+      }
+      await ok(other, `/${firstId}/personal`, "PUT", { status: "finished", rating: null, expectedVersion: 1 });
+      const probe = await request(me, `${pair}&revisionOnly=true`, "GET", undefined, { "If-None-Match": initial.etag });
+      assert.equal(probe.status, 200); assert.notEqual(probe.etag, initial.etag);
+      assert.ok(probe.body.revision > initial.body.revision); assert.equal(probe.body.commonPendingCounts, undefined);
+      const changed = await request(me, pair, "GET", undefined, { "If-None-Match": initial.etag });
+      assert.equal(changed.status, 200); assert.equal(changed.body.commonPendingCounts[0].count, 50);
+      assert.equal((await request(me, pair, "GET", undefined, { "If-None-Match": changed.etag })).status, 304);
+      const archived = await fetch(`${origin}/api/members/${other.id}`, { method: "PATCH", headers: { Cookie: me.cookie, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ action: "archive", expectedVersion: 1 }) });
+      assert.equal(archived.status, 200);
+      assert.equal((await request(me, pair)).body.code, "MEMBER_UNAVAILABLE");
+      const archivedProbe = await request(me, `${pair}&revisionOnly=true`, "GET", undefined, { "If-None-Match": changed.etag });
+      assert.equal(archivedProbe.status, 200); assert.ok(archivedProbe.body.accessRevision > changed.body.accessRevision);
+      assert.deepEqual((await ok(me)).commonPendingCounts, [{ memberId: third.id, count: 1 }]);
+      const solo = await identity(await family());
+      assert.deepEqual((await ok(solo)).commonPendingCounts, []);
+    });
     await t.test("common pending, complete ratings and revisions have independent archive and membership semantics", async () => {
       const id = (await ok(owner, "", "POST", { title: "Common fixture" })).id;
       const common = async (archived = false) => (await ok(owner, `?view=common_pending${archived ? "&archived=true" : ""}`)).works.some((work) => work.id === id);
@@ -185,8 +232,8 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       let current = await read();
       assert.equal(current.runtimeMinutes, 148); assert.deepEqual(current.cast, ["José Pérez", "Ana"]); assert.equal(current.synopsis, "Uno\nDos\nTres");
       const state = await request(owner, `/${id}`);
-      assert.match(state.etag, /library-v3-/);
-      const oldEtag = state.etag.replace("library-v3-", "library-v2-");
+      assert.match(state.etag, /library-v4-/);
+      const oldEtag = state.etag.replace("library-v4-", "library-v2-");
       const refreshed = await request(owner, `/${id}`, "GET", undefined, { "If-None-Match": oldEtag });
       assert.equal(refreshed.status, 200); assert.equal(refreshed.body.work.runtimeMinutes, 148);
       assert.equal((await request(owner, `/${id}`, "GET", undefined, { "If-None-Match": state.etag })).status, 304);

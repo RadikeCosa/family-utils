@@ -12,3 +12,17 @@ export function selectedCompanionsSummary(ordered: LibraryProfile[], selected: s
   const names = ordered.filter((member) => selected.includes(member.id)).map((member) => member.name);
   return names.length ? `${names.slice(0, 2).join(", ")}${names.length > 2 ? ` +${names.length - 2}` : ""}` : "Opcional";
 }
+
+export function commonMemberLabels(members: LibraryProfile[], currentMemberId: string) {
+  const active = members.filter(member => !member.archivedAt && member.id !== currentMemberId);
+  const totals = new Map<string, number>();
+  const seen = new Map<string, number>();
+  const key = (name: string) => name.trim().toLocaleLowerCase("es-AR");
+  for (const member of active) totals.set(key(member.name), (totals.get(key(member.name)) ?? 0) + 1);
+  return active.map(member => {
+    const nameKey = key(member.name);
+    const ordinal = (seen.get(nameKey) ?? 0) + 1;
+    seen.set(nameKey, ordinal);
+    return { ...member, label: totals.get(nameKey)! > 1 ? `${member.name} (${ordinal})` : member.name };
+  });
+}
