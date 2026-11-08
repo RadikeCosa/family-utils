@@ -11,6 +11,7 @@ import WorkForm from "./WorkForm";
 import Contributions, { NewContribution } from "./Contributions";
 import PersonalForm from "./PersonalForm";
 import WorkIcon from "./WorkIcon";
+import MovieCard from "./MovieCard";
 import WorkDialog from "./WorkDialog";
 import styles from "./library.module.css";
 const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "Quiero ver" }, { value: "in_progress", label: "Viendo" }, { value: "finished", label: "Vistas" }, { value: "none", label: "Sin estado" }, { value: "common_pending", label: "Pendientes en común" }];
@@ -24,6 +25,10 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
   const [filters, setFilters] = useState(libraryFilterString(initialFilters));
   const [genre, setGenre] = useState(initialFilters.genre);
   const [searchAnnouncement, setSearchAnnouncement] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
+  const filterSummary = useRef<HTMLElement>(null);
+  const secondaryFilterCount = Number(Boolean(genre)) + Number(Boolean(archived));
+  const selectedGenreLabel = genre === "none" ? "Sin género" : GENRES.find(option => option.id === genre)?.label;
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const composingRef = useRef(false);
   const lastAppliedSearch = useRef(initialFilters.q);
@@ -88,16 +93,28 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
     {adding && data && <WorkDialog busy={busy} shouldRestoreFocus={shouldRestoreDialogFocus} onRequestClose={() => { setAdding(false); library.clearDuplicates(); }}><WorkForm key={`${data.familyId}:${data.currentMemberId}:new`} scope={`${data.familyId}:${data.currentMemberId}:new-work`} busy={busy} duplicates={library.duplicates} issue={library.operationIssue} onIdentityChange={library.clearDuplicates} onCancel={() => { setAdding(false); library.clearDuplicates(); }} onSave={async (input) => { const result = await library.mutate("", "POST", input); if (!result) return false; skipDialogFocusReturn.current = true; setAdding(false); router.push(`/cinemateca/${result.id}`); return true; }} /></WorkDialog>}
     {!workId && data && "works" in data && <>
       <form className={styles.filters} aria-busy={loading} onSubmit={(event) => { event.preventDefault(); if (!composingRef.current) applyCurrent(search); }}>
-        <label className={styles.searchLabel}>Buscar películas<input type="search" value={search} placeholder="Título o director/a" onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={(event) => { composingRef.current = false; const value = event.currentTarget.value; const pending = deferredPop.current; deferredPop.current = null; if (pending) { setSearch(pending.q); setView(pending.view); setStatus(pending.status); setArchived(pending.archived); setGenre(pending.genre); writeSearch(pending); } else { debounce.current = setTimeout(() => applyCurrent(value), 0); } }} onKeyDown={(event) => { if (event.key === "Enter" && !composingRef.current) { event.preventDefault(); applyCurrent(search); } }} onChange={(event) => { const value = event.target.value; setSearch(value); if (debounce.current) clearTimeout(debounce.current); if (!composingRef.current) debounce.current = setTimeout(() => applyCurrent(value), 300); }} /></label>
-        <label>Mostrar<select value={view || status} onChange={(event) => applyCurrent(search, event.target.value === "common_pending" ? "common_pending" : "", event.target.value === "common_pending" ? "" : event.target.value)}>{showOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-        <label>Género<select value={genre} onChange={(event) => applyCurrent(search, view, status, archived, event.target.value)}><option value="">Todos los géneros</option><option value="none">Sin género</option>{GENRES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
-        <div className={styles.filterExtras}><label className={styles.check}><input type="checkbox" checked={archived === "true"} onChange={(event) => applyCurrent(search, view, status, event.target.checked ? "true" : "")} /><span>Solo archivadas</span></label>
-          {(search || view || status || archived || genre) && <button type="button" onClick={() => applyCurrent("", "", "", "", "")}>Limpiar filtros</button>}
+        <label className={styles.searchLabel}>Buscar películas<input ref={searchInput} type="search" value={search} placeholder="Título o director/a" onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={(event) => { composingRef.current = false; const value = event.currentTarget.value; const pending = deferredPop.current; deferredPop.current = null; if (pending) { setSearch(pending.q); setView(pending.view); setStatus(pending.status); setArchived(pending.archived); setGenre(pending.genre); writeSearch(pending); } else { debounce.current = setTimeout(() => applyCurrent(value), 0); } }} onKeyDown={(event) => { if (event.key === "Enter" && !composingRef.current) { event.preventDefault(); applyCurrent(search); } }} onChange={(event) => { const value = event.target.value; setSearch(value); if (debounce.current) clearTimeout(debounce.current); if (!composingRef.current) debounce.current = setTimeout(() => applyCurrent(value), 300); }} /></label>
+        <div className={styles.quickFilters} role="group" aria-label="Mostrar películas">
+          {showOptions.map(option => <button key={option.value} type="button" aria-pressed={(view || status) === option.value} onClick={() => applyCurrent(search, option.value === "common_pending" ? "common_pending" : "", option.value === "common_pending" ? "" : option.value)}>{option.label}</button>)}
         </div>
+        <details className={styles.moreFilters}>
+          <summary ref={filterSummary}>Más filtros{secondaryFilterCount > 0 && <span className={styles.filterCount}>({secondaryFilterCount})</span>}</summary>
+          <div className={styles.advancedFilters}>
+            <label>Género<select value={genre} onChange={(event) => applyCurrent(search, view, status, archived, event.target.value)}><option value="">Todos los géneros</option><option value="none">Sin género</option>{GENRES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+            <label className={styles.check}><input type="checkbox" checked={archived === "true"} onChange={(event) => applyCurrent(search, view, status, event.target.checked ? "true" : "")} /><span>Solo archivadas</span></label>
+          </div>
+        </details>
+        {(search || view || status || archived || genre) && <div className={styles.filterExtras}>
+          <div className={styles.activeFilters}>
+            {genre && <button type="button" aria-label={`Quitar filtro de género: ${selectedGenreLabel}`} onClick={() => { applyCurrent(search, view, status, archived, ""); filterSummary.current?.focus(); }}>{selectedGenreLabel}<span aria-hidden="true">×</span></button>}
+            {archived && <button type="button" aria-label="Quitar filtro: Solo archivadas" onClick={() => { applyCurrent(search, view, status, "", genre); filterSummary.current?.focus(); }}>Solo archivadas<span aria-hidden="true">×</span></button>}
+          </div>
+          <button type="button" className={styles.clearFilters} onClick={() => { applyCurrent("", "", "", "", ""); searchInput.current?.focus(); }}>Limpiar filtros</button>
+        </div>}
         {view === "common_pending" && <p className={styles.filterHelp}>Todos los integrantes activos las marcaron como Quiero ver.</p>}
       </form>
       <p className={styles.srStatus} role="status" aria-live="polite" aria-atomic="true">{loading ? searchAnnouncement : resultAnnouncement}</p>
-      {data.works.length ? <ul className={styles.grid}>{data.works.map((item) => { const mine = item.personal.find((entry) => entry.memberId === data.currentMemberId); return <li key={item.id}><Link className={styles.workCard} href={`/cinemateca/${item.id}`}><span className={styles.workContent}><h2>{item.title}</h2><p>{[item.creator, item.year].filter(Boolean).join(" · ") || "Por descubrir"}</p><p>{mine?.status ? STATUS_LABELS[mine.status] : "Sin estado"} · {mine?.rating ? `Mi nota: ${mine.rating}/5` : "Sin valorar"}</p>{item.genres.length > 0 && <p>{genreLabels(item.genres).join(" · ")}</p>}<p>{familyRating(item.personal)}</p></span></Link></li>; })}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
+      {data.works.length ? <ul className={styles.grid}>{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
       {data.nextCursor && <button disabled={loading} onClick={() => void library.more()}>{loading ? "Cargando…" : "Cargar más películas"}</button>}
     </>}
     {work && data && <>

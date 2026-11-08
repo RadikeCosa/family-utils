@@ -142,7 +142,7 @@ test("collection filters restore URLs and text search avoids server navigations"
   const id = (await created.json()).id;
   await api.put(`/api/library/${id}/personal`, { data: { status: "finished", rating: null, expectedVersion: 0 } });
   await page.goto("/cinemateca?kind=book&status=finished&extra=keep");
-  await expect(page.getByRole("combobox", { name: "Mostrar", exact: true })).toHaveValue("finished");
+  await expect(page.getByRole("button", { name: "Vistas", exact: true })).toHaveAttribute("aria-pressed", "true");
   const serverNavigations: string[] = [];
   page.on("request", request => {
     const url = new URL(request.url());
@@ -153,7 +153,7 @@ test("collection filters restore URLs and text search avoids server navigations"
   await expect(page).toHaveURL(/q=consultada/); expect(serverNavigations).toHaveLength(0);
   await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
   await expect(page).toHaveURL(/cinemateca\?extra=keep$/);
-  await expect(page.getByRole("combobox", { name: "Mostrar", exact: true })).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Todas", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("heading", { name: "Lectura consultada" })).toBeVisible();
 });
 
@@ -295,13 +295,13 @@ test("common view explains empty results and displays family ratings", async ({ 
   const id = (await response.json()).id;
   await page.goto("/cinemateca");
   await expect(page.getByRole("heading", { name: "Para esta noche" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Mostrar", exact: true }).selectOption("common_pending");
+  await page.getByRole("button", { name: "Pendientes en común", exact: true }).click();
   await expect(page.getByText("Aparecen cuando todos los integrantes activos las marcan como Quiero ver")).toBeVisible();
   await api.put(`/api/library/${id}/personal`, { data: { status: "pending", rating: 4, expectedVersion: 0 } });
   await page.reload();
   const card = page.getByRole("link", { name: /Para esta noche/ });
   await expect(card).toContainText("Quiero ver");
-  await expect(card).toContainText("Familia · 4,0/5 · 1 valoración");
+  await expect(card.getByRole("img", { name: "Familia · 4,0/5 · 1 valoración", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/view=common_pending/);
 });
 
@@ -355,25 +355,28 @@ test("compact collection and canonical filters retain archive and common semanti
   await page.screenshot({ path: testInfo.outputPath("coleccion-generos-390.png"), fullPage: false });
   expect(box.y).toBeLessThan(560); expect(box.y + box.height).toBeLessThanOrEqual(844);
   await expect(page).toHaveURL(/cinemateca\?extra=keep$/);
-  const show = page.getByRole("combobox", { name: "Mostrar", exact: true });
-  for (const status of ["pending", "in_progress", "finished", "none", ""]) {
-    await show.selectOption(status);
+  const show = page.getByRole("button", { name: "Pendientes en común", exact: true });
+  for (const [status, label] of [["pending", "Quiero ver"], ["in_progress", "Viendo"], ["finished", "Vistas"], ["none", "Sin estado"], ["", "Todas"]]) {
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(page.getByRole("button", { pressed: true })).toHaveCount(1);
     if (status) await expect(page).toHaveURL(new RegExp(`status=${status}`)); else await expect(page).not.toHaveURL(/status=/);
   }
-  await show.selectOption("common_pending"); await expect(page).toHaveURL(/view=common_pending/);
+  await show.click(); await expect(page).toHaveURL(/view=common_pending/);
+  await page.locator("summary").filter({ hasText: "Más filtros" }).click();
   await page.getByRole("combobox", { name: "Género", exact: true }).selectOption("documental");
   await expect(card).toBeVisible();
   await api.patch(`/api/library/${id}`, { data: { action: "archive", expectedVersion: 1 } });
   await page.getByLabel("Solo archivadas", { exact: true }).check();
   await expect(page).toHaveURL(/archived=true/); await expect(card).toBeVisible();
-  await expect(show).toHaveValue("common_pending");
+  await expect(show).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
   await expect(page).toHaveURL(/cinemateca\?extra=keep$/); await expect(card).toHaveCount(0);
   await page.goto("/cinemateca?view=common_pending&status=finished&extra=keep");
-  await expect(show).toHaveValue("common_pending"); await expect(page).not.toHaveURL(/status=/);
+  await expect(show).toHaveAttribute("aria-pressed", "true"); await expect(page).not.toHaveURL(/status=/);
   for (const genre of ["", "wrong", "drama&genre=terror", "drama&genre=drama"]) {
     await page.goto(`/biblioteca?kind=book&type=music&cursor=old&genre=${genre}&extra=keep`);
     await expect(page).toHaveURL(/cinemateca\?extra=keep$/);
+    await page.locator("summary").filter({ hasText: "Más filtros" }).click();
     await expect(page.getByRole("combobox", { name: "Género", exact: true })).toHaveValue("");
   }
 });
@@ -608,12 +611,14 @@ test("genre filter resets loaded pages and survives back and forward navigation"
   const cards = page.locator("ul").filter({ has: page.getByRole("heading", { level: 2 }).filter({ hasText: "Género " }) }).getByRole("link");
   await expect(cards).toHaveCount(50);
   await page.getByRole("button", { name: "Cargar más películas", exact: true }).click(); await expect(cards).toHaveCount(55);
+  await page.locator("summary").filter({ hasText: "Más filtros" }).click();
   await page.getByRole("combobox", { name: "Género", exact: true }).selectOption("terror"); await expect(cards).toHaveCount(50);
   await expect(page).toHaveURL(/genre=terror/);
   const selectedTitle = await cards.first().getByRole("heading").innerText();
   await cards.first().click();
   await expect(page.getByRole("heading", { name: selectedTitle, level: 1, exact: true })).toBeVisible();
-  await page.goBack(); await expect(page.getByRole("combobox", { name: "Género", exact: true })).toHaveValue("terror");
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "Quitar filtro de género: Terror", exact: true })).toBeVisible();
   await page.goForward(); await expect(page.getByRole("heading", { name: selectedTitle, level: 1, exact: true })).toBeVisible();
 });
 
@@ -667,4 +672,99 @@ test("two clients preserve an updated hidden link through conflict review and re
   await expect(page.getByRole("heading", { name: "Mi título local", exact: true })).toBeVisible();
   saved = (await (await api.get(`/api/library/${id}`)).json()).work;
   expect(saved.referenceUrl).toBe("https://example.com/new"); expect(saved.genres).toEqual(["drama"]);
+});
+
+test("secondary filters stay visible when collapsed and can be removed independently", async ({ page }) => {
+  await page.goto("/cinemateca?q=noche&status=pending&genre=drama&archived=true&extra=keep");
+  const summary = page.locator("summary").filter({ hasText: "Más filtros" });
+  const panel = summary.locator("..");
+  await expect(summary).toHaveText("Más filtros(2)");
+  await expect(panel).not.toHaveAttribute("open", "");
+  await expect(page.getByRole("button", { name: "Quitar filtro de género: Drama", exact: true })).toBeVisible();
+  await summary.focus(); await summary.press("Enter");
+  await expect(page.getByRole("combobox", { name: "Género", exact: true })).toHaveValue("drama");
+  await expect(page.getByLabel("Solo archivadas", { exact: true })).toBeChecked();
+  await summary.press("Enter");
+  await page.getByRole("button", { name: "Quitar filtro de género: Drama", exact: true }).click();
+  await expect(summary).toBeFocused(); await expect(summary).toHaveText("Más filtros(1)");
+  await expect(page).toHaveURL(/q=noche&status=pending&archived=true$/);
+  await page.getByRole("button", { name: "Quitar filtro: Solo archivadas", exact: true }).click();
+  await expect(summary).toBeFocused(); await expect(summary).toHaveText("Más filtros");
+  await expect(page).toHaveURL(/extra=keep&q=noche&status=pending$/);
+  await summary.press("Space");
+  await page.getByRole("combobox", { name: "Género", exact: true }).selectOption("terror");
+  await page.getByLabel("Solo archivadas", { exact: true }).check();
+  await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
+  await expect(page).toHaveURL(/cinemateca\?extra=keep$/);
+  await expect(page.getByLabel("Buscar películas")).toBeFocused();
+  await expect(page.getByRole("combobox", { name: "Género", exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Solo archivadas", { exact: true })).not.toBeChecked();
+  await expect(page.getByRole("button", { name: "Todas", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("movie cards show personal badges and accessible proportional family stars", async ({ page }, testInfo) => {
+  const titles = ["Sin aportes todavía", "Una estrella", "Cinco estrellas", "Promedio familiar con perfil archivado"];
+  const ids: string[] = [];
+  for (const title of titles) {
+    const response = await api.post("/api/library", { data: { title } });
+    ids.push((await response.json()).id);
+  }
+  await api.put(`/api/library/${ids[1]}/personal`, { data: { status: "pending", rating: 1, expectedVersion: 0 } });
+  await api.put(`/api/library/${ids[2]}/personal`, { data: { status: "finished", rating: 5, expectedVersion: 0 } });
+  await api.put(`/api/library/${ids[3]}/personal`, { data: { status: "in_progress", rating: 4, expectedVersion: 0 } });
+  const other = (await pool.query("INSERT INTO members(family_id,name,archived_at) VALUES($1,'Perfil anterior',now()) RETURNING id", [familyId])).rows[0].id;
+  await pool.query("INSERT INTO library_personal(family_id,work_id,member_id,rating) VALUES($1,$2,$3,3)", [familyId, ids[3], other]);
+  await page.goto("/cinemateca");
+  const empty = page.getByRole("link", { name: /Sin aportes todavía/ });
+  await expect(empty).toContainText("Sin estado"); await expect(empty).toContainText("Sin valorar"); await expect(empty).toContainText("Sin valoraciones");
+  await expect(empty.getByRole("img")).toHaveCount(0);
+  const low = page.getByRole("link", { name: /Una estrella/ });
+  await expect(low).toContainText("Quiero ver");
+  await expect(low.getByRole("img", { name: "Mi valoración: 1 de 5 estrellas", exact: true })).toBeVisible();
+  const high = page.getByRole("link", { name: /Cinco estrellas/ });
+  await expect(high).toContainText("Vista");
+  await expect(high.getByRole("img", { name: "Mi valoración: 5 de 5 estrellas", exact: true })).toBeVisible();
+  const mixed = page.getByRole("link", { name: /Promedio familiar con perfil archivado/ });
+  await expect(mixed).toContainText("Viendo");
+  const family = mixed.getByRole("img", { name: "Familia · 3,5/5 · 2 valoraciones", exact: true });
+  await expect(family).toBeVisible();
+  const fills = await family.locator('[style]').evaluateAll(elements => elements.map(element => (element as HTMLElement).style.width));
+  expect(fills).toEqual(["100%", "100%", "100%", "50%", "0%"]);
+  await expect(high.getByRole("img", { name: "Familia · 5,0/5 · 1 valoración", exact: true })).toBeVisible();
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("tarjetas-estrellas.png"), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: testInfo.outputPath("tarjetas-escritorio.png"), fullPage: true });
+  await api.patch(`/api/library/${ids[2]}`, { data: { action: "archive", expectedVersion: 1 } });
+  await page.goto("/cinemateca?archived=true");
+  await expect(high).toContainText("Archivada"); await expect(high).toContainText("Vista");
+  await high.click(); await expect(page).toHaveURL(new RegExp(`/cinemateca/${ids[2]}$`));
+});
+
+test("quick filters and movie cards reflow with enlarged text and keyboard focus", async ({ page, browserName }, testInfo) => {
+  await api.post("/api/library", { data: { title: "Un título muy largo para compartir una noche de películas con toda nuestra familia", creator: "Una directora con un nombre extenso", genres: ["ciencia_ficcion", "documental"] } });
+  await page.goto("/cinemateca?genre=ciencia_ficcion");
+  const summary = page.locator("summary").filter({ hasText: "Más filtros" });
+  await summary.focus(); await summary.press("Enter");
+  await expect(page.getByRole("combobox", { name: "Género", exact: true })).toBeVisible();
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  }
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const pending = page.getByRole("button", { name: "Quiero ver", exact: true });
+  await pending.focus(); await pending.press("Space");
+  await expect(pending).toBeFocused(); await expect(pending).toHaveAttribute("aria-pressed", "true");
+  for (const button of await page.getByRole("group", { name: "Mostrar películas", exact: true }).getByRole("button").all()) {
+    const box = (await button.boundingBox())!; expect(box.height).toBeGreaterThanOrEqual(44); expect(box.width).toBeGreaterThanOrEqual(44);
+  }
+  await page.getByRole("button", { name: "Todas", exact: true }).click();
+  if (browserName === "chromium") {
+    await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+    await page.screenshot({ path: testInfo.outputPath("coleccion-contraste-forzado.png"), fullPage: true });
+    await page.emulateMedia({ forcedColors: "none" });
+  }
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
 });
