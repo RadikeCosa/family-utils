@@ -1,5 +1,5 @@
 import { isGenre, normalizeGenres } from "./genres";
-import { commonPendingSql } from "./queries";
+import { commonPendingSql, commonPendingCountsSql } from "./queries";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
@@ -49,13 +49,16 @@ export async function readLibrary(request: Request, workId?: string) {
     const q = normalizeLibraryText(url.searchParams.get("q") ?? "");
     const kind = url.searchParams.get("kind") ?? "", status = url.searchParams.get("status") ?? "";
     const view = url.searchParams.get("view") ?? "";
+    const withMember = (url.searchParams.get("withMember") ?? "").toLowerCase();
     const archived = url.searchParams.get("archived") === "true";
     const genres = url.searchParams.getAll("genre");
     if (genres.length > 1 || (genres.length === 1 && genres[0] !== "none" && !isGenre(genres[0]))) fail(400, "INVALID", "Género inválido.");
     const genre = genres[0];
-    if ((view && view !== "common_pending") || (view && status)) fail(400, "INVALID", "Filtros incompatibles o vista inválida.");
+    if ((view && !["common_pending", "pair_pending"].includes(view)) || (view && status)
+      || (view === "pair_pending" ? !UUID_PATTERN.test(withMember) || withMember === actor.memberId : url.searchParams.has("withMember"))
+      || url.searchParams.getAll("withMember").length > 1) fail(400, "INVALID", "Filtros incompatibles o vista inválida.");
     if (Array.from(q).length > 200 || (kind && !WORK_KINDS.includes(kind as never)) || (status && !PERSONAL_STATUSES.includes(status as never) && status !== "none")) fail(400, "INVALID", "Filtros inválidos.");
-    const scope = cursorScope([actor.familyId, workId ?? "collection", q, kind, status, archived, view, status ? actor.memberId : null, ...(genre ? ["genre", genre] : [])]);
+    const scope = cursorScope([actor.familyId, workId ?? "collection", q, kind, status, archived, view, status ? actor.memberId : null, ...(genre ? ["genre", genre] : []), ...(view === "pair_pending" ? ["pair", actor.memberId, withMember] : [])]);
     let cursor;
     try { cursor = decodeCursor(url.searchParams.get("cursor"), scope); } catch (error) { fail(400, "INVALID", (error as Error).message); }
     tx = await getPool().connect();
@@ -63,11 +66,16 @@ export async function readLibrary(request: Request, workId?: string) {
     await activeActor(tx, actor);
     const rev = await revision(tx, actor);
     // Version the response shape independently of the pagination scope.
-    const etag = `"library-v3-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
+    const etag = `"library-v4-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
     const headers = { ETag: etag, "Cache-Control": "private, no-cache", Vary: "Cookie" };
-    if (request.headers.get("if-none-match") === etag) { await tx.query("COMMIT"); return new NextResponse(null, { status: 304, headers }); }
     const members = await profiles(tx, actor.familyId);
     const base = { currentMemberId: actor.memberId, familyId: actor.familyId, revision: rev.revision, accessRevision: rev.accessRevision, members };
+    if (view === "pair_pending") {
+      const member = members.find(member => member.id === withMember);
+      if (!member) fail(400, "INVALID", "La persona debe pertenecer a tu familia.");
+      if (member.archivedAt && url.searchParams.get("revisionOnly") !== "true") fail(400, "MEMBER_UNAVAILABLE", "Ese integrante ya no está disponible.");
+    }
+    if (request.headers.get("if-none-match") === etag) { await tx.query("COMMIT"); return new NextResponse(null, { status: 304, headers }); }
     if (url.searchParams.get("revisionOnly") === "true") {
       await tx.query("COMMIT"); return NextResponse.json({ ...base }, { headers });
     }
@@ -94,7 +102,20 @@ export async function readLibrary(request: Request, workId?: string) {
     if (q) { const query = arg(q); where.push(`(strpos(w.titulo_normalizado,${query})>0 OR strpos(w.creador_normalizado,${query})>0)`); }
     if (kind) where.push(`w.kind=${arg(kind)}`);
     if (genre) where.push(genre === "none" ? "w.genres = '{}'::text[]" : `w.genres @> ARRAY[${arg(genre)}]::text[]`);
+    // Keep this aggregate independent of personal status, selected person and pagination.
+    const countValues: unknown[] = [actor.familyId, actor.memberId];
+    const countWhere = ["w.family_id=$1", archived ? "w.archived_at IS NOT NULL" : "w.archived_at IS NULL"];
+    const countArg = (value: unknown) => { countValues.push(value); return `$${countValues.length}`; };
+    if (q) { const query = countArg(q); countWhere.push(`(strpos(w.titulo_normalizado,${query})>0 OR strpos(w.creador_normalizado,${query})>0)`); }
+    if (genre) countWhere.push(genre === "none" ? "w.genres = '{}'::text[]" : `w.genres @> ARRAY[${countArg(genre)}]::text[]`);
+    const counts = (await tx.query<{ memberId: string; count: number }>(commonPendingCountsSql(countWhere.join(" AND ")), countValues)).rows;
+    const countByMember = new Map(counts.map(entry => [entry.memberId, entry.count]));
+    const commonPendingCounts = members.filter(member => member.id !== actor.memberId && !member.archivedAt)
+      .map(member => ({ memberId: member.id as string, count: countByMember.get(member.id) ?? 0 }));
     if (view === "common_pending") where.push(commonPendingSql);
+    if (view === "pair_pending") {
+      for (const memberId of [actor.memberId, withMember]) where.push(`EXISTS(SELECT 1 FROM library_personal p WHERE p.work_id=w.id AND p.family_id=w.family_id AND p.member_id=${arg(memberId)} AND p.status='pending')`);
+    }
     if (status) {
       const person = arg(actor.memberId);
       where.push(status === "none" ? `NOT EXISTS(SELECT 1 FROM library_personal p WHERE p.work_id=w.id AND p.member_id=${person} AND p.status IS NOT NULL)` : `EXISTS(SELECT 1 FROM library_personal p WHERE p.work_id=w.id AND p.member_id=${person} AND p.status=${arg(status)})`);
@@ -105,7 +126,7 @@ export async function readLibrary(request: Request, workId?: string) {
     const works = await mapWorks(tx, page);
     const nextCursor = rows.length > 50 && last ? encodeCursor(scope, last.activity_at, last.id) : null;
     await tx.query("COMMIT");
-    return NextResponse.json({ ...base, works, nextCursor }, { headers });
+    return NextResponse.json({ ...base, works, nextCursor, commonPendingCounts }, { headers });
   } catch (error) { if (tx) await tx.query("ROLLBACK"); return errorResponse(error); }
   finally { tx?.release(); }
 }

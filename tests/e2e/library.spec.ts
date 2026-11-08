@@ -942,3 +942,105 @@ test("maximum movie metadata and every genre reflow with enlarged text", async (
   await expect(page.getByRole("button",{name:"Editar datos",exact:true})).toBeFocused();
   expect(id).toBeTruthy();
 });
+
+async function seedPairMovies(count = 2) {
+  const peers = (await pool.query("INSERT INTO members(family_id,name) VALUES($1,'Ana'),($1,'Ana'),($1,$2) RETURNING id,name", [familyId, "Un nombre familiar muy largo que debe mostrarse completo en el celular"])).rows.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  const movies: string[] = [];
+  for (let n = 1; n <= count; n++) {
+    const response = await api.post("/api/library", { data: { title: `Compartida ${n}`, genres: [n === 1 ? "terror" : "drama"] } });
+    expect(response.status()).toBe(201);
+    movies.push((await response.json()).id);
+  }
+  await pool.query("INSERT INTO library_personal(family_id,work_id,member_id,status) SELECT $1,w.id,m.id,'pending' FROM library_works w JOIN members m ON m.family_id=w.family_id WHERE w.family_id=$1 AND m.id=ANY($2::uuid[])", [familyId, [memberId, peers[0].id]]);
+  return { peers, movies };
+}
+
+test("pair filters: counts, toggles, zero, duplicate names, URLs and accessible mobile layout", async ({ page }, testInfo) => {
+  const { peers } = await seedPairMovies();
+  await page.goto("/cinemateca?status=finished");
+  const group = page.getByRole("group", { name: "En común con vos" });
+  const ana = group.getByRole("button", { name: "Ana (1) · 2", exact: true });
+  await expect(ana).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compartida 1", exact: true })).toHaveCount(0);
+  await ana.click();
+  await expect(page).toHaveURL(new RegExp(`view=pair_pending.*withMember=${peers[0].id}`));
+  await expect(ana).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: testInfo.outputPath("peliculas-en-comun.png"), fullPage: true });
+  await expect(page.getByRole("status").filter({ hasText: "2 películas en común con Ana (1)" })).toBeVisible();
+  await page.reload();
+  await expect(ana).toHaveAttribute("aria-pressed", "true");
+  await ana.click();
+  await expect(page.getByRole("button", { name: "Todas", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page).not.toHaveURL(/status=finished|withMember/);
+  await ana.click();
+  await page.getByLabel("Buscar películas").fill("Compartida 1");
+  await expect(group.getByRole("button", { name: "Ana (1) · 1", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Limpiar filtros" }).click();
+  await expect(page).not.toHaveURL(/withMember|q=/);
+  const zero = group.getByRole("button", { name: "Ana (2) · 0", exact: true });
+  await expect(zero).toBeEnabled();
+  await zero.click();
+  await expect(zero).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("No hay películas que vos y Ana (2) quieran ver con estos filtros.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Todos queremos ver", exact: true }).click();
+  await expect(zero).toHaveAttribute("aria-pressed", "false");
+  await expect(page).not.toHaveURL(/withMember/);
+  // Exercise restored History API state without a server navigation.
+  await page.evaluate((id) => { window.history.pushState({}, "", `/cinemateca?view=pair_pending&withMember=${id}`); window.dispatchEvent(new PopStateEvent("popstate")); }, peers[0].id);
+  await expect(ana).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Quiero ver", exact: true }).click();
+  await expect(ana).toHaveAttribute("aria-pressed", "false");
+  await expect(page).toHaveURL(/status=pending/);
+  await page.setViewportSize({ width: 320, height: 740 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  const a11y = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(a11y.violations).toEqual([]);
+});
+
+test("pair links: solo family, invalid selection and archived member recovery preserve collection filters", async ({ page }) => {
+  await page.goto("/cinemateca");
+  await expect(page.getByRole("heading", { name: "Nuestra colección empieza acá" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "En común con vos" })).toHaveCount(0);
+  await page.goto(`/cinemateca?view=pair_pending&withMember=${memberId}`);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No pudimos aplicar estos filtros");
+  await page.getByRole("button", { name: "Quitar selección" }).click();
+  await expect(page).not.toHaveURL(/withMember/);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  const { peers } = await seedPairMovies();
+  await pool.query("UPDATE members SET archived_at=now() WHERE id=$1", [peers[0].id]);
+  await page.goto(`/cinemateca?q=Compartida&genre=terror&archived=true&view=pair_pending&withMember=${peers[0].id}`);
+  await expect(page.getByText("Ese integrante ya no está disponible. Quitamos el filtro", { exact: true })).toBeVisible();
+  await expect(page).not.toHaveURL(/withMember|view=pair_pending/);
+  await expect(page).toHaveURL(/q=Compartida/);
+  await expect(page).toHaveURL(/genre=terror/);
+  await expect(page).toHaveURL(/archived=true/);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+});
+
+test("pair refresh keeps counts with their results through peer changes and pagination", async ({ page }) => {
+  const { peers, movies } = await seedPairMovies(52);
+  await page.goto(`/cinemateca?view=pair_pending&withMember=${peers[0].id}`);
+  const group = page.getByRole("group", { name: "En común con vos" });
+  await expect(group.getByRole("button", { name: "Ana (1) · 52", exact: true })).toBeVisible();
+  await pool.query("UPDATE library_personal SET status='finished',version=version+1 WHERE work_id=$1 AND member_id=$2", [movies[0], peers[0].id]);
+  await pool.query("UPDATE families SET library_revision=library_revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByText(/Hay cambios\. Actualizá/)).toBeVisible();
+  await expect(group.getByRole("button", { name: "Ana (1) · 52", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Cargar más películas", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Cargar más películas", exact: true })).toHaveCount(0);
+  await expect(group.getByRole("button", { name: "Ana (1) · 52", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+  await expect(group.getByRole("button", { name: "Ana (1) · 51", exact: true })).toBeVisible();
+  await expect(page.getByText(/Hay cambios\. Actualizá/)).toHaveCount(0);
+  await pool.query("UPDATE members SET archived_at=now() WHERE id=$1", [peers[0].id]);
+  await pool.query("UPDATE families SET revision=revision+1 WHERE id=$1", [familyId]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByText(/Hay cambios\. Actualizá/)).toBeVisible();
+  await expect(page).toHaveURL(/view=pair_pending/);
+  await expect(group.getByRole("button", { name: "Ana (1) · 51", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+  await expect(page.getByText("Ese integrante ya no está disponible. Quitamos el filtro", { exact: true })).toBeVisible();
+  await expect(page).not.toHaveURL(/withMember/);
+  await expect(group.getByRole("button", { name: "Ana · 0", exact: true })).toBeVisible();
+});

@@ -126,3 +126,6 @@ El cambio posterior de filtros, géneros y valoración está documentado en [cin
 
 La [ampliación de datos y formulario manual](./cinemateca-datos.md) incorpora
 duración, reparto y sinopsis, con contratos compatibles y migración aditiva.
+
+La [vista de películas en común por integrante](./cinemateca-pares.md) agrega
+conteos y selección de pares, con recuperación de enlaces y sin migraciones.

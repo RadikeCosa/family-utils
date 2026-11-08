@@ -5,10 +5,11 @@ import { libraryIssueMessage, type OperationIssue } from "@/lib/library/form-err
 import type { LibraryCollection, LibraryDetail } from "@/lib/library/types";
 import { clearLibraryDrafts } from "@/lib/library/drafts";
 export type LibraryData = LibraryCollection | LibraryDetail;
-export function useLibrary(workId: string | undefined, filters: string) {
+export function useLibrary(workId: string | undefined, filters: string, onMemberUnavailable?: () => void) {
   const router = useRouter();
   const [data, setData] = useState<LibraryData | null>(null);
   const [error, setError] = useState("");
+  const [readErrorCode, setReadErrorCode] = useState("");
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; archivedAt: string | null }[]>([]);
   const [operationIssue, setOperationIssue] = useState<OperationIssue | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,9 @@ export function useLibrary(workId: string | undefined, filters: string) {
       const body = await response.json();
       if (!response.ok) {
         readIssueCode = body.code;
+        if (body.code === "MEMBER_UNAVAILABLE" && onMemberUnavailable && mode !== "probe") {
+          onMemberUnavailable(); return;
+        }
         if (body.code === "NOT_FOUND" && workId) {
           setOperationIssue({ code: "NOT_FOUND", status: 404, path: `/${workId}` });
           throw new Error("Este contenido ya no está disponible. Conservamos tu borrador.");
@@ -52,15 +56,22 @@ export function useLibrary(workId: string | undefined, filters: string) {
       const incoming = body as LibraryData;
       if (mode === "more" && current.current) {
         if (incoming.revision !== current.current.revision || incoming.accessRevision !== current.current.accessRevision) setHasChanges(true);
-        if ("works" in incoming && "works" in current.current) incoming.works = [...new Map([...current.current.works, ...incoming.works].map((value) => [value.id, value])).values()];
+        if ("works" in incoming && "works" in current.current) {
+          incoming.works = [...new Map([...current.current.works, ...incoming.works].map((value) => [value.id, value])).values()];
+          incoming.commonPendingCounts = current.current.commonPendingCounts;
+          incoming.members = current.current.members;
+        }
         if ("contributions" in incoming && "contributions" in current.current) incoming.contributions = [...new Map([...current.current.contributions, ...incoming.contributions].map((value) => [value.id, value])).values()];
         incoming.revision = current.current.revision;
         incoming.accessRevision = current.current.accessRevision;
       } else { etag.current = response.headers.get("etag") ?? ""; setHasChanges(false); }
-      current.current = incoming; setData(incoming); setError(""); setOperationIssue(null);
-    } catch { if (!controller.signal.aborted && serial === generation.current) setError(libraryIssueMessage(readIssueCode)); }
+      current.current = incoming; setData(incoming); setError(""); setReadErrorCode(""); setOperationIssue(null);
+    } catch { if (!controller.signal.aborted && serial === generation.current) {
+      setReadErrorCode(typeof readIssueCode === "string" ? readIssueCode : "UNAVAILABLE");
+      setError(readIssueCode === "INVALID" ? "No pudimos aplicar estos filtros. Revisá la selección e intentá de nuevo." : libraryIssueMessage(readIssueCode));
+    } }
     finally { if (serial === generation.current) setLoading(false); if (pending.current === controller) pending.current = null; }
-  }, [endpoint, filters, router, workId]);
+  }, [endpoint, filters, router, workId, onMemberUnavailable]);
   useEffect(() => {
     current.current = null; etag.current = "";
     const start = setTimeout(() => void read(), 0);
@@ -99,5 +110,5 @@ export function useLibrary(workId: string | undefined, filters: string) {
     } finally { writing.current = false; setBusy(false); }
   }
 
-  return { data, error, setError, duplicates, operationIssue, clearDuplicates: () => setDuplicates([]), busy, loading, hasChanges, refresh: () => read(), more: () => read("more"), mutate };
+  return { data, error, readErrorCode, setError, duplicates, operationIssue, clearDuplicates: () => setDuplicates([]), busy, loading, hasChanges, refresh: () => read(), more: () => read("more"), mutate };
 }

@@ -11,5 +11,5 @@ export type LibraryProfile = { id: string; name: string; archivedAt: string | nu
 export type PersonalEntry = { memberId: string; status: PersonalStatus | null; rating: number | null; version: number };
 export type LibraryWork = WorkInput & { genres: Genre[]; runtimeMinutes: number | null; cast: string[]; synopsis: string | null; id: string; version: number; archivedAt: string | null; createdAt: string; updatedAt: string; activityAt: string; personal: PersonalEntry[] };
 export type Contribution = { id: string; authorMemberId: string; body: string; spoiler: boolean; experience: ExperienceDate; companionIds: string[]; version: number; createdAt: string; updatedAt: string };
-export type LibraryCollection = { currentMemberId: string; familyId: string; revision: number; accessRevision: number; members: LibraryProfile[]; works: LibraryWork[]; nextCursor: string | null };
-export type LibraryDetail = Omit<LibraryCollection, "works"> & { work: LibraryWork; contributions: Contribution[] };
+export type LibraryCollection = { currentMemberId: string; familyId: string; revision: number; accessRevision: number; members: LibraryProfile[]; commonPendingCounts: { memberId: string; count: number }[]; works: LibraryWork[]; nextCursor: string | null };
+export type LibraryDetail = Omit<LibraryCollection, "works" | "commonPendingCounts"> & { work: LibraryWork; contributions: Contribution[] };
