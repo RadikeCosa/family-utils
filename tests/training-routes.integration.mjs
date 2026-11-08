@@ -55,8 +55,10 @@ test("training authenticated API: gates, isolation, replay, concurrency, history
       assert.equal((await req(owner, "routines", "POST", { ...create(), ownerMemberId: peer.id })).status, 400);
       assert.equal((await req(owner, "routines", "POST", create(), { Origin: "https://other.invalid" })).status, 403);
       assert.equal((await req(owner)).cache, "private, no-store");
-      const streamed = await fetch(`${origin}/api/training/routines`, { method: "POST", headers: { Cookie: owner.cookie, Origin: origin, "Content-Type": "application/json" }, body: (async function* () { for (let i=0;i<9;i++) yield "x".repeat(65536); })(), duplex: "half" });
+      // Isolate the connection that the server closes after rejecting an oversized stream.
+      const streamed = await fetch(`${origin}/api/training/routines`, { method: "POST", headers: { Cookie: owner.cookie, Origin: origin, "Content-Type": "application/json", Connection: "close" }, body: (async function* () { for (let i=0;i<9;i++) yield "x".repeat(65536); })(), duplex: "half" });
       assert.equal(streamed.status,413);
+      await streamed.arrayBuffer();
       assert.equal((await req(owner, "routines", "POST", { ...create(), name: "x".repeat(524289) })).status, 413);
     });
     await t.test("create retries serialize and preserve original fingerprint even after edits", async () => {
