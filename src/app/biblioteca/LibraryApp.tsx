@@ -1,5 +1,5 @@
 "use client";
-import { GENRES, genreLabels } from "@/lib/library/genres";
+import { genreLabels } from "@/lib/library/genres";
 import { canonicalLibrarySearch, libraryFilterString, readLibraryFilters, type SearchFilters } from "@/lib/library/filters";
 import { familyRating } from "@/lib/library/presentation";
 import Link from "next/link";
@@ -14,8 +14,9 @@ import WorkIcon from "./WorkIcon";
 import MovieCard from "./MovieCard";
 import Runtime from "./Runtime";
 import WorkDialog from "./WorkDialog";
+import GenreFilter from "./GenreFilter";
 import styles from "./library.module.css";
-const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "Quiero ver" }, { value: "in_progress", label: "Viendo" }, { value: "finished", label: "Vistas" }, { value: "none", label: "Sin estado" }, { value: "common_pending", label: "Pendientes en común" }];
+const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "Quiero ver" }, { value: "in_progress", label: "Viendo" }, { value: "finished", label: "Vistas" }, { value: "none", label: "Sin estado" }, { value: "common_pending", label: "Todos queremos ver" }];
 function readSearchFilters() { return readLibraryFilters(new URLSearchParams(window.location.search)); }
 export default function LibraryApp({ workId, initialFilters = { q: "", view: "", status: "", archived: "", genre: "" } }: { workId?: string; initialFilters?: SearchFilters }) {
   const router = useRouter();
@@ -27,9 +28,6 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
   const [genre, setGenre] = useState(initialFilters.genre);
   const [searchAnnouncement, setSearchAnnouncement] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
-  const filterSummary = useRef<HTMLElement>(null);
-  const secondaryFilterCount = Number(Boolean(genre)) + Number(Boolean(archived));
-  const selectedGenreLabel = genre === "none" ? "Sin género" : GENRES.find(option => option.id === genre)?.label;
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const composingRef = useRef(false);
   const lastAppliedSearch = useRef(initialFilters.q);
@@ -98,20 +96,17 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
         <div className={styles.quickFilters} role="group" aria-label="Mostrar películas">
           {showOptions.map(option => <button key={option.value} type="button" aria-pressed={(view || status) === option.value} onClick={() => applyCurrent(search, option.value === "common_pending" ? "common_pending" : "", option.value === "common_pending" ? "" : option.value)}>{option.label}</button>)}
         </div>
-        <details className={styles.moreFilters}>
-          <summary ref={filterSummary}>Más filtros{secondaryFilterCount > 0 && <span className={styles.filterCount}>({secondaryFilterCount})</span>}</summary>
-          <div className={styles.advancedFilters}>
-            <label>Género<select value={genre} onChange={(event) => applyCurrent(search, view, status, archived, event.target.value)}><option value="">Todos los géneros</option><option value="none">Sin género</option>{GENRES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
-            <label className={styles.check}><input type="checkbox" checked={archived === "true"} onChange={(event) => applyCurrent(search, view, status, event.target.checked ? "true" : "")} /><span>Solo archivadas</span></label>
+        <div className={styles.collectionTools}>
+          <GenreFilter value={genre} onChange={(nextGenre) => applyCurrent(search, view, status, archived, nextGenre)} />
+          <div className={styles.archiveSwitch} role="group" aria-label="Ubicación de las películas">
+            <button type="button" aria-pressed={!archived} onClick={() => applyCurrent(search, view, status, "")}>Colección</button>
+            <button type="button" aria-pressed={archived === "true"} onClick={() => applyCurrent(search, view, status, "true")}>Archivadas</button>
           </div>
-        </details>
+        </div>
         {(search || view || status || archived || genre) && <div className={styles.filterExtras}>
-          <div className={styles.activeFilters}>
-            {genre && <button type="button" aria-label={`Quitar filtro de género: ${selectedGenreLabel}`} onClick={() => { applyCurrent(search, view, status, archived, ""); filterSummary.current?.focus(); }}>{selectedGenreLabel}<span aria-hidden="true">×</span></button>}
-            {archived && <button type="button" aria-label="Quitar filtro: Solo archivadas" onClick={() => { applyCurrent(search, view, status, "", genre); filterSummary.current?.focus(); }}>Solo archivadas<span aria-hidden="true">×</span></button>}
-          </div>
           <button type="button" className={styles.clearFilters} onClick={() => { applyCurrent("", "", "", "", ""); searchInput.current?.focus(); }}>Limpiar filtros</button>
         </div>}
+        {archived && <p className={styles.filterHelp}>Estás viendo las películas archivadas. Podés restaurarlas desde su ficha.</p>}
         {view === "common_pending" && <p className={styles.filterHelp}>Todos los integrantes activos las marcaron como Quiero ver.</p>}
       </form>
       <p className={styles.srStatus} role="status" aria-live="polite" aria-atomic="true">{loading ? searchAnnouncement : resultAnnouncement}</p>

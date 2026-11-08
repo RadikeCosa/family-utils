@@ -50,13 +50,17 @@ cual es aceptable.
 ## Colección y formulario
 
 Mostrar unifica Todas (sin status/view), Quiero ver (pending), Viendo
-(in_progress), Vistas (finished), Sin estado (none) y Pendientes en común
-(view=common_pending sin status). Todas no incluye archivadas: Solo archivadas
-cambia exclusivamente el archivo. Género y archivo son independientes de Mostrar.
-No hay panel de filtros adicionales. Limpiar filtros elimina búsqueda y filtros,
-conservando parámetros ajenos. Los selectores tienen como máximo 16 rem; en móvil
-se apilan para no cortar nombres. Se retiró la frase introductoria para recuperar
-altura sin reducir el texto de los controles.
+(in_progress), Vistas (finished), Sin estado (none) y Todos queremos ver
+(view=common_pending sin status). Colección excluye archivadas; el control
+Colección / Archivadas cambia exclusivamente el archivo. Género y archivo son
+independientes de Mostrar y están siempre accesibles, sin Más filtros ni casillero.
+Género abre un diálogo con opciones en grilla, selección marcada y cierre al elegir;
+el botón conserva el nombre elegido. Escape o Cerrar géneros permiten salir sin
+cambios y el foco vuelve al botón. Todos los géneros elimina esa selección.
+Archivadas muestra una explicación sobre cómo restaurar películas desde su ficha.
+Limpiar filtros elimina búsqueda y filtros, conservando parámetros ajenos.
+En móvil la barra permite saltos de línea y el diálogo usa dos columnas, con
+opciones de al menos 44 px de alto. No se duplican selecciones como chips debajo.
 
 En páginas, vista común válida prevalece; view inválido se elimina y se conserva
 status válido. No se reconocen watching/common como alias. Género vacío,
