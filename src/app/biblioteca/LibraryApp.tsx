@@ -3,6 +3,9 @@ import { genreLabels } from "@/lib/library/genres";
 import { canonicalLibrarySearch, libraryFilterString, readLibraryFilters, type SearchFilters } from "@/lib/library/filters";
 import { familyRating, commonMemberLabels } from "@/lib/library/presentation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { AvailabilityDetails, AvailabilityFilters } from "./AvailabilityView";
+const AvailabilityTools = dynamic(() => import("./AvailabilityTools"));
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KIND_LABELS, STATUS_LABELS } from "@/lib/library/types";
@@ -27,6 +30,8 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
   const [filters, setFilters] = useState(libraryFilterString(initialFilters));
   const [genre, setGenre] = useState(initialFilters.genre);
   const [withMember, setWithMember] = useState(initialFilters.withMember);
+  const [availabilityPlatforms, setAvailabilityPlatforms] = useState<string[]>(initialFilters.platforms ?? []);
+  const [free, setFree] = useState(initialFilters.free ?? false);
   const [filterNotice, setFilterNotice] = useState("");
   const [searchAnnouncement, setSearchAnnouncement] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
@@ -44,6 +49,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
     if (debounce.current) clearTimeout(debounce.current);
     setSearchAnnouncement("");
     setSearch(next.q); setView(next.view); setStatus(next.status); setArchived(next.archived); setGenre(next.genre); setWithMember(next.withMember);
+    setAvailabilityPlatforms(next.platforms ?? []); setFree(next.free ?? false);
     lastAppliedSearch.current = next.q;
     const url = new URL(window.location.href);
     url.search = canonicalLibrarySearch(url.searchParams, next);
@@ -91,7 +97,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
     window.addEventListener("popstate", onPopState);
     return () => { window.removeEventListener("popstate", onPopState); if (debounce.current) clearTimeout(debounce.current); };
   }, []);
-  const applyCurrent = (q: string, nextView = view, nextStatus = status, nextArchived = archived, nextGenre = genre, nextMember = withMember) => { setFilterNotice(""); writeSearch({ q: (composingRef.current ? lastAppliedSearch.current : q).trim(), view: nextView, status: nextStatus, archived: nextArchived, genre: nextGenre, withMember: nextMember }); };
+  const applyCurrent = (q: string, nextView = view, nextStatus = status, nextArchived = archived, nextGenre = genre, nextMember = withMember, nextPlatforms = availabilityPlatforms, nextFree = free) => { setFilterNotice(""); writeSearch({ q: (composingRef.current ? lastAppliedSearch.current : q).trim(), view: nextView, status: nextStatus, archived: nextArchived, genre: nextGenre, withMember: nextMember, platforms: nextPlatforms, free: nextFree }); };
   return <main className={styles.page}>
     <header className={styles.header}><Link className={styles.brand} href="/">family utils</Link><nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/cinemateca" aria-current="page">Cinemateca</Link><Link href="/familia">Mi familia</Link></nav></header>
     {workId && <Link className={styles.back} href="/cinemateca">← Volver a la cinemateca</Link>}
@@ -120,13 +126,14 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
             <button type="button" aria-pressed={archived === "true"} onClick={() => applyCurrent(search, view, status, "true")}>Archivadas</button>
           </div>
         </div>
-        {(search || view || status || archived || genre) && <div className={styles.filterExtras}>
-          <button type="button" className={styles.clearFilters} onClick={() => { applyCurrent("", "", "", "", "", ""); searchInput.current?.focus(); }}>Limpiar filtros</button>
+        {(search || view || status || archived || genre || availabilityPlatforms.length > 0 || free) && <div className={styles.filterExtras}>
+          <button type="button" className={styles.clearFilters} onClick={() => { applyCurrent("", "", "", "", "", "", [], false); searchInput.current?.focus(); }}>Limpiar filtros</button>
         </div>}
         {archived && <p className={styles.filterHelp}>Estás viendo las películas archivadas. Podés restaurarlas desde su ficha.</p>}
         {selectedMember && <p className={styles.filterHelp}>Vos y {selectedMember.label} quieren ver estas películas.</p>}
         {view === "common_pending" && <p className={styles.filterHelp}>Todos los integrantes activos las marcaron como Quiero ver.</p>}
       </form>
+      {data.availabilityEnabled && <div className={styles.availabilityControls}>{data.availabilitySummary && <AvailabilityFilters summary={data.availabilitySummary} selected={availabilityPlatforms} free={free} onChange={(platforms, nextFree) => applyCurrent(search, view, status, archived, genre, withMember, platforms, nextFree)} />}<AvailabilityTools canManage={data.canManagePlatforms ?? false} onSaved={library.refresh} /></div>}
       <p className={styles.srStatus} role="status" aria-live="polite" aria-atomic="true">{loading ? searchAnnouncement : resultAnnouncement}</p>
       {data.works.length ? <ul className={styles.grid}>{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
       {data.nextCursor && <button disabled={loading} onClick={() => void library.more()}>{loading ? "Cargando…" : "Cargar más películas"}</button>}
@@ -142,6 +149,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
       <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.runtimeMinutes != null && <p>Duración: <Runtime minutes={work.runtimeMinutes} /></p>}{work.genres.length > 0 && <p>{genreLabels(work.genres).join(" · ")}</p>}</section>
       {work.synopsis && <section className={styles.card}><h2>Sinopsis</h2><p className={styles.body}>{work.synopsis}</p></section>}
       {work.cast.length > 0 && <section className={styles.card}><h2>Reparto</h2><ol className={styles.detailCast}>{work.cast.map(name => <li key={name}>{name}</li>)}</ol></section>}
+      {data.availabilityEnabled && work.availability && <section className={styles.card}><h2>Dónde verla en Argentina</h2><AvailabilityDetails value={work.availability} />{!work.archivedAt && <AvailabilityTools key={`${data.familyId}:${data.currentMemberId}:${work.id}:availability`} workId={work.id} value={work.availability} canManage={data.canManagePlatforms ?? false} onSaved={library.refresh} />}</section>}
       <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} issue={library.operationIssue} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
       <section className={styles.card}><h2>Las miradas de la familia</h2><p>{familyRating(work.personal)}</p>{work.personal.length ? <ul>{work.personal.map((entry) => <li key={entry.memberId}><strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>: {entry.status ? STATUS_LABELS[entry.status] : "Sin estado"} · {entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</li>)}</ul> : <p>Todavía no hay estados ni valoraciones.</p>}</section>
       {"contributions" in data && <Contributions data={data} issue={library.operationIssue} busy={busy} loading={loading} save={library.mutate} more={library.more} />}

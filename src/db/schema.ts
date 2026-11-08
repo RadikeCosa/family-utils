@@ -1007,3 +1007,166 @@ export const recipeShoppingOperations = pgTable("recipe_shopping_operations", {
   result: jsonb("result").$type<{ listId: string; added: number; edited: number }>().notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, table => [foreignKey({ columns: [table.memberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "recipe_shopping_operations_member_family_fk" }).onDelete("cascade"), uniqueIndex("recipe_shopping_operations_unique").on(table.familyId, table.operationId), index("recipe_shopping_operations_expiry_idx").on(table.expiresAt)]);
+
+// Availability is family-scoped and independent of personal entries and movie edits.
+export const streamingPlatforms = pgTable(
+  "streaming_platforms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    familyId: uuid("family_id")
+      .notNull()
+      .references(() => families.id),
+    name: text("name").notNull(),
+    modes: text("modes").array().notNull(),
+    coverage: text("coverage").notNull().default("pending"),
+    coverageSources: text("coverage_sources")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    requiresChannel: boolean("requires_channel").notNull().default(false),
+    version: integer("version").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("streaming_platforms_id_family").on(t.id, t.familyId),
+    check("streaming_platforms_name", sql`char_length(btrim(${t.name})) BETWEEN 1 AND 100`),
+    check(
+      "streaming_platforms_modes",
+      sql`cardinality(${t.modes}) BETWEEN 1 AND 3 AND array_ndims(${t.modes})=1 AND ${t.modes} <@ ARRAY['subscription','free','free_with_ads']::text[] AND array_position(${t.modes},NULL) IS NULL AND cardinality(${t.modes})=num_nonnulls(array_position(${t.modes},'subscription'),array_position(${t.modes},'free'),array_position(${t.modes},'free_with_ads'))`,
+    ),
+    check(
+      "streaming_platforms_coverage",
+      sql`${t.coverage} IN ('pending','verified','unavailable') AND (${t.coverage}<>'verified' OR cardinality(${t.coverageSources})>0)`,
+    ),
+    check("streaming_platforms_version", sql`${t.version}>0`),
+    check("streaming_platforms_sources", sql`availability_urls_valid(${t.coverageSources},true)`),
+  ],
+);
+export const streamingPlatformAliases = pgTable(
+  "streaming_platform_aliases",
+  {
+    familyId: uuid("family_id").notNull(),
+    platformId: uuid("platform_id").notNull(),
+    alias: text("alias").notNull(),
+    normalizedAlias: text("normalized_alias").notNull(),
+  },
+  (t) => [
+    uniqueIndex("streaming_alias_family_unique").on(t.familyId, t.normalizedAlias),
+    foreignKey({
+      columns: [t.platformId, t.familyId],
+      foreignColumns: [streamingPlatforms.id, streamingPlatforms.familyId],
+    }),
+    check(
+      "streaming_alias_length",
+      sql`char_length(btrim(${t.alias})) BETWEEN 1 AND 100 AND char_length(btrim(${t.normalizedAlias})) BETWEEN 1 AND 100`,
+    ),
+  ],
+);
+export const libraryPlatformChecks = pgTable(
+  "library_platform_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    familyId: uuid("family_id").notNull(),
+    workId: uuid("work_id").notNull(),
+    platformId: uuid("platform_id").notNull(),
+    country: text("country").notNull().default("AR"),
+    checkedOn: date("checked_on").notNull(),
+    sourceUrls: text("source_urls").array().notNull(),
+    version: integer("version").notNull().default(1),
+    updatedByMemberId: uuid("updated_by_member_id").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("library_checks_identity").on(t.familyId, t.workId, t.country, t.platformId),
+    uniqueIndex("library_checks_id_family").on(t.id, t.familyId),
+    foreignKey({ columns: [t.workId, t.familyId], foreignColumns: [libraryWorks.id, libraryWorks.familyId] }),
+    foreignKey({
+      columns: [t.platformId, t.familyId],
+      foreignColumns: [streamingPlatforms.id, streamingPlatforms.familyId],
+    }),
+    foreignKey({
+      columns: [t.updatedByMemberId, t.familyId],
+      foreignColumns: [members.id, members.familyId],
+    }),
+    check("library_checks_country", sql`${t.country}='AR'`),
+    check(
+      "library_checks_date",
+      sql`${t.checkedOn} BETWEEN DATE '0001-01-01' AND (CURRENT_TIMESTAMP AT TIME ZONE 'America/Argentina/Buenos_Aires')::date`,
+    ),
+    check("library_checks_sources", sql`availability_urls_valid(${t.sourceUrls},false)`),
+    check("library_checks_version", sql`${t.version}>0`),
+  ],
+);
+export const libraryStreamingOffers = pgTable(
+  "library_streaming_offers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    familyId: uuid("family_id").notNull(),
+    checkId: uuid("check_id").notNull(),
+    mode: text("mode").notNull(),
+    sourceUrls: text("source_urls").array().notNull(),
+    linkKind: text("link_kind").notNull(),
+    url: text("url"),
+    directVerifiedOn: date("direct_verified_on"),
+    channel: jsonb("channel").$type<import("@/lib/library/availability").Channel>(),
+  },
+  (t) => [
+    uniqueIndex("library_offers_check_mode").on(t.checkId, t.mode),
+    foreignKey({
+      columns: [t.checkId, t.familyId],
+      foreignColumns: [libraryPlatformChecks.id, libraryPlatformChecks.familyId],
+    }),
+    check("library_offers_mode", sql`${t.mode} IN ('subscription','free','free_with_ads')`),
+    check("library_offers_sources", sql`availability_urls_valid(${t.sourceUrls},false)`),
+    check(
+      "library_offers_link",
+      sql`(${t.linkKind}='none' AND ${t.url} IS NULL AND ${t.directVerifiedOn} IS NULL) OR (${t.linkKind}='aggregator' AND ${t.url} IS NOT NULL AND availability_urls_valid(ARRAY[${t.url}],false) AND ${t.directVerifiedOn} IS NULL) OR (${t.linkKind}='direct' AND ${t.url} IS NOT NULL AND availability_urls_valid(ARRAY[${t.url}],false) AND ${t.directVerifiedOn} IS NOT NULL)`,
+    ),
+    check("library_offers_channel", sql`${t.channel} IS NULL OR availability_channel_valid(${t.channel})`),
+  ],
+);
+export const libraryAvailabilityProposals = pgTable(
+  "library_availability_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    familyId: uuid("family_id").notNull(),
+    memberId: uuid("member_id").notNull(),
+    proposalHash: text("proposal_hash").notNull(),
+    payload: jsonb("payload").$type<import("@/lib/library/availability").ProposalMovie[]>().notNull(),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("availability_proposals_owner").on(t.id, t.familyId, t.memberId),
+    foreignKey({ columns: [t.memberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+    check("availability_proposal_hash", sql`${t.proposalHash} ~ '^[a-f0-9]{64}$'`),
+    check("availability_proposal_expiry", sql`${t.expiresAt}>${t.createdAt}`),
+  ],
+);
+export const libraryAvailabilityOperations = pgTable(
+  "library_availability_operations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    familyId: uuid("family_id").notNull(),
+    memberId: uuid("member_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    previewId: uuid("preview_id").notNull(),
+    results: jsonb("results")
+      .$type<Record<string, import("@/lib/library/availability").CommitResult>>()
+      .notNull()
+      .default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("availability_operations_key").on(t.familyId, t.memberId, t.idempotencyKey),
+    foreignKey({
+      columns: [t.previewId, t.familyId, t.memberId],
+      foreignColumns: [
+        libraryAvailabilityProposals.id,
+        libraryAvailabilityProposals.familyId,
+        libraryAvailabilityProposals.memberId,
+      ],
+    }),
+  ],
+);

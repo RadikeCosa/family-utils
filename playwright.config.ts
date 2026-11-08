@@ -15,7 +15,7 @@ export default defineConfig({
   projects: [
     { name: "iPhone viewport", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
     { name: "Android viewport", use: { ...devices["Pixel 7"], defaultBrowserType: "chromium" } },
-    { name: "WebKit iPhone viewport", testMatch: /library\.spec\.ts/, use: { ...devices["iPhone 13"], defaultBrowserType: "webkit" } },
+    { name: "WebKit iPhone viewport", testMatch: /(library|availability)\.spec\.ts/, use: { ...devices["iPhone 13"], defaultBrowserType: "webkit" } },
     { name: "Desktop Chromium", testMatch: /sports\.spec\.ts/, use: { viewport: { width: 1365, height: 900 }, defaultBrowserType: "chromium" } },
   ],
   webServer: {
@@ -31,6 +31,7 @@ export default defineConfig({
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
       BETTER_AUTH_URL: baseURL,
       LIBRARY_ENABLED: "true",
+      LIBRARY_AVAILABILITY_ENABLED: "true",
       TRAINING_ENABLED: "true",
       TRAINING_OPTIONAL_METRICS_ENABLED: "true",
       TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true",
