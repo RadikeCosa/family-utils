@@ -62,7 +62,7 @@ test("cinemateca migration is atomic, times out on locks, and compensation resto
       await client.query("COMMIT");
     } finally { client.release(); }
     assert.equal(await constraint(), original);
-    assert.deepEqual((await pool.query("SELECT * FROM library_works WHERE id=$1", [work])).rows, sentinel.map(row => ({ ...row, genres: [] })));
+    assert.deepEqual((await pool.query("SELECT * FROM library_works WHERE id=$1", [work])).rows, sentinel.map(row => ({ ...row, genres: [], runtime_minutes: null, cast: [], synopsis: null })));
     for (const kind of ["movie", "series", "book", "music", "art", "video_game", "tabletop_game"]) await pool.query("UPDATE library_works SET kind=$1 WHERE id=$2", [kind, work]);
     await assert.rejects(pool.query("UPDATE library_works SET kind='unknown' WHERE id=$1", [work]), { code: "23514" });
   } finally {
@@ -156,7 +156,7 @@ test("genre migration preserves data, enforces the catalog and fails atomically 
       assert.deepEqual(await snapshot(), before);
     } finally { await blocker.query("ROLLBACK"); blocker.release(); }
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
-    assert.deepEqual(await snapshot(), { ...before, work: { ...before.work, genres: [] } });
+    assert.deepEqual(await snapshot(), { ...before, work: { ...before.work, genres: [], runtime_minutes: null, cast: [], synopsis: null } });
     const definition = (await pool.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname='library_works_genres'")).rows[0].def;
     const literals = [...definition.matchAll(/'([^']*)'/g)].map(match => match[1]);
     assert.deepEqual([...new Set(literals)].sort(), GENRES.map(g => g.id).sort());

@@ -6,9 +6,9 @@ import pg from "pg";
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) throw new Error("FAMILY_UTILS_TEST_DATABASE_URL required");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function start(port, enabled) {
+async function start(port, enabled, root = process.cwd()) {
   const origin = `http://localhost:${port}`;
-  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, LIBRARY_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "library-test-only-secret-not-production", CODE_PEPPER: "library-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore" });
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: connectionString, LIBRARY_ENABLED: enabled ? "true" : "false", BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "library-test-only-secret-not-production", CODE_PEPPER: "library-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: "ignore", cwd: root });
   for (let i = 0; ; i++) {
     if (server.exitCode !== null) throw new Error("Library test server failed");
     try { if ((await fetch(origin)).ok) break; } catch { /* Wait for listening. */ }
@@ -178,6 +178,37 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       await ok(owner, `/${id}`, "PATCH", { action: "edit", title: initial.title, referenceUrl: initial.referenceUrl, genres: [], expectedVersion: (await read()).version });
       assert.deepEqual((await read()).genres, []);
       assert.ok((await ok(owner, "?genre=none")).works.some(w => w.id === id));
+    });
+    await t.test("metadata omission, clearing, validation, ETags and old clients preserve new columns", async () => {
+      const id = (await ok(owner, "", "POST", { title: "Metadata contracts", runtimeMinutes: 148, cast: ["  Jose\u0301   Pérez ", "JOSÉ PÉREZ", "Ana"], synopsis: " \r\nUno\r\nDos\rTres " })).id;
+      const read = async () => (await ok(owner, `/${id}`)).work;
+      let current = await read();
+      assert.equal(current.runtimeMinutes, 148); assert.deepEqual(current.cast, ["José Pérez", "Ana"]); assert.equal(current.synopsis, "Uno\nDos\nTres");
+      const state = await request(owner, `/${id}`);
+      assert.match(state.etag, /library-v3-/);
+      const oldEtag = state.etag.replace("library-v3-", "library-v2-");
+      const refreshed = await request(owner, `/${id}`, "GET", undefined, { "If-None-Match": oldEtag });
+      assert.equal(refreshed.status, 200); assert.equal(refreshed.body.work.runtimeMinutes, 148);
+      assert.equal((await request(owner, `/${id}`, "GET", undefined, { "If-None-Match": state.etag })).status, 304);
+      const legacyPayload = { action: "edit", title: "Old client changes title", creator: null, year: null, referenceUrl: null, expectedVersion: current.version };
+      await ok(owner, `/${id}`, "PATCH", legacyPayload);
+      current = await read(); assert.equal(current.runtimeMinutes,148); assert.deepEqual(current.cast,["José Pérez","Ana"]); assert.equal(current.synopsis,"Uno\nDos\nTres");
+      assert.equal((await request(owner, `/${id}`, "PATCH", legacyPayload)).status,409);
+      for (const data of [{runtimeMinutes:""},{runtimeMinutes:0},{runtimeMinutes:1441},{runtimeMinutes:1.5},{cast:null},{cast:[""]},{cast:Array.from({length:31},(_,i)=>`Actor ${i}`)},{synopsis:"a".repeat(5001)}]) assert.equal((await request(owner,"","POST",{title:"Invalid metadata",...data})).status,400);
+      if (process.env.LIBRARY_LEGACY_ROOT) {
+        const legacy = await start(3342,true,process.env.LIBRARY_LEGACY_ROOT);
+        try {
+          const response = await fetch(`${legacy.origin}/api/library/${id}`, {headers:{Cookie:owner.cookie}});
+          assert.equal(response.status,200); const oldBody = await response.json();
+          assert.equal(oldBody.work.title,current.title);
+          const edited = await fetch(`${legacy.origin}/api/library/${id}`,{method:"PATCH",headers:{Cookie:owner.cookie,Origin:legacy.origin,"Content-Type":"application/json"},body:JSON.stringify({...legacyPayload,title:"Actual old code",expectedVersion:current.version})});
+          assert.equal(edited.status,200); current=await read(); assert.equal(current.runtimeMinutes,148); assert.deepEqual(current.cast,["José Pérez","Ana"]); assert.equal(current.synopsis,"Uno\nDos\nTres");
+        } finally { legacy.server.kill(); }
+      }
+      await ok(owner,`/${id}`,"PATCH",{action:"edit",title:current.title,runtimeMinutes:null,cast:[],synopsis:" \r\n ",expectedVersion:current.version});
+      current=await read(); assert.equal(current.runtimeMinutes,null); assert.deepEqual(current.cast,[]); assert.equal(current.synopsis,null);
+      const minimal=(await ok(owner,"","POST",{title:"Empty metadata defaults"})).id;
+      const empty=(await ok(owner,`/${minimal}`)).work; assert.equal(empty.runtimeMinutes,null); assert.deepEqual(empty.cast,[]); assert.equal(empty.synopsis,null);
     });
     await t.test("duplicate warnings, shared edits, conflicts and archive rules", async () => {
       const duplicate = await request(peer, "", "POST", { title: " CANCION del verano ", kind: "movie" });

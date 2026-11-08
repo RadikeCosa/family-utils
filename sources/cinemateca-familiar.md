@@ -123,3 +123,6 @@ El [pulido de UX/UI](./cinemateca-ux.md) describe la colección compacta, estrel
 acompañantes plegables y validación de formularios sin cambios de API ni esquema.
 
 El cambio posterior de filtros, géneros y valoración está documentado en [cinemateca-generos.md](./cinemateca-generos.md).
+
+La [ampliación de datos y formulario manual](./cinemateca-datos.md) incorpora
+duración, reparto y sinopsis, con contratos compatibles y migración aditiva.

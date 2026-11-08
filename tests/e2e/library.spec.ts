@@ -198,7 +198,7 @@ test("editing compares current values before accepting a newer version", async (
   await expect(page.getByRole("heading", { name: "El contenido cambió mientras lo editabas" })).toBeVisible();
   await expect(page.getByText("Mi borrador nuevo", { exact: true })).toBeVisible();
   await expect(page.getByRole("dialog").getByText("Título actualizado", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Revisé los cambios: conservar mi borrador" }).click();
+  await page.getByRole("button", { name: "Conservar mi borrador" }).click();
   await page.getByRole("button", { name: "Guardar cambios" }).click();
   await expect(page.getByRole("heading", { name: "Mi borrador nuevo" })).toBeFocused();
 });
@@ -501,8 +501,11 @@ test("contribution dates focus and describe the invalid field before publishing"
   await page.getByRole("button", { name: "Publicar aporte", exact: true }).click();
   await expect(day).toBeFocused(); await expect(day).toHaveAttribute("aria-invalid", "true");
   await day.fill("29"); await expect(day).toHaveAttribute("aria-invalid", "false");
+  const published = page.waitForResponse(response => new URL(response.url()).pathname === `/api/library/${id}/contributions` && response.request().method() === "POST");
   await page.getByRole("button", { name: "Publicar aporte", exact: true }).click();
-  await expect(page.getByText("Un recuerdo", { exact: true })).toBeVisible();
+  expect((await published).status()).toBe(201);
+  await expect(page.getByRole("listitem").getByText("Un recuerdo", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Tu aporte", { exact: true })).toHaveValue("");
 });
 
 test("text enlargement, forced colors, long names and touch targets remain usable", async ({ page, browserName }, testInfo) => {
@@ -577,10 +580,10 @@ test("genre form preserves selections through drafts and edits, wraps labels and
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto("/cinemateca"); await page.getByRole("button", { name: "Agregar película", exact: true }).click();
   const dialog = page.getByRole("dialog"); await dialog.getByLabel(/^Título/).fill("Géneros compartidos");
-  const genres = dialog.locator("details"); await expect(genres).not.toHaveAttribute("open", "");
+  const genres = dialog.locator("details").filter({ hasText: "Elegir géneros" }); await expect(genres).not.toHaveAttribute("open", "");
   await genres.locator("summary").click();
   for (const label of ["Terror", "Drama", "Ciencia ficción"]) await genres.getByLabel(label, { exact: true }).check();
-  await expect(genres.locator("summary")).toContainText("Ciencia ficción, Drama +1");
+  await expect(dialog.getByRole("region", { name: "Géneros", exact: true })).toContainText("Ciencia ficciónDramaTerror");
   const labels = genres.locator("label");
   const columns = await labels.evaluateAll(elements => new Set(elements.map(e => Math.round(e.getBoundingClientRect().x))).size);
   expect(columns).toBe(2);
@@ -591,12 +594,12 @@ test("genre form preserves selections through drafts and edits, wraps labels and
   await page.screenshot({ path: testInfo.outputPath("generos-texto-200.png"), fullPage: false });
   await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
   await page.reload(); await page.getByRole("button", { name: "Agregar película", exact: true }).click();
-  await expect(genres.locator("summary")).toContainText("Ciencia ficción, Drama +1");
+  await expect(dialog.getByRole("region", { name: "Géneros", exact: true })).toContainText("Ciencia ficciónDramaTerror");
   await expect(genres).not.toHaveAttribute("open", "");
   await dialog.getByRole("button", { name: "Agregar película", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Géneros compartidos", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Editar datos", exact: true }).click();
-  await expect(genres.locator("summary")).toContainText("Ciencia ficción, Drama +1");
+  await expect(dialog.getByRole("region", { name: "Géneros", exact: true })).toContainText("Ciencia ficciónDramaTerror");
   await genres.locator("summary").click(); await expect(genres.getByLabel("Drama", { exact: true })).toBeChecked();
   await genres.getByLabel("Drama", { exact: true }).uncheck();
   await dialog.getByRole("button", { name: "Guardar cambios", exact: true }).click();
@@ -659,7 +662,7 @@ test("two clients preserve an updated hidden link through conflict review and re
   await page.getByRole("button", { name: "Editar datos", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByLabel(/^Título/)).toHaveValue("Mi título local");
-  await expect(dialog.locator("summary")).toContainText("Drama");
+  await expect(dialog.getByRole("region", { name: "Géneros", exact: true })).toContainText("Drama");
   await expect(dialog.getByLabel("Enlace", { exact: true })).toHaveCount(0);
   const changed = await api.patch(`/api/library/${id}`, { data: { action: "edit", title: "Enlace conservado", referenceUrl: "https://example.com/new", expectedVersion: 1 } }); expect(changed.status()).toBe(200);
   await dialog.getByRole("button", { name: "Guardar cambios", exact: true }).click();
@@ -667,7 +670,7 @@ test("two clients preserve an updated hidden link through conflict review and re
   await expect(dialog.getByRole("button", { name: "Guardar cambios", exact: true })).toBeDisabled();
   let saved = (await (await api.get(`/api/library/${id}`)).json()).work;
   expect(saved.title).toBe("Enlace conservado"); expect(saved.referenceUrl).toBe("https://example.com/new"); expect(saved.genres).toEqual(["drama"]);
-  await dialog.getByRole("button", { name: "Revisé los cambios: conservar mi borrador", exact: true }).click();
+  await dialog.getByRole("button", { name: "Conservar mi borrador", exact: true }).click();
   await dialog.getByRole("button", { name: "Guardar cambios", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Mi título local", exact: true })).toBeVisible();
   saved = (await (await api.get(`/api/library/${id}`)).json()).work;
@@ -767,4 +770,165 @@ test("quick filters and movie cards reflow with enlarged text and keyboard focus
     await page.emulateMedia({ forcedColors: "none" });
   }
   expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+});
+
+test("manual movie form restores partial metadata, commits pending cast and shows genre badges", async ({ page }, testInfo) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.goto("/cinemateca");
+  await page.getByRole("button",{name:"Agregar película",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await expect(dialog.getByRole("heading",{name:"Agregar película",exact:true})).toBeFocused();
+  await expect(dialog.getByRole("button",{name:"Descartar borrador",exact:true})).toHaveCount(0);
+  await dialog.getByLabel(/^Título/).fill("Una historia completa");
+  await dialog.getByLabel("Director/a",{exact:true}).fill("Una directora");
+  await dialog.getByLabel("Año de estreno",{exact:true}).fill("2020");
+  await dialog.getByLabel("Duración (minutos)",{exact:true}).fill("148");
+  await page.screenshot({path:testInfo.outputPath("formulario-manual-390.png"),fullPage:false});
+  const more=dialog.locator("details").filter({hasText:"Sinopsis y reparto"});
+  await expect(more).not.toHaveAttribute("open","");
+  await more.locator("summary").click();
+  await dialog.getByRole("textbox",{name:"Sinopsis",exact:true}).fill("Una historia\ncon sorpresas.");
+  const cast=dialog.getByRole("textbox",{name:"Nombres del reparto",exact:true});
+  await cast.fill("  Jose\u0301   Pérez\nJOSÉ PÉREZ\nAna");
+  await dialog.getByRole("button",{name:"Agregar nombres",exact:true}).click();
+  await expect(dialog.getByText("Se omitió 1 nombre duplicado.",{exact:true})).toBeVisible();
+  await expect(dialog.getByRole("button",{name:"Quitar del reparto: José Pérez",exact:true})).toBeVisible();
+  await cast.fill("Un nombre pendiente");
+  await dialog.getByRole("button",{name:"Cerrar",exact:true}).click();
+  await page.reload(); await page.getByRole("button",{name:"Agregar película",exact:true}).click();
+  await expect(dialog.getByLabel("Duración (minutos)",{exact:true})).toHaveValue("148");
+  await more.locator("summary").click();
+  await expect(cast).toHaveValue("Un nombre pendiente");
+  await expect(dialog.getByRole("textbox",{name:"Sinopsis",exact:true})).toHaveValue("Una historia\ncon sorpresas.");
+  await dialog.locator("summary").filter({hasText:"Elegir géneros"}).click();
+  for(const label of ["Ciencia ficción","Drama"]) await dialog.getByLabel(label,{exact:true}).check();
+  await dialog.locator("summary").filter({hasText:"Elegir géneros"}).click();
+  await dialog.locator("form").evaluate(element=>{element.scrollTop=0;});
+  await page.screenshot({path:testInfo.outputPath("formulario-datos-completos.png"),fullPage:false});
+  expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+  await dialog.getByRole("button",{name:"Agregar película",exact:true}).click();
+  await expect(page).toHaveURL(/\/cinemateca\/[a-f0-9-]+$/);
+  await expect(page.getByRole("heading",{name:"Una historia completa",level:1,exact:true})).toBeVisible();
+  const id=page.url().split("/").at(-1);
+  const saved=(await(await api.get(`/api/library/${id}`)).json()).work;
+  expect(saved.runtimeMinutes).toBe(148); expect(saved.cast).toEqual(["José Pérez","Ana","Un nombre pendiente"]); expect(saved.synopsis).toBe("Una historia\ncon sorpresas.");
+  await expect(page.getByRole("heading",{name:"Sinopsis",exact:true})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Reparto",exact:true})).toBeVisible();
+  await expect(page.getByText("2 horas y 28 minutos",{exact:true})).toHaveCount(1);
+  await page.getByRole("link",{name:"← Volver a la cinemateca",exact:true}).click();
+  const card=page.getByRole("link",{name:/Una historia completa/});
+  await expect(card).toContainText("2 h 28 min");
+  await expect(card.locator('[aria-label="Géneros"] > span')).toHaveText(["Ciencia ficción","Drama"]);
+});
+
+test("cast capacity is atomic after deduplication and discarding restores focus", async ({page}) => {
+  const names=Array.from({length:29},(_,index)=>`Actor ${index}`);
+  const id=(await(await api.post("/api/library",{data:{title:"Reparto límite",cast:names}})).json()).id;
+  await page.goto(`/cinemateca/${id}`); await page.getByRole("button",{name:"Editar datos",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await dialog.locator("summary").filter({hasText:"Sinopsis y reparto"}).click();
+  const pending=dialog.getByRole("textbox",{name:"Nombres del reparto",exact:true});
+  await pending.fill("Actor 0\nNuevo A\nNuevo B"); await dialog.getByRole("button",{name:"Agregar nombres",exact:true}).click();
+  await expect(dialog.getByText("Podés agregar hasta 30 integrantes al reparto.",{exact:true})).toBeVisible();
+  await expect(pending).toHaveValue("Actor 0\nNuevo A\nNuevo B");
+  await expect(dialog.getByRole("button",{name:/Quitar del reparto:/})).toHaveCount(29);
+  await pending.fill("Actor 0\nACTOR 1\nNuevo A"); await dialog.getByRole("button",{name:"Agregar nombres",exact:true}).click();
+  await expect(dialog.getByRole("button",{name:/Quitar del reparto:/})).toHaveCount(30);
+  const discard=dialog.getByRole("button",{name:"Descartar borrador",exact:true});
+  await discard.click(); await expect(dialog.getByRole("button",{name:"Seguir editando",exact:true})).toBeFocused();
+  await dialog.getByRole("button",{name:"Seguir editando",exact:true}).click(); await expect(discard).toBeFocused();
+  // Replace the opener as a render would, then verify that restoration finds its current replacement.
+  await page.evaluate(()=>{const button=[...document.querySelectorAll("main > div button")].find(b=>b.textContent==="Editar datos");if(button)button.replaceWith(button.cloneNode(true));});
+  await discard.click(); await dialog.getByRole("button",{name:"Descartar y cerrar",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Editar datos",exact:true})).toBeFocused();
+  expect((await(await api.get(`/api/library/${id}`)).json()).work.cast).toEqual(names);
+});
+
+test("metadata errors open their section and counters announce thresholds only", async ({page}) => {
+  await page.goto("/cinemateca"); await page.getByRole("button",{name:"Agregar película",exact:true}).click();
+  const dialog=page.getByRole("dialog"); await dialog.getByLabel(/^Título/).fill("Errores de metadatos");
+  const section=dialog.locator("details").filter({hasText:"Sinopsis y reparto"});
+  await section.locator("summary").click();
+  const synopsis=dialog.getByRole("textbox",{name:"Sinopsis",exact:true});
+  await synopsis.fill("x".repeat(4000)); await expect(dialog.getByRole("status").filter({hasText:"Sinopsis: 4000 de 5000."})).toBeAttached();
+  await synopsis.fill("x".repeat(4001)); await expect(dialog.getByRole("status").filter({hasText:/Sinopsis:/})).toHaveCount(0);
+  await synopsis.fill("x".repeat(5000)); await expect(dialog.getByRole("status").filter({hasText:"Sinopsis: 5000 de 5000."})).toBeAttached();
+  await synopsis.fill("x".repeat(5001)); await section.locator("summary").click();
+  await dialog.getByRole("button",{name:"Agregar película",exact:true}).click();
+  await expect(section).toHaveAttribute("open",""); await expect(synopsis).toBeFocused();
+  await expect(synopsis).toHaveAttribute("aria-describedby",/work-error-synopsis/);
+  await expect(dialog.getByRole("alert")).toContainText("Revisá el campo indicado");
+  await synopsis.fill("Breve");
+  const pending=dialog.getByRole("textbox",{name:"Nombres del reparto",exact:true});
+  await pending.fill("a".repeat(201)); await section.locator("summary").click();
+  await dialog.getByRole("button",{name:"Agregar película",exact:true}).click(); await expect(pending).toBeFocused();
+  await pending.fill("Ana"); await dialog.getByLabel("Duración (minutos)",{exact:true}).fill("0");
+  await dialog.getByRole("button",{name:"Agregar película",exact:true}).click();
+  await expect(dialog.getByLabel("Duración (minutos)",{exact:true})).toBeFocused();
+});
+
+test("metadata drafts in independent tabs do not read or overwrite one another", async ({page,context}) => {
+  await page.goto("/cinemateca"); await page.getByRole("button",{name:"Agregar película",exact:true}).click();
+  await page.getByRole("dialog").getByLabel(/^Título/).fill("Borrador primera pestaña");
+  await page.getByRole("dialog").locator("summary").filter({hasText:"Sinopsis y reparto"}).click();
+  await page.getByRole("textbox",{name:"Sinopsis",exact:true}).fill("Sinopsis primera");
+  const other=await context.newPage();
+  try {
+    await other.goto("/cinemateca"); await other.getByRole("button",{name:"Agregar película",exact:true}).click();
+    await expect(other.getByRole("dialog").getByLabel(/^Título/)).toHaveValue("");
+    await other.getByRole("dialog").getByLabel(/^Título/).fill("Borrador segunda pestaña");
+    await page.reload(); await page.getByRole("button",{name:"Agregar película",exact:true}).click();
+    await expect(page.getByRole("dialog").getByLabel(/^Título/)).toHaveValue("Borrador primera pestaña");
+    await page.getByRole("dialog").locator("summary").filter({hasText:"Sinopsis y reparto"}).click();
+    await expect(page.getByRole("textbox",{name:"Sinopsis",exact:true})).toHaveValue("Sinopsis primera");
+    await other.reload(); await other.getByRole("button",{name:"Agregar película",exact:true}).click();
+    await expect(other.getByRole("dialog").getByLabel(/^Título/)).toHaveValue("Borrador segunda pestaña");
+  } finally {await other.close();}
+});
+
+test("conflicts process pending cast and expose server changes in untouched metadata", async ({page}) => {
+  const id=(await(await api.post("/api/library",{data:{title:"Conflictos completos",runtimeMinutes:45,cast:["Ana"],synopsis:"Original"}})).json()).id;
+  await page.goto(`/cinemateca/${id}`); await page.getByRole("button",{name:"Editar datos",exact:true}).click();
+  const dialog=page.getByRole("dialog"); await dialog.getByLabel(/^Título/).fill("Mi título");
+  await dialog.locator("summary").filter({hasText:"Sinopsis y reparto"}).click();
+  await dialog.getByRole("textbox",{name:"Nombres del reparto",exact:true}).fill("Ana\nBea");
+  await api.patch(`/api/library/${id}`,{data:{action:"edit",title:"Conflictos completos",runtimeMinutes:61,cast:["Carla"],synopsis:"Servidor".repeat(100),expectedVersion:1}});
+  await dialog.getByRole("button",{name:"Guardar cambios",exact:true}).click();
+  await expect(dialog.getByRole("heading",{name:"El contenido cambió mientras lo editabas",exact:true})).toBeVisible();
+  await expect(dialog.getByText("Al guardar se reemplazarán todos los datos editables actuales por los de tu borrador, incluidos los campos que no modificaste.",{exact:true})).toBeVisible();
+  const comparison=dialog.locator("section").filter({has:page.getByRole("heading",{name:"Reparto · cambió",exact:true})}).last();
+  await expect(comparison).toContainText("Ana"); await expect(comparison).toContainText("Bea"); await expect(comparison).toContainText("Carla");
+  await expect(dialog.getByRole("heading",{name:"Duración (minutos) · cambió",exact:true})).toBeVisible();
+  const pendingCast=dialog.getByRole("textbox",{name:"Nombres del reparto",exact:true});
+  await pendingCast.fill("x".repeat(201));
+  await expect(dialog.getByRole("button",{name:"Conservar mi borrador",exact:true})).toBeDisabled();
+  await expect(dialog.getByText("Revisá los nombres pendientes del reparto antes de comparar y conservar tu borrador.",{exact:true})).toBeVisible();
+  await pendingCast.fill("");
+  await dialog.getByRole("button",{name:"Conservar mi borrador",exact:true}).click();
+  let saved=(await(await api.get(`/api/library/${id}`)).json()).work; expect(saved.runtimeMinutes).toBe(61);
+  await api.patch(`/api/library/${id}`,{data:{action:"edit",title:saved.title,synopsis:"Otro cambio",expectedVersion:saved.version}});
+  await dialog.getByRole("button",{name:"Guardar cambios",exact:true}).click();
+  await expect(dialog.getByRole("button",{name:"Guardar cambios",exact:true})).toBeDisabled();
+  await dialog.getByRole("button",{name:"Conservar mi borrador",exact:true}).click(); await dialog.getByRole("button",{name:"Guardar cambios",exact:true}).click();
+  await expect(dialog).not.toBeVisible(); saved=(await(await api.get(`/api/library/${id}`)).json()).work;
+  expect(saved.cast).toEqual(["Ana","Bea"]); expect(saved.runtimeMinutes).toBe(45); expect(saved.synopsis).toBe("Original");
+});
+
+test("maximum movie metadata and every genre reflow with enlarged text", async ({page},testInfo) => {
+  const {GENRES}=await import("../../src/lib/library/genres");
+  const id=(await(await api.post("/api/library",{data:{title:"Metadatos completos",runtimeMinutes:1440,genres:GENRES.map(g=>g.id),cast:Array.from({length:30},(_,i)=>`Actor ${i} ${"Nombre".repeat(25)}`),synopsis:"Una historia ".repeat(380)}})).json()).id;
+  await page.goto("/cinemateca");
+  const card=page.getByRole("link",{name:/Metadatos completos/}); await expect(card.locator('[aria-label="Géneros"] > span')).toHaveCount(GENRES.length);
+  await expect(card).toContainText("24 h"); await card.click(); await page.getByRole("button",{name:"Editar datos",exact:true}).click();
+  const dialog=page.getByRole("dialog"); await dialog.locator("summary").filter({hasText:"Sinopsis y reparto"}).click();
+  for(const width of [320,390,768,1280]) {
+    await page.setViewportSize({width,height:900}); await page.evaluate(()=>{document.documentElement.style.fontSize="200%";});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  }
+  await page.evaluate(()=>{document.documentElement.style.fontSize="";}); await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:testInfo.outputPath("formulario-reparto-maximo.png"),fullPage:true});
+  expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+  await dialog.getByRole("button",{name:"Cerrar",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Editar datos",exact:true})).toBeFocused();
+  expect(id).toBeTruthy();
 });

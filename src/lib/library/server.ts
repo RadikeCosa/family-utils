@@ -30,12 +30,12 @@ async function revision(tx: PoolClient, actor: MemberContext) {
 async function profiles(tx: PoolClient, familyId: string) {
   return (await tx.query('SELECT id, name, archived_at AS "archivedAt" FROM members WHERE family_id=$1 ORDER BY created_at,id', [familyId])).rows;
 }
-type WorkRow = { genres: string[]; id: string; family_id: string; title: string; kind: WorkKind; creator: string | null; year: number | null; reference_url: string | null; version: number; archived_at: Date | null; created_at: Date; updated_at: Date; activity_at: string };
+type WorkRow = { runtime_minutes: number | null; cast: string[]; synopsis: string | null; genres: string[]; id: string; family_id: string; title: string; kind: WorkKind; creator: string | null; year: number | null; reference_url: string | null; version: number; archived_at: Date | null; created_at: Date; updated_at: Date; activity_at: string };
 const activitySql = "greatest(w.created_at, coalesce((SELECT max(c.created_at) FROM library_contributions c WHERE c.work_id=w.id), w.created_at))";
 const activityColumn = `to_char(${activitySql} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS activity_at`;
 async function mapWorks(tx: PoolClient, rows: WorkRow[]): Promise<LibraryWork[]> {
   const personalRows = rows.length ? (await tx.query('SELECT work_id,member_id AS "memberId",status,rating,version FROM library_personal WHERE work_id=ANY($1::uuid[])', [rows.map((row) => row.id)])).rows : [];
-  return rows.map((row) => ({ id: row.id, title: row.title, kind: row.kind, genres: normalizeGenres(row.genres), creator: row.creator, year: row.year, referenceUrl: row.reference_url, version: row.version, archivedAt: row.archived_at?.toISOString() ?? null, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), activityAt: row.activity_at,
+  return rows.map((row) => ({ id: row.id, title: row.title, kind: row.kind, genres: normalizeGenres(row.genres), creator: row.creator, year: row.year, referenceUrl: row.reference_url, runtimeMinutes: row.runtime_minutes, cast: row.cast, synopsis: row.synopsis, version: row.version, archivedAt: row.archived_at?.toISOString() ?? null, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(), activityAt: row.activity_at,
     personal: personalRows.filter((entry) => entry.work_id === row.id).map(({ memberId, status, rating, version }) => ({ memberId, status, rating, version }) as PersonalEntry) }));
 }
 export async function readLibrary(request: Request, workId?: string) {
@@ -63,7 +63,7 @@ export async function readLibrary(request: Request, workId?: string) {
     await activeActor(tx, actor);
     const rev = await revision(tx, actor);
     // Version the response shape independently of the pagination scope.
-    const etag = `"library-v2-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
+    const etag = `"library-v3-${cursorScope([scope, actor.memberId, rev.revision, rev.accessRevision, url.searchParams.get("cursor")])}"`;
     const headers = { ETag: etag, "Cache-Control": "private, no-cache", Vary: "Cookie" };
     if (request.headers.get("if-none-match") === etag) { await tx.query("COMMIT"); return new NextResponse(null, { status: 304, headers }); }
     const members = await profiles(tx, actor.familyId);
@@ -198,13 +198,13 @@ export async function mutateLibrary(request: Request, command: "create" | "manag
       const { rows: duplicates } = await tx.query('SELECT id,title,archived_at AS "archivedAt" FROM library_works WHERE family_id=$1 AND kind=$2 AND titulo_normalizado=$3 AND ($4::uuid IS NULL OR id<>$4) ORDER BY created_at DESC,id DESC LIMIT 20', [actor.familyId, input.kind, normalizeLibraryText(input.title), current?.id ?? null]);
       if (duplicates.length) throw new LibraryError(409, "DUPLICATE", "Ya hay contenidos parecidos. Revisá las coincidencias o confirmá que es otro contenido.", { duplicates });
     }
-    const values = [input.title, normalizeLibraryText(input.title), input.kind, input.creator, normalizeLibraryText(input.creator ?? ""), input.year, input.referenceUrl, actor.memberId, input.genres ?? normalizeGenres(current?.genres)];
+    const values = [input.title, normalizeLibraryText(input.title), input.kind, input.creator, normalizeLibraryText(input.creator ?? ""), input.year, input.referenceUrl, actor.memberId, input.genres ?? normalizeGenres(current?.genres), input.runtimeMinutes === undefined ? current?.runtime_minutes ?? null : input.runtimeMinutes, input.cast ?? current?.cast ?? [], input.synopsis === undefined ? current?.synopsis ?? null : input.synopsis];
     let id: string;
     if (current) {
-      await tx.query("UPDATE library_works SET title=$1,titulo_normalizado=$2,kind=$3,creator=$4,creador_normalizado=$5,year=$6,reference_url=$7,updated_by_member_id=$8,genres=$9::text[],updated_at=now(),version=version+1 WHERE id=$10", [...values, workId]);
+      await tx.query("UPDATE library_works SET title=$1,titulo_normalizado=$2,kind=$3,creator=$4,creador_normalizado=$5,year=$6,reference_url=$7,updated_by_member_id=$8,genres=$9::text[],runtime_minutes=$10,\"cast\"=$11::text[],synopsis=$12,updated_at=now(),version=version+1 WHERE id=$13", [...values, workId]);
       id = current.id;
     } else {
-      id = (await tx.query("INSERT INTO library_works(title,titulo_normalizado,kind,creator,creador_normalizado,year,reference_url,created_by_member_id,updated_by_member_id,genres,family_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9::text[],$10) RETURNING id", [...values, actor.familyId])).rows[0].id;
+      id = (await tx.query("INSERT INTO library_works(title,titulo_normalizado,kind,creator,creador_normalizado,year,reference_url,created_by_member_id,updated_by_member_id,genres,runtime_minutes,\"cast\",synopsis,family_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9::text[],$10,$11::text[],$12,$13) RETURNING id", [...values, actor.familyId])).rows[0].id;
     }
     await record(tx, actor, "library_work", id, current ? "edited" : "created");
     await tx.query("COMMIT"); return NextResponse.json({ id }, { status: current ? 200 : 201 });

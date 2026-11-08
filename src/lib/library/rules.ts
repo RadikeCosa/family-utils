@@ -1,3 +1,4 @@
+import { MAX_RUNTIME_MINUTES, MAX_SYNOPSIS_LENGTH, movieTextLength, normalizeCast, normalizeSynopsis } from "./movie-metadata.ts";
 import { genreInput } from "./genres.ts";
 import { PERSONAL_STATUSES, WORK_KINDS, type ExperienceDate, type WorkInput } from "./types.ts";
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,7 +18,16 @@ export function workInput(body: Record<string, unknown>): WorkInput | null {
   }
   const genres = body.genres === undefined ? undefined : genreInput(body.genres);
   if (genres === null) return null;
-  return { title, kind: "movie", creator, year: year as number | null, referenceUrl, ...(genres === undefined ? {} : { genres }) };
+  const runtimeMinutes = body.runtimeMinutes;
+  if (runtimeMinutes !== undefined && runtimeMinutes !== null && (typeof runtimeMinutes !== "number" || !Number.isInteger(runtimeMinutes) || runtimeMinutes < 1 || runtimeMinutes > MAX_RUNTIME_MINUTES)) return null;
+  const cast = body.cast === undefined ? undefined : normalizeCast(body.cast);
+  if (cast?.error) return null;
+  if (body.synopsis !== undefined && body.synopsis !== null && typeof body.synopsis !== "string") return null;
+  const synopsis = typeof body.synopsis === "string" ? normalizeSynopsis(body.synopsis) || null : body.synopsis;
+  if (typeof synopsis === "string" && movieTextLength(synopsis) > MAX_SYNOPSIS_LENGTH) return null;
+  return { title, kind: "movie", creator, year: year as number | null, referenceUrl, ...(genres === undefined ? {} : { genres }),
+    ...(runtimeMinutes === undefined ? {} : { runtimeMinutes: runtimeMinutes as number | null }),
+    ...(cast === undefined ? {} : { cast: cast.names }), ...(synopsis === undefined ? {} : { synopsis: synopsis as string | null }) };
 }
 export function personalInput(body: Record<string, unknown>) {
   if (body.status !== null && !PERSONAL_STATUSES.includes(body.status as never)) return null;

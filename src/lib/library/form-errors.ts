@@ -1,3 +1,4 @@
+import { appendCast, MAX_RUNTIME_MINUTES, MAX_SYNOPSIS_LENGTH, movieTextLength, normalizeSynopsis } from "./movie-metadata.ts";
 import { codePointLength, experienceInput, familyDay } from "./rules.ts";
 export type FieldErrors = Record<string, string>;
 export type OperationIssue = { code: string; status: number; path: string };
@@ -13,11 +14,15 @@ const messages: Record<string, string> = {
 export function libraryIssueMessage(code: unknown) {
   return typeof code === "string" && Object.hasOwn(messages, code) ? messages[code] : "No pudimos completar la operación. Conservamos tu borrador. Intentá de nuevo.";
 }
-export function workFieldErrors(draft: { title: string; creator: string; year: string; referenceUrl?: string }): FieldErrors {
+export function workFieldErrors(draft: { title: string; creator: string; year: string; referenceUrl?: string; runtimeMinutes?: string; synopsis?: string; cast?: string[]; castPending?: string }): FieldErrors {
   const errors: FieldErrors = {};
   if (!draft.title.trim() || codePointLength(draft.title.trim()) > 200) errors.title = "Escribí un título de entre 1 y 200 caracteres.";
   if (codePointLength(draft.creator.trim()) > 200) errors.creator = "La dirección admite hasta 200 caracteres.";
   if (draft.year && (!Number.isInteger(Number(draft.year)) || Number(draft.year) < 1 || Number(draft.year) > 9999)) errors.year = "Ingresá un año entero entre 1 y 9999.";
+  if (draft.runtimeMinutes && (!Number.isInteger(Number(draft.runtimeMinutes)) || Number(draft.runtimeMinutes) < 1 || Number(draft.runtimeMinutes) > MAX_RUNTIME_MINUTES)) errors.runtimeMinutes = "Ingresá una duración entera entre 1 y 1440 minutos.";
+  if (movieTextLength(normalizeSynopsis(draft.synopsis ?? "")) > MAX_SYNOPSIS_LENGTH) errors.synopsis = "La sinopsis admite hasta 5.000 caracteres.";
+  const cast = appendCast(draft.cast ?? [], draft.castPending ?? "");
+  if (cast.error) errors.castPending = cast.error;
   return errors;
 }
 export function contributionFieldErrors(draft: { body: string; year: string; month: string; day: string }, today = familyDay()): FieldErrors {
