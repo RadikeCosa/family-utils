@@ -501,8 +501,11 @@ test("contribution dates focus and describe the invalid field before publishing"
   await page.getByRole("button", { name: "Publicar aporte", exact: true }).click();
   await expect(day).toBeFocused(); await expect(day).toHaveAttribute("aria-invalid", "true");
   await day.fill("29"); await expect(day).toHaveAttribute("aria-invalid", "false");
+  const published = page.waitForResponse(response => new URL(response.url()).pathname === `/api/library/${id}/contributions` && response.request().method() === "POST");
   await page.getByRole("button", { name: "Publicar aporte", exact: true }).click();
-  await expect(page.getByText("Un recuerdo", { exact: true })).toBeVisible();
+  expect((await published).status()).toBe(201);
+  await expect(page.getByRole("listitem").getByText("Un recuerdo", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Tu aporte", { exact: true })).toHaveValue("");
 });
 
 test("text enlargement, forced colors, long names and touch targets remain usable", async ({ page, browserName }, testInfo) => {
