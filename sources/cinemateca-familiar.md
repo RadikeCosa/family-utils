@@ -129,3 +129,7 @@ duración, reparto y sinopsis, con contratos compatibles y migración aditiva.
 
 La [vista de películas en común por integrante](./cinemateca-pares.md) agrega
 conteos y selección de pares, con recuperación de enlaces y sin migraciones.
+
+La [ficha compacta y las vistas de la colección](./cinemateca-ficha-vistas.md)
+priorizan la valoración y permiten alternar entre tarjetas y lista, conservando
+la preferencia del navegador sin cambios de API o esquema.
