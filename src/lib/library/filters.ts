@@ -1,14 +1,13 @@
 import { isGenre } from "./genres.ts";
 import { PERSONAL_STATUSES, type PersonalStatus } from "./types.ts";
-export type SearchFilters = { q: string; view: string; status: string; archived: string; genre: string; withMember: string; platforms?: string[]; free?: boolean };
+export type SearchFilters = { q: string; view: string; status: string; archived: string; genre: string; withMember: string };
 const filterKeys = ["q", "view", "status", "archived", "genre", "withMember"] as const;
 export function readLibraryFilters(params: URLSearchParams): SearchFilters {
   const view = ["common_pending", "pair_pending"].includes(params.get("view") ?? "") ? params.get("view")! : "";
   const status = params.get("status") ?? "";
   const genres = params.getAll("genre");
   const genre = genres.length === 1 && (genres[0] === "none" || isGenre(genres[0])) ? genres[0] : "";
-  const platforms = [...new Set(params.getAll("platform").map(id=>id.toLowerCase()).filter(id=>/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id)))].sort();
-  return { genre, ...(platforms.length ? { platforms } : {}), ...(params.get("free") === "true" ? { free: true } : {}),
+  return { genre,
     withMember: view === "pair_pending" ? (params.get("withMember") ?? "").toLowerCase() : "",
     q: (params.get("q") ?? "").slice(0, 200), view,
     status: view ? "" : status === "none" || PERSONAL_STATUSES.includes(status as PersonalStatus) ? status : "",
@@ -18,13 +17,11 @@ export function readLibraryFilters(params: URLSearchParams): SearchFilters {
 export function libraryFilterString(value: SearchFilters) {
   const params = new URLSearchParams();
   for (const key of filterKeys) if (value[key]) params.set(key, value[key]);
-  for (const id of [...new Set(value.platforms ?? [])].sort()) params.append("platform",id);
-  if (value.free) params.set("free","true");
   return params.toString();
 }
 export function canonicalLibrarySearch(params: URLSearchParams, filters = readLibraryFilters(params)) {
   const next = new URLSearchParams(params);
-  for (const key of [...filterKeys, "kind", "type", "cursor", "platform", "free"]) next.delete(key);
-  for (const [key, value] of new URLSearchParams(libraryFilterString(filters))) next.append(key, value);
+  for (const key of [...filterKeys, "kind", "type", "cursor"]) next.delete(key);
+  for (const [key, value] of new URLSearchParams(libraryFilterString(filters))) next.set(key, value);
   return next.toString();
 }

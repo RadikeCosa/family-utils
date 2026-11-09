@@ -98,7 +98,7 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       await ok(third, `/${firstId}/personal`, "PUT", { status: "pending", rating: null, expectedVersion: 0 });
       const initial = await request(me, pair);
       assert.equal(initial.status, 200);
-      const previousRepresentation = await request(me, pair, "GET", undefined, { "If-None-Match": initial.etag.replace("library-v5-", "library-v4-") });
+      const previousRepresentation = await request(me, pair, "GET", undefined, { "If-None-Match": initial.etag.replace("library-v4-", "library-v3-") });
       assert.equal(previousRepresentation.status, 200);
       assert.ok(Array.isArray(previousRepresentation.body.commonPendingCounts));
       assert.deepEqual(initial.body.commonPendingCounts, [{ memberId: other.id, count: 51 }, { memberId: third.id, count: 1 }]);
@@ -232,8 +232,8 @@ test("library gates and real authenticated family endpoints", { skip: !connectio
       let current = await read();
       assert.equal(current.runtimeMinutes, 148); assert.deepEqual(current.cast, ["José Pérez", "Ana"]); assert.equal(current.synopsis, "Uno\nDos\nTres");
       const state = await request(owner, `/${id}`);
-      assert.match(state.etag, /library-v5-/);
-      const oldEtag = state.etag.replace("library-v5-", "library-v2-");
+      assert.match(state.etag, /library-v4-/);
+      const oldEtag = state.etag.replace("library-v4-", "library-v2-");
       const refreshed = await request(owner, `/${id}`, "GET", undefined, { "If-None-Match": oldEtag });
       assert.equal(refreshed.status, 200); assert.equal(refreshed.body.work.runtimeMinutes, 148);
       assert.equal((await request(owner, `/${id}`, "GET", undefined, { "If-None-Match": state.etag })).status, 304);

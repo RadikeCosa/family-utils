@@ -3,7 +3,6 @@ import { genreLabels } from "@/lib/library/genres";
 import { familyRating } from "@/lib/library/presentation";
 import { STATUS_LABELS, type LibraryWork } from "@/lib/library/types";
 import Runtime from "./Runtime";
-import { AvailabilityBadges } from "./AvailabilityView";
 import styles from "./library.module.css";
 
 const starPath = "m12 2 3.1 6.3 7 .9-5.1 4.9 1.2 7L12 17.8l-6.2 3.3 1.2-7L1.9 9.2l7-.9Z";
@@ -36,7 +35,6 @@ export default function MovieCard({ work, memberId }: { work: LibraryWork; membe
         <span className={styles.statusBadge} data-status={mine?.status ?? "none"}>{mine?.status ? STATUS_LABELS[mine.status] : "Sin estado"}</span>
         {work.archivedAt && <span className={styles.archiveBadge}>Archivada</span>}
       </div>
-      <AvailabilityBadges value={work.availability} />
       <div className={styles.movieRatings}>
         <RatingDisplay label="Mi valoración" rating={mine?.rating ?? null} description={`Mi valoración: ${mine?.rating} de 5 estrellas`} />
         <RatingDisplay label="Familia" rating={average} description={familyRating(work.personal)} count={ratings.length} />

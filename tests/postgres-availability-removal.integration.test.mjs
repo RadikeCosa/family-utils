@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import pg from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
+if (process.env.CI && !connectionString) throw Error('FAMILY_UTILS_TEST_DATABASE_URL required');
+const removed = ['library_availability_operations','library_availability_proposals','library_streaming_offers','library_platform_checks','streaming_platform_aliases','streaming_platforms'];
+test('availability removal drops only its tables/functions/data and preserves movies, experiences and unrelated audit', {skip: !connectionString && 'isolated PostgreSQL required', timeout: 120000}, async () => {
+ const admin = new pg.Pool({connectionString});
+ const name = `availability_removal_${randomUUID().replaceAll('-','')}`;
+ const folder = await mkdtemp(join(tmpdir(),'availability-removal-'));
+ let pool;
+ try {
+  await admin.query(`CREATE DATABASE "${name}"`);
+  const url = new URL(connectionString);url.pathname=`/${name}`;
+  pool = new pg.Pool({connectionString:url.toString()});
+  const journal=JSON.parse(await readFile('drizzle/meta/_journal.json','utf8'));
+  await mkdir(join(folder,'meta'));
+  const previous=journal.entries.slice(0,-1);
+  await writeFile(join(folder,'meta/_journal.json'),JSON.stringify({...journal,entries:previous}));
+  for(const entry of previous) await writeFile(join(folder,`${entry.tag}.sql`),await readFile(`drizzle/${entry.tag}.sql`));
+  await migrate(drizzle(pool),{migrationsFolder:folder});
+  const f=(await pool.query("INSERT INTO families(name) VALUES('Removal test') RETURNING id")).rows[0].id;
+  const m=(await pool.query("INSERT INTO members(family_id,name) VALUES($1,'Sentinel') RETURNING id",[f])).rows[0].id;
+  const w=(await pool.query("INSERT INTO library_works(family_id,title,titulo_normalizado,kind,creator,year,runtime_minutes,\"cast\",synopsis,created_by_member_id,updated_by_member_id) VALUES($1,'Preserved','preserved','movie','Director',1993,110,ARRAY['Actor'],'Keep this',$2,$2) RETURNING id",[f,m])).rows[0].id;
+  await pool.query("INSERT INTO library_personal(family_id,work_id,member_id,status,rating) VALUES($1,$2,$3,'finished',4)",[f,w,m]);
+  const contribution=(await pool.query("INSERT INTO library_contributions(family_id,work_id,author_member_id,body) VALUES($1,$2,$3,'Preserve this memory') RETURNING id",[f,w,m])).rows[0].id;
+  await pool.query('INSERT INTO library_companions(family_id,contribution_id,member_id) VALUES($1,$2,$3)',[f,contribution,m]);
+  const platform=(await pool.query("INSERT INTO streaming_platforms(family_id,name,modes,coverage,coverage_sources) VALUES($1,'Test',ARRAY['subscription'],'verified',ARRAY['https://example.org/ar']) RETURNING id",[f])).rows[0].id;
+  await pool.query("INSERT INTO streaming_platform_aliases(family_id,platform_id,alias,normalized_alias) VALUES($1,$2,'Test','test')",[f,platform]);
+  const check=(await pool.query("INSERT INTO library_platform_checks(family_id,work_id,platform_id,checked_on,source_urls,updated_by_member_id) VALUES($1,$2,$3,'2026-01-01',ARRAY['https://example.org/ar'],$4) RETURNING id",[f,w,platform,m])).rows[0].id;
+  await pool.query("INSERT INTO library_streaming_offers(family_id,check_id,mode,source_urls,link_kind) VALUES($1,$2,'subscription',ARRAY['https://example.org/ar'],'none')",[f,check]);
+  const proposal=(await pool.query("INSERT INTO library_availability_proposals(family_id,member_id,proposal_hash,payload,expires_at) VALUES($1,$2,repeat('a',64),'[]',now()+interval '24 hours') RETURNING id",[f,m])).rows[0].id;
+  await pool.query("INSERT INTO library_availability_operations(family_id,member_id,idempotency_key,preview_id) VALUES($1,$2,$3,$4)",[f,m,randomUUID(),proposal]);
+  for(const kind of ['library_availability','streaming_platform','library_work']) await pool.query("INSERT INTO audit_events(family_id,actor_member_id,entity_type,entity_id,action) VALUES($1,$2,$3,$4,'updated')",[f,m,kind,w]);
+  const snapshot=async()=>{
+   const data={};for(const table of ['library_works','library_personal','library_contributions','library_companions']) data[table]=(await pool.query(`SELECT to_jsonb(t) AS row FROM ${table} t WHERE family_id=$1`,[f])).rows;
+   data.audit=(await pool.query("SELECT * FROM audit_events WHERE entity_type NOT IN ('library_availability','streaming_platform') ORDER BY id")).rows;
+   return data;
+  };
+  const before=await snapshot();
+  await migrate(drizzle(pool),{migrationsFolder:'drizzle'});
+  assert.deepEqual(await snapshot(),before);
+  for(const table of removed) assert.equal((await pool.query('SELECT to_regclass($1) AS relation',[`public.${table}`])).rows[0].relation,null);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'availability_%'")).rows[0].n,0);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE entity_type IN ('library_availability','streaming_platform')")).rows[0].n,0);
+  assert.equal(Number((await pool.query('SELECT library_revision FROM families WHERE id=$1',[f])).rows[0].library_revision),1);
+  await migrate(drizzle(pool),{migrationsFolder:'drizzle'});
+  assert.deepEqual(await snapshot(),before);
+ }finally{
+  await pool?.end();await admin.query(`DROP DATABASE IF EXISTS "${name}"`);await admin.end();await rm(folder,{recursive:true,force:true});
+ }
+});

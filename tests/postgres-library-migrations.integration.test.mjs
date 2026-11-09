@@ -35,7 +35,8 @@ test("library migration upgrades existing data and exactly records timestamp and
     assert.equal(applied.hash, hash);
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
     assert.equal(Number((await pool.query("SELECT count(*) FROM drizzle.__drizzle_migrations")).rows[0].count), journal.entries.length);
-    assert.equal((await pool.query("SELECT library_revision FROM families WHERE id=$1", [family.id])).rows[0].library_revision, "0");
+    // Removing the temporary availability catalog invalidates the collection once.
+    assert.equal((await pool.query("SELECT library_revision FROM families WHERE id=$1", [family.id])).rows[0].library_revision, "1");
   } finally {
     if (pool) await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
