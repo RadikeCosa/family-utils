@@ -253,7 +253,3 @@ details[open] > summary .disclosureArrow { transform:rotate(180deg); }
 @media(forced-colors:active) { .genreBadge { border-color:CanvasText; } }
 
 .commonSection { display:grid; gap:8px; min-width:0; }
-
-.availabilityControls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; margin:0; }
-.filters:has(+ .availabilityControls) { margin-bottom:0; }
-.availabilityControls:has(> div > details[open]) > section { grid-column:1/-1; grid-row:auto; }

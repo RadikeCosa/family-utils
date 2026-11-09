@@ -20,7 +20,7 @@ export function useLibrary(workId: string | undefined, filters: string, onMember
   const pending = useRef<AbortController | null>(null);
   const etag = useRef("");
   const endpoint = `/api/library${workId ? `/${workId}` : ""}`;
-  const read = useCallback(async function readLibraryData(mode: "replace" | "more" | "probe" = "replace"): Promise<void> {
+  const read = useCallback(async (mode: "replace" | "more" | "probe" = "replace") => {
     if (pending.current && mode !== "replace") return;
     if (mode === "replace") pending.current?.abort();
     const controller = new AbortController(); pending.current = controller;
@@ -52,10 +52,10 @@ export function useLibrary(workId: string | undefined, filters: string, onMember
       if (current.current && (body.familyId !== current.current.familyId || body.currentMemberId !== current.current.currentMemberId)) {
         clearLibraryDrafts(); current.current = null; setData(null); router.replace("/acceso"); router.refresh(); return;
       }
-      if (mode === "probe" && current.current) { if (body.availabilityDay !== current.current.availabilityDay || body.availabilityEnabled !== current.current.availabilityEnabled) { void readLibraryData("replace"); return; } if (body.revision !== current.current.revision || body.accessRevision !== current.current.accessRevision ) setHasChanges(true); return; }
+      if (mode === "probe" && current.current) { if (body.revision !== current.current.revision || body.accessRevision !== current.current.accessRevision) setHasChanges(true); return; }
       const incoming = body as LibraryData;
       if (mode === "more" && current.current) {
-        if (incoming.revision !== current.current.revision || incoming.accessRevision !== current.current.accessRevision || incoming.availabilityDay !== current.current.availabilityDay) setHasChanges(true);
+        if (incoming.revision !== current.current.revision || incoming.accessRevision !== current.current.accessRevision) setHasChanges(true);
         if ("works" in incoming && "works" in current.current) {
           incoming.works = [...new Map([...current.current.works, ...incoming.works].map((value) => [value.id, value])).values()];
           incoming.commonPendingCounts = current.current.commonPendingCounts;
