@@ -1044,3 +1044,88 @@ test("pair refresh keeps counts with their results through peer changes and pagi
   await expect(page).not.toHaveURL(/withMember/);
   await expect(group.getByRole("button", { name: "Ana · 0", exact: true })).toBeVisible();
 });
+
+test("movie detail keeps rating above long editorial content and fits the mobile viewport", async ({ page }, testInfo) => {
+  const synopsis = "Una historia que merece su espacio cuando queremos leerla. ".repeat(50);
+  const cast = Array.from({ length: 30 }, (_, index) => `Intérprete ${index + 1}`);
+  const response = await api.post("/api/library", { data: {
+    title: "Una película para compartir", creator: "Una directora", year: 2024,
+    runtimeMinutes: 118, genres: ["drama", "comedia"], synopsis, cast,
+  } });
+  expect(response.status()).toBe(201);
+  const id = (await response.json()).id;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/cinemateca/${id}`);
+  const firstStar = page.getByRole("radio", { name: "1 de 5 estrellas", exact: true });
+  const save = page.getByRole("button", { name: "Guardar estado y valoración", exact: true });
+  await expect(firstStar).toBeAttached();
+  expect((await firstStar.locator("..").boundingBox())!.y).toBeLessThan(460);
+  const saveBox = (await save.boundingBox())!;
+  expect(saveBox.y + saveBox.height).toBeLessThan(844);
+  const synopsisSection = page.locator("details").filter({ has: page.getByRole("heading", { name: "Sinopsis", exact: true }) });
+  const castSection = page.locator("details").filter({ has: page.getByRole("heading", { name: "Reparto", exact: true }) });
+  await expect(synopsisSection).not.toHaveAttribute("open");
+  await expect(castSection).not.toHaveAttribute("open");
+  expect((await save.boundingBox())!.y).toBeLessThan((await synopsisSection.boundingBox())!.y);
+  await page.screenshot({ path: testInfo.outputPath("ficha-valoracion-390.png"), fullPage: true });
+  await synopsisSection.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(synopsisSection.getByText(synopsis, { exact: true })).toBeVisible();
+  await castSection.locator("summary").click();
+  await expect(castSection.getByRole("listitem")).toHaveCount(30);
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  }
+});
+
+test("collection switches between cards and a compact list, preserving preference and filters", async ({ page }, testInfo) => {
+  const ids: string[] = [];
+  for (const title of ["Una noche de cine", "Una tarde de cine", "Otra historia"]) {
+    const response = await api.post("/api/library", { data: { title, creator: "Una directora", year: 2024, genres: ["drama"] } });
+    expect(response.status()).toBe(201);
+    ids.push((await response.json()).id);
+  }
+  await api.put(`/api/library/${ids[0]}/personal`, { data: { status: "pending", rating: 4, expectedVersion: 0 } });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/cinemateca");
+  const view = page.getByRole("group", { name: "Vista de la colección", exact: true });
+  const cards = view.getByRole("button", { name: "Tarjetas", exact: true });
+  const list = view.getByRole("button", { name: "Lista", exact: true });
+  await expect(cards).toHaveAttribute("aria-pressed", "true");
+  const movie = page.getByRole("link", { name: /Una noche de cine/ });
+  const cardHeight = (await movie.boundingBox())!.height;
+  await list.focus(); await list.press("Enter");
+  await expect(list).toHaveAttribute("aria-pressed", "true");
+  await expect(list).toBeFocused();
+  expect((await movie.boundingBox())!.height).toBeLessThan(cardHeight);
+  await expect(movie.getByRole("img", { name: "Mi valoración: 4 de 5 estrellas", exact: true })).toContainText("4/5");
+  await expect(movie.getByRole("img", { name: "Familia · 4,0/5 · 1 valoración", exact: true })).toContainText("4/5");
+  await page.getByLabel("Buscar películas").fill("cine");
+  await expect(page).toHaveURL(/q=cine/);
+  await expect(page.getByRole("list", { name: "Películas", exact: true }).getByRole("listitem")).toHaveCount(2);
+  await cards.click(); await expect(page).toHaveURL(/q=cine/);
+  await list.click();
+  await movie.click();
+  await page.getByRole("link", { name: "← Volver a la cinemateca", exact: true }).click();
+  await expect(list).toHaveAttribute("aria-pressed", "true");
+  await page.reload(); await expect(list).toHaveAttribute("aria-pressed", "true");
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  }
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("coleccion-lista-390.png"), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: testInfo.outputPath("coleccion-lista-1280.png"), fullPage: true });
+  await page.evaluate(() => { localStorage.setItem("cinemateca:collection-layout", "unknown"); });
+  await page.reload(); await expect(cards).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => { Storage.prototype.setItem = () => { throw new DOMException("Storage full", "QuotaExceededError"); }; });
+  await list.click(); await expect(list).toHaveAttribute("aria-pressed", "true");
+  await cards.click(); await expect(cards).toHaveAttribute("aria-pressed", "true");
+});

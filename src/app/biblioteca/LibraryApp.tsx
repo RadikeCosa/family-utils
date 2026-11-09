@@ -5,13 +5,14 @@ import { familyRating, commonMemberLabels } from "@/lib/library/presentation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { KIND_LABELS, STATUS_LABELS } from "@/lib/library/types";
+import { STATUS_LABELS } from "@/lib/library/types";
 import { useLibrary } from "./useLibrary";
 import WorkForm from "./WorkForm";
 import Contributions, { NewContribution } from "./Contributions";
 import PersonalForm from "./PersonalForm";
 import WorkIcon from "./WorkIcon";
 import MovieCard from "./MovieCard";
+import { useCollectionLayout } from "./useCollectionLayout";
 import Runtime from "./Runtime";
 import WorkDialog from "./WorkDialog";
 import GenreFilter from "./GenreFilter";
@@ -20,6 +21,7 @@ const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "
 function readSearchFilters() { return readLibraryFilters(new URLSearchParams(window.location.search)); }
 export default function LibraryApp({ workId, initialFilters = { q: "", view: "", status: "", archived: "", genre: "", withMember: "" } }: { workId?: string; initialFilters?: SearchFilters }) {
   const router = useRouter();
+  const { layout, setLayout } = useCollectionLayout();
   const [search, setSearch] = useState(initialFilters.q);
   const [view, setView] = useState(initialFilters.view);
   const [status, setStatus] = useState(initialFilters.status);
@@ -127,26 +129,54 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
         {selectedMember && <p className={styles.filterHelp}>Vos y {selectedMember.label} quieren ver estas películas.</p>}
         {view === "common_pending" && <p className={styles.filterHelp}>Todos los integrantes activos las marcaron como Quiero ver.</p>}
       </form>
+      <div className={styles.collectionViewBar}>
+        <p className={styles.filterHelp}>{loading ? "Buscando…" : resultAnnouncement}</p>
+        <div className={styles.layoutSwitch} role="group" aria-label="Vista de la colección">
+          <button type="button" aria-pressed={layout === "cards"} onClick={() => setLayout("cards")}><svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="6" height="6" rx="1" /><rect x="12" y="2" width="6" height="6" rx="1" /><rect x="2" y="12" width="6" height="6" rx="1" /><rect x="12" y="12" width="6" height="6" rx="1" /></svg>Tarjetas</button>
+          <button type="button" aria-pressed={layout === "list"} onClick={() => setLayout("list")}><svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 4h11M7 10h11M7 16h11M2 4h1M2 10h1M2 16h1" /></svg>Lista</button>
+        </div>
+      </div>
       <p className={styles.srStatus} role="status" aria-live="polite" aria-atomic="true">{loading ? searchAnnouncement : resultAnnouncement}</p>
-      {data.works.length ? <ul className={styles.grid}>{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
+      {data.works.length ? <ul className={layout === "list" ? styles.movieList : styles.grid} aria-label="Películas">{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} compact={layout === "list"} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
       {data.nextCursor && <button disabled={loading} onClick={() => void library.more()}>{loading ? "Cargando…" : "Cargar más películas"}</button>}
     </>}
     {work && data && <>
-      <div className={styles.actions}>
+      <div className={styles.detailIdentity}>
+        <div className={styles.detailMetadata}>
+          <p className={styles.detailFacts}>
+            {work.creator && <span>{work.creator}</span>}
+            {work.year && <span><span className={styles.srStatus}>Año: </span>{work.year}</span>}
+            {work.runtimeMinutes != null && <span><Runtime minutes={work.runtimeMinutes} /></span>}
+            {work.archivedAt && <span className={styles.archiveBadge}>Archivada</span>}
+          </p>
+          {work.genres.length > 0 && <p className={styles.detailGenres}>{genreLabels(work.genres).join(" · ")}</p>}
+        </div>
+        <div className={styles.detailEdit}>
         {!work.archivedAt && <button disabled={busy} onClick={() => { skipDialogFocusReturn.current = false; setEditing(!editing); library.clearDuplicates(); }}>Editar datos</button>}
         {work.archivedAt && <button disabled={busy} onClick={() => { skipDialogFocusReturn.current = false; setEditing(true); library.clearDuplicates(); }}>Ver datos archivados</button>}
-        <button disabled={busy} onClick={async () => { if (window.confirm(work.archivedAt ? "¿Restaurar este contenido?" : "¿Archivar este contenido? Se conservan todos sus aportes.")) await library.mutate(`/${work.id}`, "PATCH", { action: work.archivedAt ? "restore" : "archive", expectedVersion: work.version }); }}>{work.archivedAt ? "Restaurar" : "Archivar"}</button>
+        </div>
       </div>
       {work.archivedAt && <p className={styles.notice}>Este contenido está archivado. Podés restaurarlo o retirar tus aportes.</p>}
       {editing && <WorkDialog busy={busy} shouldRestoreFocus={shouldRestoreDialogFocus} onRequestClose={() => { setEditing(false); library.clearDuplicates(); }}><WorkForm key={`${data.familyId}:${data.currentMemberId}:${work.id}`} scope={`${data.familyId}:${data.currentMemberId}:${work.id}:edit-work`} work={work} busy={busy} duplicates={library.duplicates} issue={library.operationIssue} onIdentityChange={library.clearDuplicates} onCancel={() => { setEditing(false); library.clearDuplicates(); }} onSave={async (input) => { if (!await library.mutate(`/${work.id}`, "PATCH", { ...input, action: "edit" })) return false; skipDialogFocusReturn.current = true; focusAfterEdit.current = true; setEditing(false); return true; }} /></WorkDialog>}
-      <section className={styles.card}><p className={styles.eyebrow}>{KIND_LABELS[work.kind]}{work.archivedAt ? " · Archivada" : ""}</p>{work.creator && <p>{work.creator}</p>}{work.year && <p>Año: {work.year}</p>}{work.runtimeMinutes != null && <p>Duración: <Runtime minutes={work.runtimeMinutes} /></p>}{work.genres.length > 0 && <p>{genreLabels(work.genres).join(" · ")}</p>}</section>
-      {work.synopsis && <section className={styles.card}><h2>Sinopsis</h2><p className={styles.body}>{work.synopsis}</p></section>}
-      {work.cast.length > 0 && <section className={styles.card}><h2>Reparto</h2><ol className={styles.detailCast}>{work.cast.map(name => <li key={name}>{name}</li>)}</ol></section>}
       <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} issue={library.operationIssue} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
-      <section className={styles.card}><h2>Las miradas de la familia</h2><p>{familyRating(work.personal)}</p>{work.personal.length ? <ul>{work.personal.map((entry) => <li key={entry.memberId}><strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>: {entry.status ? STATUS_LABELS[entry.status] : "Sin estado"} · {entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</li>)}</ul> : <p>Todavía no hay estados ni valoraciones.</p>}</section>
+      <section className={`${styles.card} ${styles.familyPanel}`}>
+        <div className={styles.familyHeading}><h2>Las miradas de la familia</h2><p>{familyRating(work.personal)}</p></div>
+        {work.personal.length ? <ul className={styles.familyOpinions}>{work.personal.map((entry) => <li key={entry.memberId}>
+          <strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>
+          <span className={styles.familyState}>{entry.status ? STATUS_LABELS[entry.status] : "Sin estado"}</span>
+          <span className={styles.familyScore}>{entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</span>
+        </li>)}</ul> : <p className={styles.fieldHelp}>Todavía no hay estados ni valoraciones.</p>}
+      </section>
+      {(work.synopsis || work.cast.length > 0) && <section className={`${styles.card} ${styles.movieDetails}`} aria-label="Más sobre la película">
+        {work.synopsis && <details><summary><h2>Sinopsis</h2></summary><p className={styles.body}>{work.synopsis}</p></details>}
+        {work.cast.length > 0 && <details><summary><h2>Reparto</h2><span>{work.cast.length}</span></summary><ul className={styles.detailCast}>{work.cast.map(name => <li key={name}>{name}</li>)}</ul></details>}
+      </section>}
       {"contributions" in data && <Contributions data={data} issue={library.operationIssue} busy={busy} loading={loading} save={library.mutate} more={library.more} />}
 
       {"contributions" in data && <NewContribution data={data} issue={library.operationIssue} busy={busy} save={library.mutate} />}
+      <div className={styles.detailManagement}>
+        <button disabled={busy} onClick={async () => { if (window.confirm(work.archivedAt ? "¿Restaurar este contenido?" : "¿Archivar este contenido? Se conservan todos sus aportes.")) await library.mutate(`/${work.id}`, "PATCH", { action: work.archivedAt ? "restore" : "archive", expectedVersion: work.version }); }}>{work.archivedAt ? "Restaurar" : "Archivar"}</button>
+      </div>
     </>}
   </main>;
 }
