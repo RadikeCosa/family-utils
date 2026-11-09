@@ -225,11 +225,19 @@ test("mobile personal experience can be set and cleared", async ({ page }) => {
   await page.getByRole("radio", { name: "4 de 5 estrellas", exact: true }).press("Space");
   await page.getByRole("button", { name: "Guardar estado y valoración" }).click();
   await expect(page.getByText("Guardamos tu estado y valoración.")).toBeVisible();
-  await expect(page.getByText("Viendo · 4/5 estrellas", { exact: false })).toBeVisible();
+  const family = page.locator("section").filter({ has: page.getByRole("heading", { name: "Las miradas de la familia", exact: true }) });
+  const personalRow = family.getByRole("listitem").filter({ hasText: "Alex" });
+  await expect(personalRow.getByText("Viendo", { exact: true })).toBeVisible();
+  await expect(personalRow.getByText("4/5 estrellas", { exact: true })).toBeVisible();
+  const saved = (await (await api.get(`/api/library/${id}`)).json()).work.personal[0];
+  expect(saved.status).toBe("in_progress"); expect(saved.rating).toBe(4);
   await page.getByRole("radio", { name: "Sin estado", exact: true }).check();
   await page.getByRole("button", { name: "Quitar valoración", exact: true }).click();
   await page.getByRole("button", { name: "Guardar estado y valoración" }).click();
-  await expect(page.getByText("Sin estado · Sin valorar", { exact: false })).toBeVisible();
+  await expect(personalRow.getByText("Sin estado", { exact: true })).toBeVisible();
+  await expect(personalRow.getByText("Sin valorar", { exact: true })).toBeVisible();
+  const cleared = (await (await api.get(`/api/library/${id}`)).json()).work.personal[0];
+  expect(cleared.status).toBeNull(); expect(cleared.rating).toBeNull();
 });
 
 test("mobile memories preserve partial dates, drafts, accessible spoilers and retirement", async ({ page }) => {
