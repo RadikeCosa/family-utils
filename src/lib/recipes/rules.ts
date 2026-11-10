@@ -1,3 +1,4 @@
+import { normalizeTagNameV1, tagCompare } from "./tags.ts";
 import type { Ingredient, RecipeDraft } from "./types.ts";
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const LIMITS = { title: 160, name: 160, note: 1000, yieldText: 100, preparation: 20000, quantity: 100, brand: 160, ingredients: 100 } as const;
@@ -19,5 +20,5 @@ export function parseIngredients(value: unknown): Ingredient[] {
   });
 }
 export function draftText(recipe: RecipeDraft): string {
-  return [recipe.title, recipe.note, recipe.yieldText && `Rendimiento: ${recipe.yieldText}`, "Ingredientes", ...recipe.ingredients.map(i => `${i.name}${i.quantity ? ` · ${i.quantity}` : ""}`), "Preparación", recipe.preparation].filter(Boolean).join("\n");
+  return [recipe.title, recipe.tags?.length && [...recipe.tags].sort((a, b) => tagCompare(normalizeTagNameV1(a), normalizeTagNameV1(b))).map(t => `#${t}`).join(" "), recipe.note, recipe.yieldText && `Rendimiento: ${recipe.yieldText}`, "Ingredientes", ...recipe.ingredients.map(i => `${i.name}${i.quantity ? ` · ${i.quantity}` : ""}`), "Preparación", recipe.preparation].filter(Boolean).join("\n");
 }

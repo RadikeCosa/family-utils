@@ -2,6 +2,8 @@
 import { useRef, useState } from "react";
 import type { RecipeDraft } from "@/lib/recipes/types";
 import { draftText } from "@/lib/recipes/rules";
+import TagSelector from "./TagSelector";
+import { parseTags } from "@/lib/recipes/tags";
 import styles from "./recipes.module.css";
 export default function RecipeEditor({ initial, busy, onSave, onCancel, onServer }: { initial: RecipeDraft; busy: boolean; onSave: (draft: RecipeDraft) => Promise<void>; onCancel: () => void; onServer: () => Promise<void> }) {
   const [draft, setDraft] = useState<RecipeDraft>(() => structuredClone(initial)), [notice, setNotice] = useState("");
@@ -16,6 +18,7 @@ export default function RecipeEditor({ initial, busy, onSave, onCancel, onServer
   return <form className={styles.form} onSubmit={e => { e.preventDefault(); void onSave(draft); }}>
     <fieldset disabled={busy} className={styles.form}><legend>Editar receta</legend>
       <label>Nombre<input required maxLength={160} value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} /></label>
+      <TagSelector label="Etiquetas de la receta" selected={parseTags(draft.tags ?? [])} onChange={tags => setDraft({ ...draft, tags: tags.map(t => t.name) })} disabled={busy} />
       <label>Nota opcional<textarea maxLength={1000} rows={2} value={draft.note ?? ""} onChange={e => setDraft({ ...draft, note: e.target.value })} /></label>
       <label>Porciones o rendimiento<input maxLength={100} value={draft.yieldText ?? ""} onChange={e => setDraft({ ...draft, yieldText: e.target.value })} placeholder="Por ejemplo, 4 personas" /></label>
       <h2>Ingredientes</h2><ol className={styles.ingredients}>{draft.ingredients.map((row, index) => <li className={styles.ingredient} key={row.id}>

@@ -251,3 +251,9 @@ Hashes de las migraciones verificadas:
 | 0057_recipe_name_normalization | `34f87aed867756cd6de2f62a594628de1fa3144dc155459ce7cdf0716383e54d` |
 | 0058_recipes_shopping | `e507e7fafeb771824b188a22baff6fb98b9117b41a05a86e21f8d4e25e00b358` |
 | 0059_recipe_family_integrity | `b4d0410b4ad80e4864460b4190d25b6f301e77de06de99c0444b39b08a90152a` |
+
+## Mejora de lista y etiquetas — 10/11/2026
+
+La portada en lista, las etiquetas libres y la paginación consistente están
+documentadas en [recipes-tags.md](recipes-tags.md). La migración aditiva 0066
+se ensaya únicamente en PostgreSQL local aislado durante esta implementación.
