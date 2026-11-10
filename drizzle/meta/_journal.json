@@ -386,6 +386,13 @@
       "when": 1794189046262,
       "tag": "0064_remove_cinemateca_availability",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794306791890,
+      "tag": "0065_cine_con_cami",
+      "breakpoints": true
     }
   ]
 }

@@ -17,7 +17,8 @@ import WorkConflictReview from "./WorkConflictReview";
 import styles from "./library.module.css";
 
 function initialDraft(work?: LibraryWork) {
-  return { title: work?.title ?? "", kind: work?.kind ?? "movie", genres: work?.genres ?? [], creator: work?.creator ?? "", year: work?.year?.toString() ?? "", runtimeMinutes: work?.runtimeMinutes?.toString() ?? "", cast: work?.cast ?? [], castPending: "", synopsis: work?.synopsis ?? "", expectedVersion: work?.version ?? 0 };
+  // null inherits the latest server choice until the checkbox is explicitly changed.
+  return { cineWithCami: null as boolean | null, title: work?.title ?? "", kind: work?.kind ?? "movie", genres: work?.genres ?? [], creator: work?.creator ?? "", year: work?.year?.toString() ?? "", runtimeMinutes: work?.runtimeMinutes?.toString() ?? "", cast: work?.cast ?? [], castPending: "", synopsis: work?.synopsis ?? "", expectedVersion: work?.version ?? 0 };
 }
 export default function WorkForm({ scope, work, busy, duplicates, issue, onIdentityChange, onSave, onCancel }: { scope: string; work?: LibraryWork; busy: boolean; duplicates: { id: string; title: string; archivedAt: string | null }[]; issue: OperationIssue | null; onIdentityChange: () => void; onSave: (input: WorkInput & { expectedVersion?: number; confirmDuplicate?: boolean }) => Promise<boolean>; onCancel: () => void }) {
   const initial = initialDraft(work);
@@ -27,7 +28,11 @@ export default function WorkForm({ scope, work, busy, duplicates, issue, onIdent
   const [validationAttempt, setValidationAttempt] = useState(0);
   const [castNotice, setCastNotice] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const dirty = Object.keys(initial).some(key => key !== "expectedVersion" && JSON.stringify(draft[key as keyof typeof draft]) !== JSON.stringify(initial[key as keyof typeof initial]));
+  const dirty = Object.keys(initial).some(key => {
+    if (key === "expectedVersion") return false;
+    if (key === "cineWithCami") return draft.cineWithCami !== null && draft.cineWithCami !== (work?.cineWithCami ?? false);
+    return JSON.stringify(draft[key as keyof typeof draft]) !== JSON.stringify(initial[key as keyof typeof initial]);
+  });
   const updateDraft: typeof setDraft = next => { setDraft(next); setErrors(previous => Object.keys(previous).length ? revalidateFieldErrors(previous, workFieldErrors(next)) : previous); };
   const relevantIssue = issue?.path === (work ? `/${work.id}` : "") ? issue : null;
   const conflict = !!work && draft.expectedVersion !== work.version;
@@ -48,10 +53,11 @@ export default function WorkForm({ scope, work, busy, duplicates, issue, onIdent
     setErrors(nextErrors); setValidationAttempt(value => value + 1);
     if (Object.keys(nextErrors).length) { focusFirstInvalid(form.current, nextErrors); return; }
     setDraft({ ...draft, cast: cast.names, castPending: "" });
-    const input = { title: draft.title, kind: "movie" as const, genres: draft.genres, creator: draft.creator || null, year: draft.year ? Number(draft.year) : null, runtimeMinutes: draft.runtimeMinutes ? Number(draft.runtimeMinutes) : null, cast: cast.names, synopsis: normalizeSynopsis(draft.synopsis) || null, referenceUrl: work?.referenceUrl ?? null, expectedVersion: draft.expectedVersion };
+    const input = { ...(draft.cineWithCami === null ? {} : { cineWithCami: draft.cineWithCami }), title: draft.title, kind: "movie" as const, genres: draft.genres, creator: draft.creator || null, year: draft.year ? Number(draft.year) : null, runtimeMinutes: draft.runtimeMinutes ? Number(draft.runtimeMinutes) : null, cast: cast.names, synopsis: normalizeSynopsis(draft.synopsis) || null, referenceUrl: work?.referenceUrl ?? null, expectedVersion: draft.expectedVersion };
     if (await onSave({ ...input, ...(confirmDuplicate ? { confirmDuplicate: true } : {}) })) clearDraft();
   }
   const comparisonRows = work ? [
+    ...(draft.cineWithCami === null ? [] : [{ label: "Cine con Cami", draft: draft.cineWithCami ? "Incluida" : "No incluida", current: work.cineWithCami ? "Incluida" : "No incluida" }]),
     { label: "Título", draft: draft.title, current: work.title },
     { label: "Director/a", draft: draft.creator, current: work.creator ?? "" },
     { label: "Año", draft: draft.year, current: work.year?.toString() ?? "" },
@@ -61,7 +67,7 @@ export default function WorkForm({ scope, work, busy, duplicates, issue, onIdent
     { label: "Sinopsis", draft: normalizeSynopsis(draft.synopsis), current: work.synopsis ?? "" },
   ].filter(row => JSON.stringify(row.draft) !== JSON.stringify(row.current)) : [];
   return <form ref={form} noValidate className={styles.workForm} onSubmit={async event => { event.preventDefault(); await saveWork(); }}>
-    <header className={styles.dialogHeader}><h2 id="work-dialog-title" tabIndex={-1} autoFocus>{work ? "Editar datos" : "Agregar película"}</h2><p>Solo el título es obligatorio.</p></header>
+    <header data-legacy-chrome className={styles.dialogHeader}><h2 id="work-dialog-title" tabIndex={-1} autoFocus>{work ? "Editar datos" : "Agregar película"}</h2><p>Solo el título es obligatorio.</p></header>
     {storageError && <p className={styles.notice} role="status">No podemos conservar tu borrador al cerrar o recargar. Podés seguir completando y guardar desde acá.</p>}
     {blocked && <div className={styles.error} role="alert" id={errorId}>{unavailable ? "Este contenido ya no está disponible. Conservamos tu borrador." : "Este contenido está archivado. Restauralo desde el detalle para poder editarlo."}</div>}
     {!blocked && relevantIssue?.code !== "CONFLICT" && relevantIssue?.code !== "DUPLICATE" && <FormIssue disabled={busy} issue={relevantIssue} onRetry={() => form.current?.requestSubmit()} />}
@@ -75,6 +81,7 @@ export default function WorkForm({ scope, work, busy, duplicates, issue, onIdent
         <div><label>Duración (minutos)<input name="runtimeMinutes" aria-invalid={!!errors.runtimeMinutes} aria-describedby={`work-runtime-help${errors.runtimeMinutes ? " work-error-runtimeMinutes" : ""}`} inputMode="numeric" type="number" min="1" max="1440" step="1" placeholder="Ej.: 148" value={draft.runtimeMinutes} onChange={event => updateDraft({ ...draft, runtimeMinutes: event.target.value })} /></label><small id="work-runtime-help">{Number.isInteger(Number(draft.runtimeMinutes)) && Number(draft.runtimeMinutes) > 0 && Number(draft.runtimeMinutes) <= 1440 ? <Runtime minutes={Number(draft.runtimeMinutes)} /> : "Entre 1 y 1440 minutos."}</small>{errors.runtimeMinutes && <small className={styles.fieldError} id="work-error-runtimeMinutes">{errors.runtimeMinutes}</small>}</div>
       </div>
       <GenresField value={draft.genres} onChange={genres => updateDraft({ ...draft, genres })} />
+      <div className={styles.camiField}><label><input type="checkbox" checked={draft.cineWithCami ?? work?.cineWithCami ?? false} onChange={event => updateDraft({ ...draft, cineWithCami: event.target.checked })} aria-describedby="cami-help" /> Cine con Cami</label><small id="cami-help">Sumar esta película a la selección para ver con Cami.</small></div>
       <details className={styles.moreMovieData}>
         <summary>Sinopsis y reparto <svg className={styles.disclosureArrow} aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></summary>
         <div className={styles.optionalMovieData}>

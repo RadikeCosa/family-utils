@@ -19,7 +19,7 @@ import GenreFilter from "./GenreFilter";
 import styles from "./library.module.css";
 const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "Quiero ver" }, { value: "in_progress", label: "Viendo" }, { value: "finished", label: "Vistas" }, { value: "none", label: "Sin estado" }, { value: "common_pending", label: "Todos queremos ver" }];
 function readSearchFilters() { return readLibraryFilters(new URLSearchParams(window.location.search)); }
-export default function LibraryApp({ workId, initialFilters = { q: "", view: "", status: "", archived: "", genre: "", withMember: "" } }: { workId?: string; initialFilters?: SearchFilters }) {
+export default function LibraryApp({ workId, initialFilters = { selection: "", q: "", view: "", status: "", archived: "", genre: "", withMember: "" } }: { workId?: string; initialFilters?: SearchFilters }) {
   const router = useRouter();
   const { layout, setLayout } = useCollectionLayout();
   const [search, setSearch] = useState(initialFilters.q);
@@ -27,6 +27,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
   const [status, setStatus] = useState(initialFilters.status);
   const [archived, setArchived] = useState(initialFilters.archived);
   const [filters, setFilters] = useState(libraryFilterString(initialFilters));
+  const [selection, setSelection] = useState(initialFilters.selection ?? "");
   const [genre, setGenre] = useState(initialFilters.genre);
   const [withMember, setWithMember] = useState(initialFilters.withMember);
   const [filterNotice, setFilterNotice] = useState("");
@@ -45,7 +46,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
   const writeSearch = useCallback((next: SearchFilters) => {
     if (debounce.current) clearTimeout(debounce.current);
     setSearchAnnouncement("");
-    setSearch(next.q); setView(next.view); setStatus(next.status); setArchived(next.archived); setGenre(next.genre); setWithMember(next.withMember);
+    setSearch(next.q); setView(next.view); setStatus(next.status); setArchived(next.archived); setGenre(next.genre); setSelection(next.selection ?? ""); setWithMember(next.withMember);
     lastAppliedSearch.current = next.q;
     const url = new URL(window.location.href);
     url.search = canonicalLibrarySearch(url.searchParams, next);
@@ -86,14 +87,14 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
       const next = readSearchFilters();
       if (composingRef.current) { deferredPop.current = next; return; }
       if (debounce.current) clearTimeout(debounce.current);
-      setSearch(next.q); setView(next.view); setStatus(next.status); setArchived(next.archived); setGenre(next.genre); setWithMember(next.withMember);
+      setSearch(next.q); setView(next.view); setStatus(next.status); setArchived(next.archived); setGenre(next.genre); setSelection(next.selection ?? ""); setWithMember(next.withMember);
       setFilters(libraryFilterString(next));
     };
     onPopState();
     window.addEventListener("popstate", onPopState);
     return () => { window.removeEventListener("popstate", onPopState); if (debounce.current) clearTimeout(debounce.current); };
   }, []);
-  const applyCurrent = (q: string, nextView = view, nextStatus = status, nextArchived = archived, nextGenre = genre, nextMember = withMember) => { setFilterNotice(""); writeSearch({ q: (composingRef.current ? lastAppliedSearch.current : q).trim(), view: nextView, status: nextStatus, archived: nextArchived, genre: nextGenre, withMember: nextMember }); };
+  const applyCurrent = (q: string, nextView = view, nextStatus = status, nextArchived = archived, nextGenre = genre, nextMember = withMember, nextSelection = selection) => { setFilterNotice(""); writeSearch({ selection: nextSelection, q: (composingRef.current ? lastAppliedSearch.current : q).trim(), view: nextView, status: nextStatus, archived: nextArchived, genre: nextGenre, withMember: nextMember }); };
   return <main className={styles.page}>
     <header className={styles.header}><Link className={styles.brand} href="/">family utils</Link><nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/cinemateca" aria-current="page">Cinemateca</Link><Link href="/familia">Mi familia</Link></nav></header>
     {workId && <Link className={styles.back} href="/cinemateca">← Volver a la cinemateca</Link>}
@@ -116,14 +117,15 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
           </div>
         </div>}
         <div className={styles.collectionTools}>
+          <button type="button" className={styles.camiFilter} aria-pressed={!!selection} onClick={() => applyCurrent(search, view, status, archived, genre, withMember, selection ? "" : "cine_with_cami")}>{selection && <span aria-hidden="true">✓ </span>}Cine con Cami</button>
           <GenreFilter value={genre} onChange={(nextGenre) => applyCurrent(search, view, status, archived, nextGenre)} />
           <div className={styles.archiveSwitch} role="group" aria-label="Ubicación de las películas">
             <button type="button" aria-pressed={!archived} onClick={() => applyCurrent(search, view, status, "")}>Colección</button>
             <button type="button" aria-pressed={archived === "true"} onClick={() => applyCurrent(search, view, status, "true")}>Archivadas</button>
           </div>
         </div>
-        {(search || view || status || archived || genre) && <div className={styles.filterExtras}>
-          <button type="button" className={styles.clearFilters} onClick={() => { applyCurrent("", "", "", "", "", ""); searchInput.current?.focus(); }}>Limpiar filtros</button>
+        {(search || view || status || archived || genre || selection) && <div className={styles.filterExtras}>
+          <button type="button" className={styles.clearFilters} onClick={() => { applyCurrent("", "", "", "", "", "", ""); searchInput.current?.focus(); }}>Limpiar filtros</button>
         </div>}
         {archived && <p className={styles.filterHelp}>Estás viendo las películas archivadas. Podés restaurarlas desde su ficha.</p>}
         {selectedMember && <p className={styles.filterHelp}>Vos y {selectedMember.label} quieren ver estas películas.</p>}
@@ -137,7 +139,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
         </div>
       </div>
       <p className={styles.srStatus} role="status" aria-live="polite" aria-atomic="true">{loading ? searchAnnouncement : resultAnnouncement}</p>
-      {data.works.length ? <ul className={layout === "list" ? styles.movieList : styles.grid} aria-label="Películas">{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} compact={layout === "list"} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
+      {data.works.length ? <ul className={layout === "list" ? styles.movieList : styles.grid} aria-label="Películas">{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} compact={layout === "list"} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{selection ? "No hay películas de Cine con Cami con estos filtros." : filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selection ? "Podés sumarlas al agregar o editar una película." : selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
       {data.nextCursor && <button disabled={loading} onClick={() => void library.more()}>{loading ? "Cargando…" : "Cargar más películas"}</button>}
     </>}
     {work && data && <>
@@ -149,6 +151,7 @@ export default function LibraryApp({ workId, initialFilters = { q: "", view: "",
             {work.runtimeMinutes != null && <span><Runtime minutes={work.runtimeMinutes} /></span>}
             {work.archivedAt && <span className={styles.archiveBadge}>Archivada</span>}
           </p>
+          {work.cineWithCami && <p><span className={styles.camiBadge}>Cine con Cami</span></p>}
           {work.genres.length > 0 && <p className={styles.detailGenres}>{genreLabels(work.genres).join(" · ")}</p>}
         </div>
         <div className={styles.detailEdit}>
