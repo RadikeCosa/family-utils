@@ -206,3 +206,12 @@ test("URL normalization retains supported state, rejects invalid parameters and 
     2,
   );
 });
+
+test("recipe tags remain in normalized URLs and recent views", () => {
+  const search = normalizeNavigationSearch("/recetas", new URLSearchParams("q=Tarta&tag=Horno&tag=casera&tag=HORNO&archived=1&unknown=remove"), apps);
+  const params = new URLSearchParams(search);
+  assert.deepEqual(params.getAll("tag"), ["casera", "horno"]);
+  assert.equal(params.get("archived"), "true");
+  assert.equal(params.get("q"), "Tarta");
+  assert.equal(params.has("unknown"), false);
+});

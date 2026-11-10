@@ -1,3 +1,4 @@
+import { readRecipeFilters } from "../recipes/filters.ts";
 import { findApp, type AppDefinition } from "./catalog.ts";
 import { readLibraryFilters, libraryFilterString } from "../library/filters.ts";
 const keys: Record<string, string[]> = {
@@ -38,8 +39,19 @@ export function normalizeNavigationSearch(
   if (!app) return "";
   if (app.id === "library")
     return libraryFilterString(readLibraryFilters(input));
-  const output = new URLSearchParams();
+  const output = app.id === "recipes"
+    ? new URLSearchParams(readRecipeFilters(input).queryKey)
+    : new URLSearchParams();
+  if (app.id === "recipes") {
+    output.delete("q");
+    const query = input.get("q")?.slice(0, 160);
+    if (query) output.set("q", query);
+    const tags = output.getAll("tag").filter(tag => tag.length > 0 && tag.length <= 40 && !/[\p{Cc}\p{Cf}]/u.test(tag)).slice(0, 10);
+    output.delete("tag");
+    tags.forEach(tag => output.append("tag", tag));
+  }
   for (const key of keys[app.id] ?? []) {
+    if (app.id === "recipes" && ["q", "archived"].includes(key)) continue;
     const value = input.get(key);
     if (!value) continue;
     if (enums[key] && !enums[key].includes(value)) continue;

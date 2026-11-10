@@ -52,7 +52,7 @@ test.beforeAll(async () => {
   expect(list.status(), await list.text()).toBe(201);
   listId = (await list.json()).id;
   const recipe = await api.post("/api/recipes", {
-    data: { title: "Tarta de prueba" },
+    data: { title: "Tarta de prueba", tags: ["Casera", "Horno"] },
   });
   expect(recipe.status(), await recipe.text()).toBe(201);
   recipeId = (await recipe.json()).idea.id;
@@ -199,10 +199,12 @@ test("drawer shares triggers, traps focus and restores opener", async ({
 test("recipe filter, direct detail, native history, origin and parent have distinct behavior", async ({
   page,
 }) => {
-  await page.goto("/recetas?q=Tarta");
+  await page.goto("/recetas?q=Tarta&tag=casera&tag=horno");
   await expect(
     page.getByRole("searchbox", { name: "Buscar recetas" }),
   ).toHaveValue("Tarta");
+  await expect(page.getByRole("button", { name: "Quitar etiqueta casera", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Quitar etiqueta horno", exact: true })).toBeVisible();
   await page
     .getByRole("link", { name: "Tarta de prueba", exact: true })
     .click();
@@ -215,7 +217,7 @@ test("recipe filter, direct detail, native history, origin and parent have disti
       exact: true,
     })
     .click();
-  await expect(page).toHaveURL(/\/recetas\?q=Tarta$/);
+  await expect(page).toHaveURL(/\/recetas\?q=Tarta&tag=casera&tag=horno$/);
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/recetas/${recipeId}`));
   await page

@@ -119,7 +119,7 @@ export default function RecipeList() {
     <div className={styles.toolbar}><label>Buscar recetas<input type="search" value={typed} onChange={e => { setWarning(""); setTyped(e.target.value); }} maxLength={160} /></label>
       <button data-legacy-sections aria-pressed={!archived} onClick={() => changeArchived(false)}>Disponibles</button><button data-legacy-sections aria-pressed={archived} onClick={() => changeArchived(true)}>Ocultas</button></div>
     <TagSelector label="Filtrar por etiquetas" selected={selected} options={data?.tags ?? []} onChange={changeTags} disabled={busy} />
-    {(query || slugs.length > 0) && <button onClick={() => { const search = new URLSearchParams(queryKey); search.delete("q"); search.delete("tag"); setTyped(""); setSearch(search, "push"); }}>Limpiar filtros</button>}
+    {(query || slugs.length > 0) && <button onClick={() => { const search = new URLSearchParams(queryKey); search.delete("q"); search.delete("tag"); setTyped(""); setSearch(search, unified ? "replace" : "push"); }}>Limpiar filtros</button>}
     {error && <p role="alert" className={styles.error}>{error} {existing ? <Link href={`/recetas/${existing}`}>Abrir receta existente</Link> : <button onClick={() => void load()}>Reintentar consulta</button>}</p>}
     <p role="status" aria-live="polite">{busy ? "Buscando…" : data ? `${data.total} recetas encontradas. ${notice} ${warning}` : notice}</p>
     {stale && <div className={styles.notice} role="status">El catálogo cambió. Actualizá la lista para continuar. <button disabled={busy} onClick={() => void load()}>Actualizar lista</button></div>}

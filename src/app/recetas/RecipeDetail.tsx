@@ -1,5 +1,5 @@
 "use client";
-import { useDetailTitle } from "@/components/platform/navigation";
+import { useDetailTitle, useUnifiedUI } from "@/components/platform/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Recipe, RecipeDraft } from "@/lib/recipes/types";
@@ -10,6 +10,7 @@ import RecipeShopping from "./RecipeShopping";
 import RecipeToMenu from "./RecipeToMenu";
 import styles from "./recipes.module.css";
 export default function RecipeDetail({ id }: { id: string }) {
+  const unified = useUnifiedUI();
   const [recipe, setRecipe] = useState<Recipe | null>(null), [editing, setEditing] = useState(false), [buying, setBuying] = useState(false), [planning, setPlanning] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [comparison, setComparison] = useState<Recipe | null>(null), [existing, setExisting] = useState<string | null>(null);
   useDetailTitle(recipe?.title);
@@ -34,7 +35,7 @@ export default function RecipeDetail({ id }: { id: string }) {
       etag.current = null; setEditing(false); setComparison(null); setNotice(body.changed ? "Receta guardada." : "La receta ya estaba actualizada."); await load();
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo guardar."); } finally { setBusy(false); }
   }
-  return <><p data-legacy-chrome><RecipeBackLink recipeId={id} /></p>
+  return <>{!unified && <p data-legacy-chrome><RecipeBackLink recipeId={id} /></p>}
     {error && <p className={styles.error} role="alert">{error} {existing && <Link href={`/recetas/${existing}`}>Abrir receta existente</Link>}{!recipe && <button onClick={() => void load()}>Reintentar</button>}</p>}
     {notice && <p className={styles.notice} role="status">{notice}</p>}
     {!recipe ? !error && <p role="status">Cargando receta…</p> : <><h1>{recipe.title}</h1>
