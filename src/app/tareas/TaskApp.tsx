@@ -1,11 +1,12 @@
 "use client";
+import DateNavigation from "@/components/calendar/DateNavigation";
 import { useUnifiedUI, useURLState, useNavigationQuery } from "@/components/platform/navigation";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "better-auth/react";
-import { addTaskDays, getFamilyDay, isTaskDateInRange, labelTaskDay, taskDateBounds } from "@/lib/tasks/family-day";
+import { getFamilyDay, isTaskDateInRange, labelTaskDay, taskDateBounds } from "@/lib/tasks/family-day";
 import styles from "../page.module.css";
 
 const authClient = createAuthClient();
@@ -558,13 +559,8 @@ export default function Home() {
             <div className={styles.createActions}>{!past && <button className={styles.addButton} onClick={() => setShowCreate(true)}><span aria-hidden="true">＋</span> Nueva tarea</button>}</div>
           </div>
 
-          <div className={styles.dateNav} aria-label="Navegar por fecha">
-            <button aria-label="Día anterior" disabled={selectedDate === bounds.earliest} onClick={() => navigateDate(addTaskDays(selectedDate, -1))}>←</button>
-            <label><span className={styles.srOnly}>Ir a una fecha</span><input type="date" value={selectedDate} min={bounds.earliest} max={bounds.latest} onChange={(event) => navigateDate(event.target.value)} /></label>
-            <button aria-label="Día siguiente" disabled={selectedDate >= bounds.latest} onClick={() => navigateDate(addTaskDays(selectedDate, 1))}>→</button>
-            <button onClick={() => navigateDate(familyDay, true)}>Hoy</button>
-            {past && <span>Solo lectura</span>}
-          </div>
+          <DateNavigation className={styles.dateNav} date={selectedDate} today={familyDay} min={bounds.earliest} max={bounds.latest} onSelect={navigateDate} />
+          {past && <span>Solo lectura</span>}
           {isToday && syncNotice && <p role="status">Puede faltar actualizar las tareas de hoy. {syncFailed && !manualRetryUsed && <button className={styles.filterButton} onClick={() => { if (family) void synchronize(family.id, generationModeRef.current, true); }}>Reintentar actualización</button>}</p>}
           {notice && <p role="status">{notice}</p>}
           <div className={styles.summaryGrid}>

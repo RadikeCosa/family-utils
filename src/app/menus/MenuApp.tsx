@@ -3,6 +3,7 @@ import { useUnifiedUI, useNavigationQuery } from "@/components/platform/navigati
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import DateNavigation from "@/components/calendar/DateNavigation";
 import { useRouter } from "next/navigation";
 import { createAuthClient } from "@/lib/family-auth-client";
 import { addDays, getDayInTimeZone, hasMealAttendance, isMenuDateInRange, isValidDate, MEAL_LABELS, MEAL_TYPES, menuDateBounds, startOfWeek, type MealType, type ParticipationStatus } from "@/lib/meals/rules";
@@ -189,12 +190,7 @@ export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
     </header>
     <section className={styles.intro}>
       <h1 className={styles.dailyTitle}>¿Qué comemos?</h1>
-      <div className={styles.dailyNavigation}>
-        <button aria-label="Día anterior" disabled={busy} onClick={() => navigate(addDays(date, -1))}>←</button>
-        <label><span className={styles.srOnly}>Ir a una fecha</span><input aria-label="Ir a una fecha" type="date" value={date} min={bounds.earliest} max={bounds.latest} disabled={busy} onChange={e => navigate(e.target.value)} /></label>
-        <button aria-label="Día siguiente" disabled={busy} onClick={() => navigate(addDays(date, 1))}>→</button>
-        <button disabled={busy} onClick={() => navigate(today, "day", true)}>Hoy</button>
-      </div>
+      <DateNavigation className={styles.dailyNavigation} date={date} today={today} min={bounds.earliest} max={bounds.latest} disabled={busy} onSelect={(next, follow) => navigate(next, "day", follow)} />
       <p className={styles.dateLabel}>{date === today ? "Hoy · " : ""}{dayLabel(date)}{date < today ? " · Solo lectura" : ""}</p>
       {view === "day" && weekReady && data && <p className={styles.dailySummary}>{countChosenMeals(data.meals, date)} de 4 comidas elegidas</p>}
       <div data-legacy-sections className={styles.viewButtons} aria-label="Vista del planificador"><button aria-pressed={view === "day"} disabled={busy} onClick={() => navigate(date, "day", followsToday.current)}>Día</button><button aria-pressed={view === "week"} disabled={busy} onClick={() => navigate(date, "week", followsToday.current)}>Semana</button></div>

@@ -2,3 +2,4 @@
 export function trainingEnabled() { return process.env.TRAINING_ENABLED === "true"; }
 export function optionalTrainingMetricsEnabled() { return process.env.TRAINING_OPTIONAL_METRICS_ENABLED === "true"; }
 export function optionalTrainingMetricsFormEnabled() { return process.env.TRAINING_OPTIONAL_METRICS_FORM_ENABLED === "true"; }
+export function trainingDiaryEnabled() { return process.env.TRAINING_DIARY_ENABLED === "true"; }

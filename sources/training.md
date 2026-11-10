@@ -190,3 +190,9 @@ recuperación de respuesta perdida después de que el servidor ya guardó.
 - Limpieza completada: rama temporal Neon eliminada y ausencia confirmada;
   contenedor PostgreSQL 18, base temporal inicial y credenciales locales del
   ensayo retirados. Las ramas y bases preexistentes se conservaron.
+
+## Diario personal — contrato 3
+
+El replanteo aditivo, sus estados, API, transición explícita, lector de reversión y
+verificación se documentan en [training-diary.md](training-diary.md). Los contratos
+anteriores descritos arriba siguen vigentes únicamente antes de esa transición.

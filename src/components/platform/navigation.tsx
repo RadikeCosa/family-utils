@@ -23,9 +23,11 @@ export function useUnifiedUI() {
 }
 function subscribe(callback: () => void) {
   window.addEventListener("popstate", callback);
+  window.addEventListener("hashchange", callback);
   window.addEventListener("family-navigation", callback);
   return () => {
     window.removeEventListener("popstate", callback);
+    window.removeEventListener("hashchange", callback);
     window.removeEventListener("family-navigation", callback);
   };
 }
@@ -111,4 +113,15 @@ export function useURLState<T extends string | boolean>(
       );
     },
   ];
+}
+
+// Fragments keep private search terms out of HTTP request URLs.
+export function useNavigationHash() {
+  return useSyncExternalStore(subscribe, () => window.location.hash, () => "");
+}
+export function updateNavigationHash(query: string) {
+  const url = new URL(window.location.href);
+  url.hash = query ? `q=${encodeURIComponent(query)}` : "";
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  window.dispatchEvent(new Event("family-navigation"));
 }

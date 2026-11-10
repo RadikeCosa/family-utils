@@ -1,31 +1,14 @@
 export const FAMILY_TIME_ZONE = "America/Argentina/Buenos_Aires";
 
-export function getFamilyDay(now: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: FAMILY_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}
+import { dayInZone, addCivilDays, isCivilDate } from "../calendar/civil.ts";
+export function getFamilyDay(now: Date = new Date()): string { return dayInZone(now, FAMILY_TIME_ZONE); }
 
 export function taskListEtag(familyId: string, revision: number, day: string, selectedDate = day, page = "", mode = ""): string {
   return `"family-${familyId}-r${revision}-d${day}-view-${selectedDate}-${page}-${mode}"`;
 }
 
-export function isTaskDate(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-export function addTaskDays(day: string, amount: number): string {
-  const value = new Date(`${day}T12:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + amount);
-  return value.toISOString().slice(0, 10);
-}
+export const isTaskDate = isCivilDate;
+export const addTaskDays = addCivilDays;
 
 export function taskDateBounds(today: string) {
   const value = new Date(`${today}T12:00:00Z`);

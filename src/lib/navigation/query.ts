@@ -16,13 +16,13 @@ const keys: Record<string, string[]> = {
     "withMember",
   ],
   sports: ["sport", "event", "round", "member"],
-  training: ["seccion", "archived", "detalle"],
+  training: ["fecha", "seccion", "archived", "detalle"],
   kitchen: ["temperatura"],
   home: [],
   family: [],
 };
 const enums: Record<string, string[]> = {
-  seccion: ["historial"],
+  seccion: ["historial", "plantillas"],
   estado: ["completed", "archived"],
   vista: ["dia", "semana"],
   archived: ["true"],
