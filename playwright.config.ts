@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = "http://localhost:3318";
+const port = process.env.PLAYWRIGHT_PORT ?? "3318";
+const baseURL = `http://localhost:${port}`;
 
 if (process.env.CI && !process.env.FAMILY_UTILS_TEST_DATABASE_URL) {
   throw new Error("FAMILY_UTILS_TEST_DATABASE_URL is required in CI");
@@ -19,7 +20,7 @@ export default defineConfig({
     { name: "Desktop Chromium", testMatch: /sports\.spec\.ts/, use: { viewport: { width: 1365, height: 900 }, defaultBrowserType: "chromium" } },
   ],
   webServer: {
-    command: "npm run start -- -p 3318",
+    command: `npm run start -- -p ${port}`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 45_000,

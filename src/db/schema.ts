@@ -633,6 +633,7 @@ export const libraryWorks = pgTable("library_works", {
   title: text("title").notNull(),
   normalizedTitle: text("titulo_normalizado").notNull(),
   kind: text("kind").notNull(),
+  cineWithCami: boolean("cine_with_cami").notNull().default(false),
   genres: text("genres").array().notNull().default(sql`'{}'::text[]`),
   creator: text("creator"),
   normalizedCreator: text("creador_normalizado").notNull().default(""),

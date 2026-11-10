@@ -16,6 +16,7 @@ export function workInput(body: Record<string, unknown>): WorkInput | null {
     if (codePointLength(referenceUrl) > 2048 || /\s/u.test(referenceUrl)) return null;
     try { const url = new URL(referenceUrl); if (!["http:", "https:"].includes(url.protocol)) return null; } catch { return null; }
   }
+  if (body.cineWithCami !== undefined && typeof body.cineWithCami !== "boolean") return null;
   const genres = body.genres === undefined ? undefined : genreInput(body.genres);
   if (genres === null) return null;
   const runtimeMinutes = body.runtimeMinutes;
@@ -25,7 +26,7 @@ export function workInput(body: Record<string, unknown>): WorkInput | null {
   if (body.synopsis !== undefined && body.synopsis !== null && typeof body.synopsis !== "string") return null;
   const synopsis = typeof body.synopsis === "string" ? normalizeSynopsis(body.synopsis) || null : body.synopsis;
   if (typeof synopsis === "string" && movieTextLength(synopsis) > MAX_SYNOPSIS_LENGTH) return null;
-  return { title, kind: "movie", creator, year: year as number | null, referenceUrl, ...(genres === undefined ? {} : { genres }),
+  return { ...(body.cineWithCami === undefined ? {} : { cineWithCami: body.cineWithCami as boolean }), title, kind: "movie", creator, year: year as number | null, referenceUrl, ...(genres === undefined ? {} : { genres }),
     ...(runtimeMinutes === undefined ? {} : { runtimeMinutes: runtimeMinutes as number | null }),
     ...(cast === undefined ? {} : { cast: cast.names }), ...(synopsis === undefined ? {} : { synopsis: synopsis as string | null }) };
 }

@@ -41,7 +41,7 @@ test("movie metadata migration preserves data, aborts atomically on locks and en
       assert.equal((await pool.query("SELECT to_regprocedure('library_cast_is_valid(text[])') AS fn")).rows[0].fn,null);
     } finally { await blocker.query("ROLLBACK"); blocker.release(); }
     await migrate(drizzle(pool), { migrationsFolder:"drizzle" });
-    assert.deepEqual(await snapshot(),{ ...before,work:{ ...before.work,runtime_minutes:null,cast:[],synopsis:null } });
+    assert.deepEqual(await snapshot(),{ ...before,work:{ ...before.work,runtime_minutes:null,cast:[],synopsis:null,cine_with_cami:false } });
     assert.equal((await history()).length,journal.entries.length);
     const update = (sql,value) => pool.query(`UPDATE library_works SET ${sql} WHERE id=$2`,[value,work]);
     for (const runtime of [1,45,60,61,148,1440,null]) await update("runtime_minutes=$1",runtime);

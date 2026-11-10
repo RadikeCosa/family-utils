@@ -79,7 +79,7 @@ test("page filters canonicalize defaults and mutually exclusive modes without lo
   }
   for (const status of ["", "wrong"]) assert.equal(canonicalLibrarySearch(new URLSearchParams({ status, view: "invalid", archived: "false", kind: "book", type: "music", cursor: "old" })), "");
   const query = new URLSearchParams("view=common_pending&status=finished&archived=true&q=cine&extra=a&extra=b");
-  assert.deepEqual(readLibraryFilters(query), { view: "common_pending", status: "", archived: "true", q: "cine", genre: "", withMember: "" });
+  assert.deepEqual(readLibraryFilters(query), { selection: "", view: "common_pending", status: "", archived: "true", q: "cine", genre: "", withMember: "" });
   assert.equal(canonicalLibrarySearch(query), "extra=a&extra=b&q=cine&view=common_pending&archived=true");
 });
 
@@ -168,4 +168,32 @@ test("common member labels preserve family order, disambiguate duplicates and ex
   ];
   assert.deepEqual(commonMemberLabels(members, "self").map(m => [m.id, m.label]), [["a", "Ana (1)"], ["b", "Ana (2)"], ["c", "Nombre largo"]]);
   assert.deepEqual(commonMemberLabels([members[0]], "self"), []);
+});
+
+test("Cami input is strictly boolean and remains absent for older clients", () => {
+  assert.equal(workInput({ title: "Film" })?.cineWithCami, undefined);
+  for (const value of [true, false]) assert.equal(workInput({ title: "Film", cineWithCami: value })?.cineWithCami, value);
+  for (const value of [null, "true", 1, [], {}]) assert.equal(workInput({ title: "Film", cineWithCami: value }), null);
+});
+test("Cami selection normalizes malformed URLs without losing archive or genre", () => {
+  for (const suffix of ["", "other", "cine_with_cami&selection=cine_with_cami"]) {
+    const params = new URLSearchParams(`selection=${suffix}&archived=true&genre=drama&extra=yes&cursor=old`);
+    const clean = new URLSearchParams(canonicalLibrarySearch(params));
+    assert.equal(clean.has("selection"), false);
+    assert.equal(clean.get("archived"), "true");
+    assert.equal(clean.get("genre"), "drama");
+    assert.equal(clean.get("extra"), "yes");
+    assert.equal(clean.has("cursor"), false);
+  }
+  assert.equal(readLibraryFilters(new URLSearchParams("selection=cine_with_cami")).selection, "cine_with_cami");
+});
+test("Cami drafts preserve an inherited choice through unrelated edits and serialization", () => {
+  const initial = { title: "Film", kind: "movie", expectedVersion: 1, cineWithCami: null as boolean | null };
+  const old = { title: "Local title", kind: "movie", expectedVersion: 1 };
+  const recovered = restoreLibraryDraft(initial, old);
+  assert.equal(recovered.title, "Local title");
+  assert.equal(recovered.cineWithCami, null);
+  const persisted = JSON.parse(JSON.stringify({ ...recovered, title: "Another edit" }));
+  assert.equal(restoreLibraryDraft(initial, persisted).cineWithCami, null);
+  for (const choice of [true, false]) assert.equal(restoreLibraryDraft(initial, { ...old, cineWithCami: choice }).cineWithCami, choice);
 });

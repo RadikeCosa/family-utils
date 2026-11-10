@@ -34,6 +34,7 @@ export default function MovieCard({ work, memberId, compact = false }: { work: L
       {work.genres.length > 0 && (compact ? <p className={styles.listGenres}>{genreLabels(work.genres).join(" · ")}</p> : <div className={styles.genreBadges} aria-label="Géneros">{genreLabels(work.genres).map(label => <span className={styles.genreBadge} key={label}>{label}</span>)}</div>)}
       </div>
       <div className={styles.movieBadges}>
+        {work.cineWithCami && <span className={styles.camiBadge}>Cine con Cami</span>}
         <span className={styles.statusBadge} data-status={mine?.status ?? "none"}>{mine?.status ? STATUS_LABELS[mine.status] : "Sin estado"}</span>
         {work.archivedAt && <span className={styles.archiveBadge}>Archivada</span>}
       </div>

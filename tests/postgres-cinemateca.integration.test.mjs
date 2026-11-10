@@ -62,7 +62,7 @@ test("cinemateca migration is atomic, times out on locks, and compensation resto
       await client.query("COMMIT");
     } finally { client.release(); }
     assert.equal(await constraint(), original);
-    assert.deepEqual((await pool.query("SELECT * FROM library_works WHERE id=$1", [work])).rows, sentinel.map(row => ({ ...row, genres: [], runtime_minutes: null, cast: [], synopsis: null })));
+    assert.deepEqual((await pool.query("SELECT * FROM library_works WHERE id=$1", [work])).rows, sentinel.map(row => ({ ...row, genres: [], runtime_minutes: null, cast: [], synopsis: null, cine_with_cami: false })));
     for (const kind of ["movie", "series", "book", "music", "art", "video_game", "tabletop_game"]) await pool.query("UPDATE library_works SET kind=$1 WHERE id=$2", [kind, work]);
     await assert.rejects(pool.query("UPDATE library_works SET kind='unknown' WHERE id=$1", [work]), { code: "23514" });
   } finally {
@@ -117,12 +117,36 @@ test("common pending SQL handles membership, archive independently and scales wi
       for (const child of node.Plans ?? []) checkAggregate(child);
     }
     checkAggregate(aggregatePlan.Plan);
+    for (const frequency of [100, 2]) {
+      await client.query("UPDATE library_works SET cine_with_cami=coalesce(substring(title from '[0-9]+$')::int % $2 = 0,false) WHERE family_id=$1", [family, frequency]);
+      await client.query("ANALYZE library_works");
+      const filteredCounts = `${countQuery.replace("w.archived_at IS NULL", "w.archived_at IS NULL AND w.cine_with_cami = true")}`;
+      const selectedCounts = (await client.query(filteredCounts, [family, members[0].id])).rows;
+      assert.ok(selectedCounts.every(entry => entry.count === 10000 / frequency));
+      const plan = (await client.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${filteredCounts}`, [family, members[0].id])).rows[0]["QUERY PLAN"][0];
+      checkAggregate(plan.Plan);
+      t.diagnostic(`Cami 1/${frequency} counts: ${plan["Execution Time"]} ms; base ${aggregatePlan["Execution Time"]} ms`);
+    }
+
     t.diagnostic(`pair counts: ${aggregatePlan["Execution Time"]} ms; ${aggregatePlan.Plan["Shared Hit Blocks"]} buffer hits`);
     const activity = "greatest(w.created_at,coalesce((SELECT max(c.created_at) FROM library_contributions c WHERE c.work_id=w.id),w.created_at))";
     const query = `SELECT w.id,${activity} AS activity FROM library_works w WHERE w.family_id=$1 AND w.archived_at IS NULL AND w.genres @> ARRAY['drama']::text[] AND ${commonPendingSql}`;
     const first = (await client.query(`${query} ORDER BY ${activity} DESC,w.id DESC LIMIT 50`, [family])).rows;
     const last = first.at(-1);
-    for (const [label, sql, args] of [["first", query, [family]], ["next", `${query} AND (${activity},w.id)<($2::timestamptz,$3::uuid)`, [family, last.activity, last.id]]]) {
+    const scenarios = [["first", query, [family]], ["next", `${query} AND (${activity},w.id)<($2::timestamptz,$3::uuid)`, [family, last.activity, last.id]]];
+    for (const frequency of [100, 2]) {
+      await client.query("UPDATE library_works SET cine_with_cami=coalesce(substring(title from '[0-9]+$')::int % $2 = 0,false) WHERE family_id=$1", [family, frequency]);
+      const selectedQuery = `${query} AND w.cine_with_cami = true`;
+      const page = (await client.query(`${selectedQuery} ORDER BY ${activity} DESC,w.id DESC LIMIT 50`, [family])).rows;
+      assert.equal(page.length, 50);
+      const tail = page.at(-1);
+      for (const [label, sql, args] of [["first", selectedQuery, [family]], ["next", `${selectedQuery} AND (${activity},w.id)<($2::timestamptz,$3::uuid)`, [family, tail.activity, tail.id]]]) {
+        const plan = (await client.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${sql} ORDER BY ${activity} DESC,w.id DESC LIMIT 50`, args)).rows[0]["QUERY PLAN"][0];
+        checkAggregate(plan.Plan);
+        t.diagnostic(`Cami 1/${frequency} ${label}: ${plan["Execution Time"]} ms`);
+      }
+    }
+    for (const [label, sql, args] of scenarios) {
       const result = (await client.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${sql} ORDER BY ${activity} DESC,w.id DESC LIMIT 50`, args)).rows[0]["QUERY PLAN"][0];
       function check(node) {
         assert.ok(!(node["Relation Name"] === "library_personal" && node["Node Type"] === "Seq Scan" && node["Actual Loops"] > 1), "no repeated full personal scan per work");
@@ -168,7 +192,7 @@ test("genre migration preserves data, enforces the catalog and fails atomically 
       assert.deepEqual(await snapshot(), before);
     } finally { await blocker.query("ROLLBACK"); blocker.release(); }
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
-    assert.deepEqual(await snapshot(), { ...before, work: { ...before.work, genres: [], runtime_minutes: null, cast: [], synopsis: null } });
+    assert.deepEqual(await snapshot(), { ...before, work: { ...before.work, genres: [], runtime_minutes: null, cast: [], synopsis: null, cine_with_cami: false } });
     const definition = (await pool.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname='library_works_genres'")).rows[0].def;
     const literals = [...definition.matchAll(/'([^']*)'/g)].map(match => match[1]);
     assert.deepEqual([...new Set(literals)].sort(), GENRES.map(g => g.id).sort());
