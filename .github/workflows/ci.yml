@@ -53,11 +53,12 @@ jobs:
           sudo python3 - <<'PYTHON'
           from pathlib import Path
           for path in Path("/etc/apt").rglob("*"):
-              if path.is_file() and path.suffix in {".list", ".sources"}:
+              if path.is_file() and path.suffix in {".list", ".sources", ".txt"}:
                   current = path.read_text()
-                  updated = current.replace("azure.archive.ubuntu.com", "archive.ubuntu.com")
+                  updated = current.replace("http://azure.archive.ubuntu.com", "https://archive.ubuntu.com").replace("https://azure.archive.ubuntu.com", "https://archive.ubuntu.com")
                   if updated != current:
                       path.write_text(updated)
+                      print(f"Ubuntu archive configured in {path}")
           PYTHON
       - name: Install browser dependencies
         timeout-minutes: 10
