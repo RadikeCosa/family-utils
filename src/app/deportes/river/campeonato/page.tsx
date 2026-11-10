@@ -1,3 +1,4 @@
+import Experience from "@/components/platform/Experience";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -12,14 +13,14 @@ export const dynamic = "force-dynamic";
 const titles = { goals: "Goleadores", assists: "Asistidores", yellowCards: "Tarjetas amarillas", redCards: "Tarjetas rojas" };
 const columns = { goals: "Goles", assists: "Asistencias", yellowCards: "Amarillas", redCards: "Rojas" };
 
-export default async function RiverChampionshipPage() {
+async function RiverChampionshipPage() {
   if (!sportsFeatures().agenda) notFound();
   if (!await getMemberContext(await headers())) redirect("/acceso");
   const data = loadRiverChampionship(), s = data.standing;
-  return <main className={styles.page}>
-    <header className={styles.header}><Link href="/deportes?sport=river">‹ River</Link><span>Family Utils / Deportes</span></header>
+  return <main data-app-frame className={styles.page}>
+    <header data-legacy-chrome className={styles.header}><Link href="/deportes?sport=river">‹ River</Link><span>Family Utils / Deportes</span></header>
     <div className={styles.intro}><p>TORNEO CLAUSURA · {data.year}</p><h1>River en el campeonato</h1><span>La posición del equipo y los números de sus jugadores.</span></div>
-    <section className={styles.standing} aria-labelledby="river-position">
+    <section data-ui-dark-surface className={styles.standing} aria-labelledby="river-position">
       <p className={styles.eyebrow}>ZONA {s.zone}</p>
       <h2 id="river-position"><strong>{s.position}.º</strong> de {s.teams} equipos</h2>
       <dl className={styles.summary}>
@@ -49,4 +50,8 @@ export default async function RiverChampionshipPage() {
       </section>;
     })}</div>
   </main>;
+}
+
+export default async function Page() {
+  return <Experience>{await RiverChampionshipPage()}</Experience>;
 }

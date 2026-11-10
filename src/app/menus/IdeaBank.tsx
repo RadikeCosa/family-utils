@@ -97,7 +97,7 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
       {(busy || !queryReady) && <p className={styles.loading} role="status">Buscando…</p>}
       {!busy && !items.length && <p className={styles.empty}>{archived ? "No hay platos ocultos." : "Todavía no hay platos en el repertorio."}</p>}
       <div className={styles.bankIdeas}>{items.map(item => <article className={styles.bankIdea} key={item.id}>
-        <h3>{item.title}</h3>{recipes && <Link href={`/recetas/${item.id}`}>Ver receta</Link>}{item.note && <p>{item.note}</p>}
+        <h3>{item.title}</h3>{recipes && <Link href={`/recetas/${item.id}${state ? `?fecha=${state.date}&comida=${state.mealType}` : ""}`}>Ver receta</Link>}{item.note && <p>{item.note}</p>}
         <div className={styles.suggestionActions}>
           {!archived && state && state.date >= today && <button disabled={busy || !queryReady} onClick={() => void choose(item)}>{hiddenExact?.id === item.id ? "Volver a usar" : "Agregar"}<span className={styles.srOnly}> {item.title}</span></button>}
           {(recipes || canManage(item)) && (manage || archived) && <>{(!archived || recipes) && <button disabled={busy} onClick={() => manageItem(item, "edit")}>Editar<span className={styles.srOnly}> {item.title}</span></button>}{canManage(item) && <button disabled={busy} onClick={() => void manageItem(item, archived ? "restore" : "archive")}>{archived ? "Restaurar" : "Ocultar del repertorio"}<span className={styles.srOnly}> {item.title}</span></button>}</>}
@@ -105,7 +105,7 @@ export default function IdeaBank({ state, onClose, onUse, onChanged, currentMemb
       </article>)}</div>
       {queryReady && !archived && state && query.trim() && !items.some(item => item.exactMatch) && <div className={styles.newCatalogChoice}>
         {!hiddenExact && <label>Nota opcional<textarea rows={2} maxLength={1000} value={note} onChange={event => setNote(event.target.value)} /></label>}
-        {hiddenExact ? <><p>Este plato está oculto.</p>{recipes ? <Link href={`/recetas/${hiddenExact.id}`}>Abrir receta para restaurar</Link> : <button className={styles.secondaryButton} disabled={busy} onClick={() => void choose(hiddenExact)}>Volver a usar “{hiddenExact.title}”</button>}</> : <button className={styles.primaryButton} disabled={busy} onClick={() => void choose({ id: "", title: query.trim(), note: note.trim() || null, authorName: "" })}>Agregar “{query.trim()}”</button>}
+        {hiddenExact ? <><p>Este plato está oculto.</p>{recipes ? <Link href={`/recetas/${hiddenExact.id}${state ? `?fecha=${state.date}&comida=${state.mealType}` : ""}`}>Abrir receta para restaurar</Link> : <button className={styles.secondaryButton} disabled={busy} onClick={() => void choose(hiddenExact)}>Volver a usar “{hiddenExact.title}”</button>}</> : <button className={styles.primaryButton} disabled={busy} onClick={() => void choose({ id: "", title: query.trim(), note: note.trim() || null, authorName: "" })}>Agregar “{query.trim()}”</button>}
       </div>}
       {!busy && nextOffset !== null && <button className={styles.expandButton} onClick={() => void load(query, archived, nextOffset, true)}>Ver más platos</button>}
       <button className={styles.inlineAction} disabled={busy} onClick={() => setManage(value => !value)}>{manage ? "Listo" : "Ver todos los platos"}</button>

@@ -1,4 +1,5 @@
 "use client";
+import { useURLState, useUnifiedUI, useDetailTitle } from "@/components/platform/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { effortLabel, formatDuration } from "@/lib/training/rules";
@@ -8,7 +9,12 @@ import styles from "./training.module.css";
 
 type Tab = "routines" | "sessions";
 export default function TrainingApp({ today: initialToday, memberName, optionalMetrics }: { today: string; memberName: string; optionalMetrics: boolean }) {
-  const [tab, setTab] = useState<Tab>("routines"); const [archived, setArchived] = useState(false);
+  const unified = useUnifiedUI();
+  const [section, setSection] = useURLState("seccion", "", "push", ["", "historial"]);
+  const tab: Tab = section === "historial" ? "sessions" : "routines";
+  const setTab = (next: Tab) => setSection(next === "sessions" ? "historial" : "");
+  const [archived, setArchived] = useURLState("archived", false);
+  const [detailId, setDetailId] = useURLState("detalle", "", "push");
   const [items, setItems] = useState<(TrainingRoutine | TrainingSession)[]>([]); const [cursor, setCursor] = useState<string | null>(null);
   const [today, setToday] = useState(initialToday); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   const [editor, setEditor] = useState<EditorTarget | null>(null); const [detail, setDetail] = useState<TrainingRoutine | TrainingSession | null>(null);
@@ -32,7 +38,19 @@ export default function TrainingApp({ today: initialToday, memberName, optionalM
     queueMicrotask(() => { if (mounted) void load(); });
     return () => { mounted = false; tracker.current++; };
   }, [load]);
+  useDetailTitle(detail?.name);
+  useEffect(() => {
+    if (!unified) return;
+    let active = true;
+    queueMicrotask(() => { if (active) { setDetail(null); setError(""); } });
+    if (detailId) {
+      void trainingRequest(`${tab}/${detailId}`).then(data => { if (active) { setToday(data.today); setDetail(data.item); } }).catch(error => { if (active) setError(error.message); });
+    }
+    return () => { active = false; };
+  }, [unified, detailId, tab]);
+  function clearDetail() { setDetail(null); if (unified) setDetailId(""); }
   async function open(item: TrainingRoutine | TrainingSession) {
+    if (unified) { setDetailId(item.id); return; }
     setBusy(true); setError("");
     try { const data = await trainingRequest(`${tab}/${item.id}`); setToday(data.today); setDetail(data.item); }
     catch (error) { setError((error as Error).message); }
@@ -53,26 +71,26 @@ export default function TrainingApp({ today: initialToday, memberName, optionalM
     setBusy(true); setError("");
     try {
       await trainingRequest(`routines/${routine.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: routine.version, action: routine.archivedAt ? "restore" : "archive" }) });
-      setDetail(null); setNotice(routine.archivedAt ? "Rutina restaurada." : "Rutina archivada. Tus entrenamientos se conservan."); await load();
+      clearDetail(); setNotice(routine.archivedAt ? "Rutina restaurada." : "Rutina archivada. Tus entrenamientos se conservan."); await load();
     } catch (error) { setError((error as Error).message); }
     finally { setBusy(false); }
   }
   function closeEditor() { setEditor(null); requestAnimationFrame(() => heading.current?.focus()); }
   function saved() {
     const savedTab = editor?.kind ?? tab;
-    closeEditor(); setDetail(null); setNotice("Guardado. Tus datos ya están disponibles en tus dispositivos.");
+    closeEditor(); clearDetail(); setNotice("Guardado. Tus datos ya están disponibles en tus dispositivos.");
     if (savedTab !== tab) { setItems([]); setCursor(null); setTab(savedTab); } else void load();
   }
   const routine = detail && "archivedAt" in detail ? detail : null;
   const session = detail && "performedOn" in detail ? detail : null;
-  return <main className={styles.page}>
-    <header className={styles.header}><Link href="/" className={styles.back}>← Aplicaciones</Link><span className={styles.private}>Espacio personal</span></header>
-    <div className={styles.hero}><p className={styles.eyebrow}>A TU RITMO</p><h1 ref={heading} tabIndex={-1}>Entrenamiento</h1><p>{memberName}, este es tu espacio para organizar tus rutinas y recordar cómo te fue.</p></div>
+  return <main data-app-frame className={styles.page}>
+    <header data-legacy-chrome className={styles.header}><Link href="/" className={styles.back}>← Aplicaciones</Link><span className={styles.private}>Espacio personal</span></header>
+    <div data-page-heading className={styles.hero}><p className={styles.eyebrow}>A TU RITMO</p><h1 ref={heading} tabIndex={-1}>Entrenamiento</h1><p>{memberName}, este es tu espacio para organizar tus rutinas y recordar cómo te fue.</p></div>
     {editor ? <TrainingEditor key={`${editor.kind}-${"session" in editor ? editor.session?.id : editor.routine?.id}-${"duplicate" in editor && editor.duplicate ? "copy" : "edit"}`} target={editor} today={today} optionalMetrics={optionalMetrics} onClose={closeEditor} onSaved={saved} /> : <>
-      <nav className={styles.tabs} aria-label="Entrenamiento"><button disabled={busy} aria-current={tab === "routines" ? "page" : undefined} onClick={() => { setTab("routines"); setItems([]); setCursor(null); setDetail(null); setNotice(""); }}>Mis rutinas</button><button disabled={busy} aria-current={tab === "sessions" ? "page" : undefined} onClick={() => { setTab("sessions"); setItems([]); setCursor(null); setDetail(null); setNotice(""); }}>Historial</button></nav>
+      <nav data-legacy-sections className={styles.tabs} aria-label="Entrenamiento"><button disabled={busy} aria-current={tab === "routines" ? "page" : undefined} onClick={() => { setTab("routines"); setItems([]); setCursor(null); clearDetail(); setNotice(""); }}>Mis rutinas</button><button disabled={busy} aria-current={tab === "sessions" ? "page" : undefined} onClick={() => { setTab("sessions"); setItems([]); setCursor(null); clearDetail(); setNotice(""); }}>Historial</button></nav>
       {notice && <p role="status" className={styles.notice}>{notice}</p>}
-      {error && <div role="alert" className={styles.error}>{error}{retryRoutine ? <button type="button" disabled={busy} onClick={() => void startSession(retryRoutine)}>Reintentar</button> : <button type="button" onClick={() => { setDetail(null); void load(); }}>Actualizar listado</button>}</div>}
-      {detail ? <section className={styles.card} aria-labelledby="detail-title"><button type="button" onClick={() => setDetail(null)}>← Volver al listado</button><h2 id="detail-title">{detail.name}</h2>
+      {error && <div role="alert" className={styles.error}>{error}{retryRoutine ? <button type="button" disabled={busy} onClick={() => void startSession(retryRoutine)}>Reintentar</button> : <button type="button" onClick={() => { clearDetail(); void load(); }}>Actualizar listado</button>}</div>}
+      {detail ? <section data-ui-surface className={styles.card} aria-labelledby="detail-title"><button type="button" onClick={clearDetail}>← Volver al listado</button><h2 id="detail-title">{detail.name}</h2>
         {routine?.archivedAt && <p className={styles.muted}>Rutina archivada. Restaurala para registrar un entrenamiento.</p>}
         {session && <><p>{displayDate(session.performedOn)}</p><div className={styles.metrics} aria-label="Datos del entrenamiento"><span>{session.durationSeconds == null ? "Duración: Sin registrar" : `Duración: ${formatDuration(session.durationSeconds)}`}</span><span>{session.effort == null ? "Esfuerzo: Sin registrar" : `Esfuerzo: ${session.effort}/10 (${effortLabel(session.effort)})`}</span></div>{session.note && <p className={styles.note}>{session.note}</p>}</>}
         <BlockSummary blocks={detail.blocks} />
@@ -84,8 +102,8 @@ export default function TrainingApp({ today: initialToday, memberName, optionalM
         <div className={styles.toolbar}><h2 id="collection-title">{tab === "routines" ? "Mis rutinas" : "Historial"}</h2>{tab === "routines" && <button className={styles.primary} onClick={() => setEditor({ kind: "routines" })}>Nueva rutina</button>}</div>
         {tab === "routines" && <label className={styles.filter}>Mostrar<select value={String(archived)} onChange={(event) => { setArchived(event.target.value === "true"); setItems([]); setCursor(null); setNotice(""); }}><option value="false">Rutinas activas</option><option value="true">Rutinas archivadas</option></select></label>}
         {loading && <p role="status">Cargando…</p>}
-        {!loading && !error && !items.length && <div className={styles.empty}><h3>{tab === "sessions" ? "Tu próximo entrenamiento empieza acá" : archived ? "No tenés rutinas archivadas" : "Armá tu primera rutina"}</h3><p>{tab === "sessions" ? "Elegí una rutina en Mis rutinas y registrá qué día la hiciste. Si querés, también podés anotar cuánto duró y qué esfuerzo te llevó." : "Combiná ejercicios por repeticiones y tiempo, organizados en bloques con sus vueltas."}</p></div>}
-        <div className={styles.grid}>{items.map((item) => <article className={styles.card} key={item.id}><h3>{item.name}</h3>{"performedOn" in item ? <><p>{displayDate(item.performedOn)}</p><div className={styles.metrics} aria-label="Datos del entrenamiento"><span>{item.durationSeconds == null ? "Duración: Sin registrar" : `Duración: ${formatDuration(item.durationSeconds)}`}</span><span>{item.effort == null ? "Esfuerzo: Sin registrar" : `Esfuerzo: ${item.effort}/10 (${effortLabel(item.effort)})`}</span></div>{item.note && <p className={styles.muted}>{item.note}</p>}</> : <><p className={styles.muted}>{item.blocks.length} {item.blocks.length === 1 ? "bloque" : "bloques"} · {item.blocks.reduce((sum, block) => sum + block.exercises.length, 0)} ejercicios</p>{!archived && <button className={styles.primary} disabled={busy || loading} onClick={() => void startSession(item)}>Registrar entrenamiento</button>}</>}<button disabled={busy || loading} aria-label={`Ver ${item.name}`} onClick={() => void open(item)}>Ver detalle →</button></article>)}</div>
+        {!loading && !error && !items.length && <div data-ui-surface className={styles.empty}><h3>{tab === "sessions" ? "Tu próximo entrenamiento empieza acá" : archived ? "No tenés rutinas archivadas" : "Armá tu primera rutina"}</h3><p>{tab === "sessions" ? "Elegí una rutina en Mis rutinas y registrá qué día la hiciste. Si querés, también podés anotar cuánto duró y qué esfuerzo te llevó." : "Combiná ejercicios por repeticiones y tiempo, organizados en bloques con sus vueltas."}</p></div>}
+        <div className={styles.grid}>{items.map((item) => <article data-ui-surface className={styles.card} key={item.id}><h3>{item.name}</h3>{"performedOn" in item ? <><p>{displayDate(item.performedOn)}</p><div className={styles.metrics} aria-label="Datos del entrenamiento"><span>{item.durationSeconds == null ? "Duración: Sin registrar" : `Duración: ${formatDuration(item.durationSeconds)}`}</span><span>{item.effort == null ? "Esfuerzo: Sin registrar" : `Esfuerzo: ${item.effort}/10 (${effortLabel(item.effort)})`}</span></div>{item.note && <p className={styles.muted}>{item.note}</p>}</> : <><p className={styles.muted}>{item.blocks.length} {item.blocks.length === 1 ? "bloque" : "bloques"} · {item.blocks.reduce((sum, block) => sum + block.exercises.length, 0)} ejercicios</p>{!archived && <button className={styles.primary} disabled={busy || loading} onClick={() => void startSession(item)}>Registrar entrenamiento</button>}</>}<button disabled={busy || loading} aria-label={`Ver ${item.name}`} onClick={() => void open(item)}>Ver detalle →</button></article>)}</div>
         {cursor && <button type="button" disabled={loading} onClick={() => void load(cursor)}>Ver más</button>}
       </section>}
     </>}

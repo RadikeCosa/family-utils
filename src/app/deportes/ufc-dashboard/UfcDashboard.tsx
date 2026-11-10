@@ -1,4 +1,5 @@
 "use client";
+import { useUnifiedUI, useURLState, useNavigationQuery } from "@/components/platform/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildUfcDashboard, type DashboardEvent } from "@/lib/sports/ufc-dashboard-rules";
@@ -10,9 +11,13 @@ const date = (value: string) => new Intl.DateTimeFormat("es-AR", { day: "numeric
 export default function UfcDashboard({ initialEvent, isAdmin }: { initialEvent: string | null; isAdmin: boolean }) {
   const router = useRouter();
   const [data, setData] = useState<Data | null>(null);
-  const [eventId, setEventId] = useState(initialEvent ?? "");
-  const [period, setPeriod] = useState(initialEvent === "all" ? "all" : "event");
-  const [memberId, setMemberId] = useState("all");
+  const unified = useUnifiedUI(), query = useNavigationQuery();
+  const [legacyEventId, setEventId] = useState(initialEvent ?? "");
+  const [legacyPeriod, setPeriod] = useState(initialEvent === "all" ? "all" : "event");
+  const requestedEvent = query.get("event");
+  const eventId = unified ? data?.events.find(card => card.id === requestedEvent)?.id ?? data?.events[0]?.id ?? "" : legacyEventId;
+  const period = unified ? requestedEvent === "all" ? "all" : "event" : legacyPeriod;
+  const [memberId, setMemberId] = useURLState("member", "all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -58,13 +63,13 @@ export default function UfcDashboard({ initialEvent, isAdmin }: { initialEvent: 
   function fighterName(fight: Data["fights"][number], id: string | null) {
     return id === fight.firstFighterId ? fight.firstFighter : id === fight.secondFighterId ? fight.secondFighter : "Sin ganador";
   }
-  if (loading) return <main className={styles.page}><a className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a><header className={styles.header}><a href="/deportes?sport=ufc">← UFC</a><span>Ranking y estadísticas</span></header><p id="dashboard-content" className={styles.status} role="status">Cargando resultados…</p></main>;
-  if (error) return <main className={styles.page}><a className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a><header className={styles.header}><a href="/deportes?sport=ufc">← UFC</a><span>Ranking y estadísticas</span></header><section id="dashboard-content" className={styles.error} role="alert"><p>{error}</p><button onClick={() => { setLoading(true); setError(""); setReloadKey((value) => value + 1); }}>Reintentar</button></section></main>;
-  if (!data || !data.events.length) return <main className={styles.page}><a className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a><header className={styles.header}><a href="/deportes?sport=ufc">← UFC</a><span>Pronósticos de la familia</span></header><section id="dashboard-content" className={styles.empty}><p className={styles.eyebrow}>UFC · RESULTADOS</p><h1>Todavía no hay una velada completa</h1><p>El ranking aparece cuando termina una cartelera y se cargan todos sus resultados.</p></section></main>;
+  if (loading) return <main data-app-frame className={styles.page}><a data-legacy-chrome className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a><header data-legacy-chrome className={styles.header}><a href="/deportes?sport=ufc">← UFC</a><span>Ranking y estadísticas</span></header><p id="dashboard-content" className={styles.status} role="status">Cargando resultados…</p></main>;
+  if (error) return <main data-app-frame className={styles.page}><a data-legacy-chrome className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a><header data-legacy-chrome className={styles.header}><a href="/deportes?sport=ufc">← UFC</a><span>Ranking y estadísticas</span></header><section id="dashboard-content" className={styles.error} role="alert"><p>{error}</p><button onClick={() => { setLoading(true); setError(""); setReloadKey((value) => value + 1); }}>Reintentar</button></section></main>;
+  if (!data || !data.events.length) return <main data-app-frame className={styles.page}><a data-legacy-chrome className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a><header data-legacy-chrome className={styles.header}><a href="/deportes?sport=ufc">← UFC</a><span>Pronósticos de la familia</span></header><section id="dashboard-content" className={styles.empty}><p className={styles.eyebrow}>UFC · RESULTADOS</p><h1>Todavía no hay una velada completa</h1><p>El ranking aparece cuando termina una cartelera y se cargan todos sus resultados.</p></section></main>;
   const activeEvent = source.find((card) => card.id === eventId) ?? source[0];
-  return <main className={styles.page}>
-    <a className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a>
-    <header className={styles.header}><a href={"/deportes?sport=ufc&event=" + encodeURIComponent(eventId)}>← UFC</a><span>Pronósticos de la familia</span></header>
+  return <main data-app-frame className={styles.page}>
+    <a data-legacy-chrome className={styles.skipLink} href="#dashboard-content">Saltar al contenido</a>
+    <header data-legacy-chrome className={styles.header}><a href={"/deportes?sport=ufc&event=" + encodeURIComponent(eventId)}>← UFC</a><span>Pronósticos de la familia</span></header>
     <section id="dashboard-content" className={styles.intro}><p className={styles.eyebrow}>UFC · COMPETENCIA FAMILIAR</p><h1>Ranking y estadísticas</h1><p>Aciertos, participación y evolución de cada integrante.</p></section>
     <section className={styles.viewBar} aria-label="Vista del ranking">
       <nav className={styles.period} aria-label="Período"><button aria-pressed={period === "event"} onClick={() => changePeriod("event")}>Por velada</button><button aria-pressed={period === "all"} onClick={() => changePeriod("all")}>Histórico</button></nav>

@@ -64,6 +64,8 @@ gane.
 
 ## Documentación
 
+- [Experiencia unificada: navegación, activación y verificación](sources/unified-experience.md)
+
 - [Recetas: catálogo compartido, migraciones y activación](sources/recipes.md)
 
 - [Rediseño de Biblioteca familiar y validación](sources/family-library-redesign.md)

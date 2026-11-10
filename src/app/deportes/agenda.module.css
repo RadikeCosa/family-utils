@@ -122,7 +122,7 @@
   align-items: center;
   gap: 12px;
 }
-.agendaHeading h3 {
+.agendaHeading :is(h2,h3) {
   margin: 2px 0 0;
   font: 700 18px Manrope,sans-serif;
 }
@@ -466,7 +466,7 @@
   .championsPicks { grid-template-columns: minmax(0,1fr); }
   .agenda { padding: 12px; }
   .agendaHeading { align-items: flex-start; }
-  .agendaHeading h3 { font-size: 16px; }
+  .agendaHeading :is(h2,h3) { font-size: 16px; }
 }
 
 .choices {
