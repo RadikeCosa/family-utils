@@ -156,3 +156,29 @@ SELECT en ambas. Las columnas y asociaciones existentes no se modificaron.
 
 La reversión de código conserva ambas tablas y sus datos; no se debe ejecutar
 una migración destructiva ni restaurar un respaldo completo como rollback.
+
+
+## Ajuste de UI/UX — portada centrada en el recetario
+
+La portada deja de mostrar permanentemente el formulario de creación y los
+campos de etiquetas. Su estado inicial presenta el título, Nueva receta, una
+búsqueda por nombre y un botón Filtros. Las primeras recetas quedan visibles
+sin atravesar formularios; las filas tienen una zona amplia de navegación,
+nota resumida, etiquetas y jerarquía visual de recetario.
+
+Nueva receta abre un diálogo nativo con un único campo obligatorio, Nombre de
+la receta. Agregar etiquetas es opcional y se despliega dentro del diálogo.
+El cierre restaura el foco y el diálogo se adapta al espacio disponible cuando
+aparece el teclado móvil. Los filtros de etiquetas y Disponibles/Ocultas se
+muestran bajo demanda, con selección activa visible fuera del panel y una
+acción para limpiar todo. Se conservan búsqueda, enlaces, cursores y regreso
+con páginas/scroll.
+
+Las sugerencias de etiquetas aparecen como un desplegable superpuesto y se
+cierran al elegir: al salir del campo no desplazan los botones de creación ni
+los controles de filtros. No se modifican contratos de API ni migraciones.
+
+Validación del ajuste: 15 recorridos en escritorio, iPhone y Android, incluida
+la ausencia de campos de creación en portada, primera receta dentro de la
+pantalla inicial, diálogo, teclado, restauración de foco, filtros, borradores,
+Menús/Compras, scroll y axe sin hallazgos; tipos, lint y build aprobados.
