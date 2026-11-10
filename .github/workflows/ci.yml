@@ -48,7 +48,20 @@ jobs:
       - run: npm run test:navigation
       - run: npm run build
       - run: npm run test:routes
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Use the Ubuntu archive for browser dependencies
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          for path in Path("/etc/apt").rglob("*"):
+              if path.is_file() and path.suffix in {".list", ".sources"}:
+                  current = path.read_text()
+                  updated = current.replace("azure.archive.ubuntu.com", "archive.ubuntu.com")
+                  if updated != current:
+                      path.write_text(updated)
+          PYTHON
+      - name: Install browser dependencies
+        timeout-minutes: 10
+        run: npx playwright install --with-deps chromium webkit
       - run: npm run test:recipes:e2e
       - run: npm run test:e2e
       - run: npm run test:sports-next
