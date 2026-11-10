@@ -31,6 +31,62 @@ test("recipes real routes: shared catalog, audit, permissions and atomic reviewe
     for (let i = 0; ; i++) { try { if ((await fetch(origin)).ok) break; } catch {} if (server.exitCode !== null || i > 150) throw new Error("Test server startup failed"); await delay(100); }
     const f = await family(); owner = await identity(f); editor = await identity(f); outsider = await identity(await family());
     const detail = async (who = owner) => (await ok(who, `/api/recipes/${recipe.id}`)).recipe;
+    await t.test("free tags are canonical, audited, family-scoped and preserved by legacy edits", async () => {
+      const created = await ok(owner, "/api/recipes", "POST", { title: "Etiquetada uno", tags: ["#deVerano", "Almuerzo", "DEVERANO"] });
+      const id = created.idea.id;
+      let tagged = (await ok(owner, `/api/recipes/${id}`)).recipe;
+      assert.deepEqual(tagged.tags.map(t => t.name), ["Almuerzo", "deVerano"]);
+      assert.deepEqual(tagged.mealTypes, []);
+      const unicode = await ok(owner, "/api/recipes", "POST", { title: "Unicode labels", tags: ["꟎", "ano", "año"] });
+      assert.deepEqual(unicode.idea.tags.map(t => t.slug), ["ano", "año", "꟏"]);
+      const noop = await ok(editor, `/api/recipes/${id}`, "PATCH", { expectedVersion: tagged.version, tags: ["deveráno", "almuerzo"] });
+      assert.equal(noop.changed, false);
+      await ok(owner, `/api/meals/ideas/${id}`, "PATCH", { expectedVersion: tagged.version, note: "Cambio desde Menús" });
+      tagged = (await ok(owner, `/api/recipes/${id}`)).recipe;
+      assert.equal(tagged.tags.length, 2);
+      const changed = await ok(editor, `/api/recipes/${id}`, "PATCH", { expectedVersion: tagged.version, tags: ["deVerano", "año"] });
+      assert.equal(changed.idea.version, tagged.version + 1);
+      const audit = (await pool.query("select * from audit_events where entity_id=$1 order by created_at desc limit 1", [id])).rows[0];
+      assert.equal(audit.before.tags.length, 2); assert.equal(audit.after.tags[0].slug, "año");
+      const race = await Promise.all([ok(owner, "/api/recipes", "POST", { title: "Etiquetada dos", tags: ["nueva", "deverano"] }),
+        ok(editor, "/api/recipes", "POST", { title: "Etiquetada tres", tags: ["NUEVA", "invierno"] })]);
+      assert.equal(race[0].idea.tags.find(t => t.slug === "nueva").id, race[1].idea.tags.find(t => t.slug === "nueva").id);
+      const foreign = await ok(outsider, "/api/recipes", "POST", { title: "Etiquetada ajena", tags: ["privada", "deVerano"] });
+      assert.notEqual(foreign.idea.tags.find(t => t.slug === "deverano").id, tagged.tags.find(t => t.slug === "deverano").id);
+      assert.equal((await ok(owner, "/api/recipes/tags?mode=edit")).tags.some(t => t.slug === "privada"), false);
+      assert.equal((await ok(owner, "/api/recipes?tag=deverano&tag=año")).total, 1);
+      const facets = await ok(owner, "/api/recipes/tags?tag=deverano");
+      assert.equal(facets.tags.find(t => t.slug === "invierno").count, 0);
+      assert.equal((await ok(owner, "/api/recipes?q=deVerano")).total, 0, "text search excludes tags");
+      const ignored = await ok(owner, "/api/recipes?tag=privada"); assert.deepEqual(ignored.ignoredTags, ["privada"]);
+      const typo = await ok(owner, "/api/recipes", "POST", { title: "Corregir etiqueta", tags: ["almuerso"] });
+      await ok(owner, `/api/recipes/${typo.idea.id}`, "PATCH", { expectedVersion: 1, tags: [] });
+      assert.equal((await ok(owner, "/api/recipes/tags?mode=edit")).tags.some(t => t.slug === "almuerso"), false);
+      assert.ok((await pool.query("select id from recipe_tags where family_id=$1 and normalized_name='almuerso'", [f])).rowCount);
+      assert.deepEqual((await ok(owner, "/api/recipes?tag=almuerso")).ignoredTags, ["almuerso"]);
+      const hidden = await ok(owner, "/api/recipes", "POST", { title: "Oculta etiquetada", tags: ["soloOculta"] });
+      await ok(owner, `/api/recipes/${hidden.idea.id}`, "PATCH", { expectedVersion: 1, action: "archive" });
+      assert.ok((await ok(owner, "/api/recipes/tags?mode=edit")).tags.some(t => t.slug === "solooculta"));
+      assert.equal((await ok(owner, "/api/recipes?archived=1&tag=solooculta")).total, 1);
+      assert.equal((await request(owner, "/api/recipes", "POST", { title: "Invalid tags", tags: ["invalid/"] })).status, 400);
+    });
+    await t.test("keyset pages keep full timestamp precision and stop when catalog revision changes", async () => {
+      for (let n = 0; n < 7; n++) await ok(owner, "/api/recipes", "POST", { title: `Cursor ${n}` });
+      // Exercise tied values, null last-use and microseconds that JavaScript Date would truncate.
+      await pool.query("update meal_ideas set updated_at='2026-11-10 10:00:00.123456+00', created_at='2026-11-10 09:00:00+00' where family_id=$1 and title like 'Cursor %'", [f]);
+      await pool.query("update meal_ideas set last_used_at='2026-11-10 11:00:00.123456+00' where family_id=$1 and title in ('Cursor 0','Cursor 1')", [f]);
+      let page = await ok(owner, "/api/recipes?q=Cursor&limit=2"), ids = page.ideas.map(i => i.id), cursor = page.nextCursor;
+      const firstCursor = cursor;
+      while (cursor) { page = await ok(owner, `/api/recipes?q=Cursor&limit=2&cursor=${encodeURIComponent(cursor)}`); ids.push(...page.ideas.map(i => i.id)); cursor = page.nextCursor; }
+      assert.equal(ids.length, 7); assert.equal(new Set(ids).size, 7);
+      assert.equal((await request(owner, `/api/recipes?q=Other&cursor=${encodeURIComponent(firstCursor)}`)).body.code, "INVALID_CURSOR");
+      assert.equal((await request(outsider, `/api/recipes?q=Cursor&cursor=${encodeURIComponent(firstCursor)}`)).body.code, "INVALID_CURSOR");
+      assert.equal((await request(owner, "/api/recipes?cursor=broken")).body.code, "INVALID_CURSOR");
+      const target = (await ok(owner, `/api/recipes/${ids[0]}`)).recipe;
+      await ok(owner, `/api/recipes/${target.id}`, "PATCH", { expectedVersion: target.version, tags: ["modificada"] });
+      assert.equal((await request(owner, `/api/recipes?q=Cursor&cursor=${encodeURIComponent(firstCursor)}`)).body.code, "CATALOG_CHANGED");
+      const legacy = await ok(owner, "/api/recipes?q=Cursor&limit=2&offset=2"); assert.equal(legacy.ideas.length, 2); assert.equal(legacy.nextOffset, 4);
+    });
     await t.test("partial recipe, SQL normalization, literal search and rename collision", async () => {
       recipe = (await ok(owner, "/api/recipes", "POST", { title: "Caña familiar" })).idea;
       assert.equal(recipe.version, 1); assert.deepEqual((await detail()).ingredients, []);
@@ -63,9 +119,11 @@ test("recipes real routes: shared catalog, audit, permissions and atomic reviewe
       const response = await request(owner, `/api/recipes/${recipe.id}`); assert.equal((await request(owner, `/api/recipes/${recipe.id}`, "GET", undefined, { "If-None-Match": response.etag })).status, 304);
       const planner = await ok(owner, "/api/meals/planner"), meal = planner.meals.find(m => m.date === planner.today && m.mealType === "lunch");
       const before = await detail();
+      const catalogBeforeMenu = await ok(owner, "/api/recipes?limit=1");
       await ok(owner, "/api/meals/planner", "PUT", { date: planner.today, mealType: "lunch", action: "propose", catalogIdeaId: recipe.id, expectedVersion: meal.version });
       const fresh = await ok(owner, "/api/meals/planner"), currentMeal = fresh.meals.find(m => m.date === planner.today && m.mealType === "lunch"), suggestion = currentMeal.suggestions[0];
       await ok(owner, "/api/meals/planner", "PUT", { date: planner.today, mealType: "lunch", action: "confirm", suggestionId: suggestion.id, menu: 1, expectedVersion: currentMeal.version });
+      assert.equal((await request(owner, `/api/recipes?limit=1&cursor=${encodeURIComponent(catalogBeforeMenu.nextCursor)}`)).body.code, "CATALOG_CHANGED");
       assert.equal((await detail()).version, before.version); assert.equal((await detail()).updatedAt, before.updatedAt);
       await ok(editor, `/api/recipes/${recipe.id}`, "PATCH", { expectedVersion: before.version, title: "Caña renombrada" });
       const after = await ok(owner, "/api/meals/planner"); assert.equal(after.meals.find(m => m.date === planner.today && m.mealType === "lunch").plan.menus[0].selection.title, before.title);

@@ -1,4 +1,4 @@
-import { ingredientsFor, normalizedName, saveRecipe } from "@/lib/recipes/server";
+import { ingredientsFor, tagsFor, normalizedName, saveRecipe } from "@/lib/recipes/server";
 import { recipesEnabled } from "@/lib/recipes/config";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -76,7 +76,7 @@ export async function PUT(request: Request) {
               if (catalog.archivedAt) {
                 if (recipesEnabled()) throw new MealError("El plato está oculto. Restauralo desde Recetas antes de usarlo.", 409, "DISH_HIDDEN");
                 const [restored] = await tx.update(mealIdeas).set({ archivedAt: null, version: catalog.version + 1, updatedAt: new Date() }).where(eq(mealIdeas.id, catalog.id)).returning();
-                await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: catalog.id, action: "restored", before: { ...catalog, ingredients: await ingredientsFor(tx, catalog.id) }, after: { ...restored, ingredients: await ingredientsFor(tx, catalog.id) } });
+                await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: catalog.id, action: "restored", before: { ...catalog, ingredients: await ingredientsFor(tx, catalog.id), tags: await tagsFor(tx, actor.familyId, catalog.id) }, after: { ...restored, ingredients: await ingredientsFor(tx, catalog.id), tags: await tagsFor(tx, actor.familyId, catalog.id) } });
               }
               title = catalog.title; note = selectedFromCatalog ? (catalog.note ?? "") : (note || catalog.note || ""); catalogIdeaId = catalog.id;
             } else {

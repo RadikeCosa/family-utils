@@ -1008,3 +1008,25 @@ export const recipeShoppingOperations = pgTable("recipe_shopping_operations", {
   result: jsonb("result").$type<{ listId: string; added: number; edited: number }>().notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, table => [foreignKey({ columns: [table.memberId, table.familyId], foreignColumns: [members.id, members.familyId], name: "recipe_shopping_operations_member_family_fk" }).onDelete("cascade"), uniqueIndex("recipe_shopping_operations_unique").on(table.familyId, table.operationId), index("recipe_shopping_operations_expiry_idx").on(table.expiresAt)]);
+
+
+export const recipeTags = pgTable("recipe_tags", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
+}, table => [
+  uniqueIndex("recipe_tags_family_name_unique").on(table.familyId, table.normalizedName),
+  uniqueIndex("recipe_tags_family_id_unique").on(table.familyId, table.id),
+  check("recipe_tags_name_check", sql`char_length(${table.name}) between 1 and 40`),
+]);
+export const recipeTagLinks = pgTable("recipe_tag_links", {
+  familyId: uuid("family_id").notNull(),
+  recipeId: uuid("recipe_id").notNull(),
+  tagId: uuid("tag_id").notNull(),
+}, table => [
+  uniqueIndex("recipe_tag_links_unique").on(table.familyId, table.recipeId, table.tagId),
+  index("recipe_tag_links_tag_recipe_idx").on(table.familyId, table.tagId, table.recipeId),
+  foreignKey({ columns: [table.familyId, table.recipeId], foreignColumns: [mealIdeas.familyId, mealIdeas.id], name: "recipe_tag_links_family_recipe_fk" }).onDelete("cascade"),
+  foreignKey({ columns: [table.familyId, table.tagId], foreignColumns: [recipeTags.familyId, recipeTags.id], name: "recipe_tag_links_family_tag_fk" }).onDelete("cascade"),
+]);

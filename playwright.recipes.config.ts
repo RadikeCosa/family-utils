@@ -3,6 +3,7 @@ export default defineConfig({
   testDir: "./tests/e2e", testMatch: /recipes\.spec\.ts/, workers: 1, reporter: "list",
   use: { baseURL: "http://localhost:3390", trace: "retain-on-failure" },
   projects: [
+    { name: "Recipes Desktop", use: { ...devices["Desktop Chrome"] } },
     { name: "Recipes iPhone", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
     { name: "Recipes Android", use: { ...devices["Pixel 7"], defaultBrowserType: "chromium" } },
   ],

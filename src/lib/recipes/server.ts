@@ -1,11 +1,13 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { auditEvents, families, mealIdeas, members, recipeIngredients } from "@/db/schema";
+import { auditEvents, families, mealIdeas, members, recipeIngredients, recipeTags, recipeTagLinks } from "@/db/schema";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
 import { bumpMenusRevision, lockFamilyActor, MealError, type MealTransaction } from "@/lib/meals/server";
 import { MEAL_TYPES, isMealType } from "@/lib/meals/rules";
 import { cleanText, LIMITS, parseIngredients, UUID } from "./rules";
+import type { RecipeTag } from "./types";
+import { parseTags, tagCompare } from "./tags";
 import { recipesEnabled } from "./config";
 
 export class RecipeError extends MealError {
@@ -35,6 +37,22 @@ export async function normalizedName(tx: MealTransaction, name: string): Promise
 export async function ingredientsFor(tx: MealTransaction, id: string) {
   return tx.select({ id: recipeIngredients.id, name: recipeIngredients.name, quantity: recipeIngredients.quantity }).from(recipeIngredients).where(eq(recipeIngredients.ideaId, id)).orderBy(asc(recipeIngredients.position));
 }
+export async function tagsFor(tx: MealTransaction, familyId: string, id: string): Promise<RecipeTag[]> {
+  const rows = await tx.select({ id: recipeTags.id, name: recipeTags.name, slug: recipeTags.normalizedName }).from(recipeTagLinks)
+    .innerJoin(recipeTags, and(eq(recipeTags.id, recipeTagLinks.tagId), eq(recipeTags.familyId, recipeTagLinks.familyId)))
+    .where(and(eq(recipeTagLinks.familyId, familyId), eq(recipeTagLinks.recipeId, id)));
+  return rows.sort((a, b) => tagCompare(a.slug, b.slug));
+}
+async function resolveTags(tx: MealTransaction, familyId: string, value: unknown): Promise<RecipeTag[]> {
+  const parsed = parseTags(value);
+  if (!parsed.length) return [];
+  await tx.insert(recipeTags).values(parsed.map(t => ({ familyId, name: t.name, normalizedName: t.slug })))
+    .onConflictDoNothing({ target: [recipeTags.familyId, recipeTags.normalizedName] });
+  const rows = await tx.select({ id: recipeTags.id, name: recipeTags.name, slug: recipeTags.normalizedName }).from(recipeTags)
+    .where(and(eq(recipeTags.familyId, familyId), inArray(recipeTags.normalizedName, parsed.map(t => t.slug))));
+  if (rows.length !== parsed.length) throw new RecipeError("No se pudieron resolver las etiquetas.");
+  return rows.sort((a, b) => tagCompare(a.slug, b.slug));
+}
 async function collision(tx: MealTransaction, actor: MemberContext, title: string, except?: string) {
   const key = await normalizedName(tx, title);
   const matches = await tx.select().from(mealIdeas).where(and(eq(mealIdeas.familyId, actor.familyId), eq(mealIdeas.normalizedTitle, key), isNull(mealIdeas.mergedIntoId)));
@@ -61,10 +79,12 @@ export async function saveRecipe(tx: MealTransaction, actor: MemberContext, body
   const canManage = current.role === "administrator" || before?.authorMemberId === current.memberId;
   if (before && ((action !== "edit" || !recipesEnabled()) && !canManage)) throw new RecipeError("Solo el autor o un administrador puede administrar este plato.", 403, "NO_PERMISSION");
   if (before && before.version !== body.expectedVersion) throw new RecipeError("La receta cambió. Copiá tu borrador y consultá la versión actual antes de volver a guardar.", 409, "RECIPE_CONFLICT");
-  let fields: ReturnType<typeof content>, ingredients;
+  let fields: ReturnType<typeof content>, ingredients, tags: RecipeTag[];
   const previousIngredients = before ? await ingredientsFor(tx, before.id) : [];
+  const previousTags = before ? await tagsFor(tx, actor.familyId, before.id) : [];
   try {
     fields = action === "edit" ? content(body, before) : content({}, before);
+    tags = action === "edit" && "tags" in body ? await resolveTags(tx, actor.familyId, body.tags) : previousTags;
     ingredients = action === "edit" && "ingredients" in body ? parseIngredients(body.ingredients) : previousIngredients;
   } catch (error) { throw new RecipeError(error instanceof Error ? error.message : "Revisá la receta."); }
   const normalizedTitle = await collision(tx, actor, fields.title, id);
@@ -73,9 +93,9 @@ export async function saveRecipe(tx: MealTransaction, actor: MemberContext, body
     if (used.some(i => i.ideaId !== id)) throw new RecipeError("Un identificador de ingrediente pertenece a otra receta.");
   }
   const archivedAt = action === "archive" ? before?.archivedAt ?? new Date() : action === "restore" ? null : before?.archivedAt ?? null;
-  const comparable = { ...fields, archivedAt: archivedAt?.toISOString() ?? null, ingredients };
-  const previousContent = before ? { ...content({}, before), archivedAt: before.archivedAt?.toISOString() ?? null, ingredients: previousIngredients } : null;
-  if (before && JSON.stringify(comparable) === JSON.stringify(previousContent)) return { idea: before, changed: false };
+  const comparable = { ...fields, archivedAt: archivedAt?.toISOString() ?? null, ingredients, tags };
+  const previousContent = before ? { ...content({}, before), archivedAt: before.archivedAt?.toISOString() ?? null, ingredients: previousIngredients, tags: previousTags } : null;
+  if (before && JSON.stringify(comparable) === JSON.stringify(previousContent)) return { idea: { ...before, tags }, changed: false };
   const now = new Date();
   const [idea] = before
     ? await tx.update(mealIdeas).set({ ...fields, normalizedTitle, archivedAt, version: before.version + 1, updatedAt: now, updatedByMemberId: current.memberId }).where(eq(mealIdeas.id, before.id)).returning()
@@ -84,9 +104,13 @@ export async function saveRecipe(tx: MealTransaction, actor: MemberContext, body
     await tx.delete(recipeIngredients).where(eq(recipeIngredients.ideaId, idea.id));
     if (ingredients.length) await tx.insert(recipeIngredients).values(ingredients.map((i, position) => ({ ...i, familyId: actor.familyId, ideaId: idea.id, position })));
   }
-  await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: idea.id, action: before ? String(action === "edit" ? "updated" : action === "archive" ? "archived" : "restored") : "created", before: before ? { ...before, ingredients: previousIngredients } : null, after: { ...idea, ingredients } });
+  if (action === "edit" && "tags" in body) {
+    await tx.delete(recipeTagLinks).where(and(eq(recipeTagLinks.familyId, actor.familyId), eq(recipeTagLinks.recipeId, idea.id)));
+    if (tags.length) await tx.insert(recipeTagLinks).values(tags.map(t => ({ familyId: actor.familyId, recipeId: idea.id, tagId: t.id })));
+  }
+  await tx.insert(auditEvents).values({ familyId: actor.familyId, actorMemberId: current.memberId, entityType: "meal_idea", entityId: idea.id, action: before ? String(action === "edit" ? "updated" : action === "archive" ? "archived" : "restored") : "created", before: before ? { ...before, ingredients: previousIngredients, tags: previousTags } : null, after: { ...idea, ingredients, tags } });
   await bumpMenusRevision(tx, actor.familyId);
-  return { idea, changed: true };
+  return { idea: { ...idea, tags }, changed: true };
 }
 export async function writeRecipe(request: Request, id?: string, legacy = false) {
   try {
@@ -95,7 +119,7 @@ export async function writeRecipe(request: Request, id?: string, legacy = false)
     if (id && !UUID.test(id)) throw new RecipeError("No se encontró el plato.", 404, "NOT_FOUND");
     const body = await jsonBody(request);
     if (id && (!Number.isSafeInteger(body.expectedVersion) || Number(body.expectedVersion) < 1)) throw new RecipeError("Revisá la versión del plato.");
-    if (!recipesEnabled() && ("ingredients" in body || "yieldText" in body || "preparation" in body)) throw new RecipeError("Recetas todavía no está habilitada.", 404);
+    if (!recipesEnabled() && ("ingredients" in body || "yieldText" in body || "preparation" in body || "tags" in body)) throw new RecipeError("Recetas todavía no está habilitada.", 404);
     const result = await getDb().transaction(tx => saveRecipe(tx, actor, body, id));
     return NextResponse.json(result, { status: id ? 200 : 201 });
   } catch (error) { return recipeError(error); }
@@ -113,7 +137,7 @@ export async function readRecipe(request: Request, id: string) {
       const headers = { ETag: `"recipe-${actor.familyId}-${current.memberId}-${family.revision}-${idea.version}"`, "Cache-Control": "private, no-cache", Vary: "Cookie" };
       if (request.headers.get("if-none-match") === headers.ETag) return new NextResponse(null, { status: 304, headers });
       const [editor] = idea.updatedByMemberId ? await tx.select({ name: members.name }).from(members).where(eq(members.id, idea.updatedByMemberId)) : [];
-      return NextResponse.json({ recipe: { ...idea, ingredients: await ingredientsFor(tx, id), updatedByName: editor?.name ?? null, canManage: current.role === "administrator" || idea.authorMemberId === current.memberId } }, { headers });
+      return NextResponse.json({ recipe: { ...idea, tags: await tagsFor(tx, actor.familyId, id), ingredients: await ingredientsFor(tx, id), updatedByName: editor?.name ?? null, canManage: current.role === "administrator" || idea.authorMemberId === current.memberId } }, { headers });
     });
   } catch (error) { return recipeError(error); }
 }
