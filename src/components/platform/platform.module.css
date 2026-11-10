@@ -690,8 +690,22 @@
   z-index: 60;
 }
 
-.shell .content :is(label,legend) { color:var(--ink);font-size:14px; }
+.shell .content :is(label, legend) {
+  color: var(--ink);
+  font-size: 14px;
+}
 
 .shell .content button[class*="cancelButton"] {
   color: var(--ink);
+}
+
+.shell :is(button, summary),
+.public :is(button, summary) {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+.shell .content label:has(> input[type="checkbox"]),
+.shell .content label:has(> input[type="radio"]) {
+  min-width: 44px;
+  min-height: 44px;
 }

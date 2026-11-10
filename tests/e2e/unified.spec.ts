@@ -163,6 +163,14 @@ test("drawer shares triggers, traps focus and restores opener", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/compras?archived=true");
   const menu = page.getByRole("button", { name: "Abrir menú de aplicaciones" });
+  const menuBounds = await menu.boundingBox();
+  expect(menuBounds?.width).toBeGreaterThanOrEqual(44);
+  expect(menuBounds?.height).toBeGreaterThanOrEqual(44);
+  const profileBounds = await page
+    .locator('summary[aria-label="Perfil de Alex"]')
+    .boundingBox();
+  expect(profileBounds?.width).toBeGreaterThanOrEqual(44);
+  expect(profileBounds?.height).toBeGreaterThanOrEqual(44);
   await menu.click();
   const drawer = page.getByRole("dialog", { name: "Menú de aplicaciones" });
   await expect(drawer).toBeVisible();
