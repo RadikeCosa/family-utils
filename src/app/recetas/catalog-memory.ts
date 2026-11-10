@@ -12,3 +12,7 @@ export function acceptCatalogFamily(familyId: string) {
   if (scope !== null && scope !== familyId) clearCatalogMemory();
   scope = familyId;
 }
+
+export function rememberCatalogOrigin(recipeId: string, href: string, entry: string) {
+  catalogOrigin.current = { recipeId, href, entry, pending: true };
+}

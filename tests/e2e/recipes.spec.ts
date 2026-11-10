@@ -27,7 +27,7 @@ test.afterEach(async () => {
 test("mobile recipe → Menus → reviewed Shopping, reorder announcements and accessible forms", async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/recetas"); await page.getByLabel("Nombre del nuevo plato").fill("Tarta familiar"); await page.getByRole("button", { name: "Crear receta", exact: true }).click();
+  await page.goto("/recetas"); await page.getByRole("button", { name: "Nueva receta", exact: true }).click(); await page.getByLabel("Nombre de la receta").fill("Tarta familiar"); await page.getByRole("button", { name: "Crear receta", exact: true }).click();
   await expect(page).toHaveURL(/\/recetas\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: "Tarta familiar", level: 1, exact: true })).toBeVisible();
   const recipeURL = page.url();
@@ -73,6 +73,7 @@ test("tags can be created with keyboard, copied in drafts and combined as AND fi
   await api.post("/api/recipes", { data: { title: "Helado", tags: ["deVerano"] } });
   await page.goto("/recetas");
   await expect(page.getByRole("list", { name: "Recetas de la familia" }).getByRole("link")).toHaveCount(3);
+  await page.getByRole("button", { name: "Filtros", exact: true }).click();
   const filter = page.getByRole("combobox", { name: "Filtrar por etiquetas", exact: true });
   await filter.focus(); await filter.press("ArrowUp"); await filter.press("Enter");
   await expect(page.getByRole("list", { name: "Recetas de la familia" }).getByRole("link")).toHaveCount(1);
@@ -100,8 +101,10 @@ test("tags can be created with keyboard, copied in drafts and combined as AND fi
   await page.getByRole("button", { name: "Actualizar lista", exact: true }).click();
   await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
   await expect(page.getByRole("list", { name: "Recetas de la familia" }).getByRole("link")).toHaveCount(3);
-  await page.getByLabel("Nombre del nuevo plato").fill("Receta etiquetada al crear");
-  const creating = page.getByRole("combobox", { name: "Etiquetas del nuevo plato", exact: true });
+  await page.getByRole("button", { name: "Nueva receta", exact: true }).click();
+  await page.getByLabel("Nombre de la receta").fill("Receta etiquetada al crear");
+  await page.getByText("Agregar etiquetas", { exact: true }).click();
+  const creating = page.getByRole("combobox", { name: "Etiquetas", exact: true });
   await creating.fill("para llevar"); await creating.press("Enter");
   await page.getByRole("button", { name: "Crear receta", exact: true }).click();
   await expect(page.getByRole("link", { name: "#para llevar", exact: true })).toBeVisible();
@@ -141,4 +144,35 @@ test("return from detail restores loaded pages and scroll, history and catalog c
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.screenshot({ path: `test-results/recipes-list-${test.info().project.name.replaceAll(" ", "-")}.png`, fullPage: true });
+});
+
+
+test("catalog stays focused on recipes; creation and filters are disclosed with accessible focus", async ({ page }) => {
+  await api.post("/api/recipes", { data: { title: "Tarta de verduras", note: "La de los domingos, con masa casera.", tags: ["almuerzo", "deVerano"] } });
+  await api.post("/api/recipes", { data: { title: "Risotto de hongos", note: "Cremoso y fácil de compartir.", tags: ["cena"] } });
+  await api.post("/api/recipes", { data: { title: "Sopa de calabaza", tags: ["invierno"] } });
+  await page.goto("/recetas");
+  await expect(page.getByRole("list", { name: "Recetas de la familia" }).getByRole("link")).toHaveCount(3);
+  await expect(page.getByRole("searchbox")).toHaveCount(1);
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+  const first = page.getByRole("list", { name: "Recetas de la familia" }).getByRole("link").first();
+  await expect(first).toBeInViewport();
+  await page.getByRole("button", { name: "Nueva receta", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Nueva receta", exact: true });
+  await expect(dialog).toBeVisible(); await expect(dialog.getByRole("textbox")).toHaveCount(1);
+  await expect(dialog.getByRole("combobox")).toHaveCount(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.keyboard.press("Escape"); await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Nueva receta", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Filtros", exact: true }).click();
+  await page.getByRole("button", { name: "Ocultas", exact: true }).click();
+  await expect(page).toHaveURL(/archived=true/);
+  await page.getByRole("button", { name: "Listo", exact: true }).click();
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await page.getByRole("button", { name: "Quitar filtro Ocultas", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Recetas de la familia" }).getByRole("link")).toHaveCount(3);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await page.screenshot({ path: `test-results/recipes-redesign-${test.info().project.name.replaceAll(" ", "-")}.png`, fullPage: true });
 });

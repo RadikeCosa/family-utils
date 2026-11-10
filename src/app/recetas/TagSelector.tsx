@@ -5,8 +5,8 @@ import type { RecipeTag } from "@/lib/recipes/types";
 import styles from "./recipes.module.css";
 type Choice = { name: string; slug: string };
 export type TagOption = RecipeTag & { count?: number };
-export default function TagSelector({ label, selected, onChange, options, disabled = false }: {
-  label: string; selected: Choice[]; onChange: (tags: Choice[]) => void; options?: TagOption[]; disabled?: boolean;
+export default function TagSelector({ label, selected, onChange, options, disabled = false, showSelected = true }: {
+  label: string; selected: Choice[]; onChange: (tags: Choice[]) => void; options?: TagOption[]; disabled?: boolean; showSelected?: boolean;
 }) {
   const id = useId(), editing = options === undefined;
   const [available, setAvailable] = useState<TagOption[]>([]), [query, setQuery] = useState(""), [open, setOpen] = useState(false);
@@ -31,22 +31,22 @@ export default function TagSelector({ label, selected, onChange, options, disabl
   function choose(index: number) {
     const tag = choices[index]; if (!tag || disabled || (!picked(tag.slug) && (tag.count === 0 || selected.length >= 10))) return;
     const next = picked(tag.slug) ? selected.filter(t => t.slug !== tag.slug) : [...selected, { name: tag.name, slug: tag.slug }];
-    onChange(next.sort((a, b) => tagCompare(a.slug, b.slug))); setQuery(""); setActive(-1); setError("");
+    onChange(next.sort((a, b) => tagCompare(a.slug, b.slug))); setQuery(""); setOpen(false); setActive(-1); setError("");
   }
   return <div className={styles.tagSelector} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) { setOpen(false); setActive(-1); } }}>
     <label htmlFor={id}>{label}</label>
-    <input id={id} role="combobox" aria-autocomplete="list" aria-expanded={open && !disabled} aria-controls={`${id}-options`}
+    <div className={styles.tagInput}><input id={id} role="combobox" aria-autocomplete="list" aria-expanded={open && !disabled} aria-controls={`${id}-options`}
       aria-activedescendant={open && active >= 0 && choices[active] ? `${id}-option-${active}` : undefined}
-      aria-describedby={`${id}-help`} autoComplete="off" disabled={disabled} value={query}
+      aria-describedby={`${id}-help`} name="recipeTags" placeholder={editing ? "Ej. almuerzo, de verano…" : "Buscar etiquetas…"} autoComplete="off" disabled={disabled} value={query}
       onFocus={() => setOpen(true)} onChange={e => { setQuery(e.target.value); setOpen(true); setActive(-1); }}
       onKeyDown={e => {
         if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setOpen(true); setActive(i => !choices.length ? -1 : i < 0 ? (e.key === "ArrowDown" ? 0 : choices.length - 1) : (i + (e.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length); }
-        if (e.key === "Escape") { e.preventDefault(); setOpen(false); setActive(-1); }
+        if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); setActive(-1); }
         if (e.key === "Enter") { e.preventDefault(); if (open && active >= 0) choose(active); else if (editing && query.trim()) {
           try { const tag = parseTags([query])[0], index = choices.findIndex(t => t.slug === tag.slug); if (index >= 0) choose(index); } catch (e) { setError((e as Error).message); }
         } }
       }} />
-    <p id={`${id}-help`} className={styles.muted}>{editing ? "Elegí una sugerencia o escribí una etiqueta y presioná Enter. Hasta 10 etiquetas." : "Se mostrarán recetas con todas las etiquetas seleccionadas."}</p>
+
     {open && !disabled && <ul id={`${id}-options`} role="listbox" aria-label={label} aria-multiselectable="true" className={styles.tagOptions}>
       {choices.map((t, i) => <li key={t.slug} id={`${id}-option-${i}`} role="option" aria-selected={picked(t.slug)}
         aria-disabled={!picked(t.slug) && (t.count === 0 || selected.length >= 10)} data-active={active === i}
@@ -55,8 +55,10 @@ export default function TagSelector({ label, selected, onChange, options, disabl
       </li>)}
       {!choices.length && <li role="option" aria-selected="false" aria-disabled="true">Sin sugerencias</li>}
     </ul>}
-    <div role="group" className={styles.tags} aria-label={`Selección: ${label}`}>{selected.map(t => <button type="button" disabled={disabled} key={t.slug}
-      aria-label={`Quitar etiqueta ${t.name}`} onClick={() => onChange(selected.filter(s => s.slug !== t.slug))}>#{t.name} ×</button>)}</div>
+    </div>
+    <p id={`${id}-help`} className={styles.muted}>{editing ? "Elegí una sugerencia o escribí una etiqueta y presioná Enter." : "Se combinan todas las etiquetas que elijas."}</p>
+    {showSelected && <div role="group" className={styles.tags} aria-label={`Selección: ${label}`}>{selected.map(t => <button type="button" disabled={disabled} key={t.slug}
+      aria-label={`Quitar etiqueta ${t.name}`} onClick={() => onChange(selected.filter(s => s.slug !== t.slug))}>#{t.name} ×</button>)}</div>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
   </div>;
 }

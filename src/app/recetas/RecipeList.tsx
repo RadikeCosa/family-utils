@@ -4,10 +4,11 @@ import { useUnifiedUI } from "@/components/platform/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { parseTags } from "@/lib/recipes/tags";
 import { readRecipeFilters } from "@/lib/recipes/filters";
+import RecipeIcon from "./RecipeIcon";
+import NewRecipeDialog from "./NewRecipeDialog";
 import TagSelector from "./TagSelector";
-import { catalogMemory, catalogOrigin, clearCatalogMemory, acceptCatalogFamily, type CatalogPage } from "./catalog-memory";
+import { catalogMemory, catalogOrigin, rememberCatalogOrigin, clearCatalogMemory, acceptCatalogFamily, type CatalogPage } from "./catalog-memory";
 import styles from "./recipes.module.css";
 function entryId() {
   if (!window.history.state?.recipeEntry) window.history.replaceState({ ...window.history.state, recipeEntry: catalogOrigin.current?.href === `${window.location.pathname}${window.location.search}` ? catalogOrigin.current.entry : crypto.randomUUID() }, "");
@@ -21,10 +22,10 @@ export default function RecipeList() {
   if (typing.source !== query) setTyping({ source: query, value: query });
   const typed = typing.source === query ? typing.value : query;
   const setTyped = (value: string) => setTyping({ source: query, value });
-  const [title, setTitle] = useState(""), [newTags, setNewTags] = useState<string[]>([]);
+  const [createOpen, setCreateOpen] = useState(false), [filtersOpen, setFiltersOpen] = useState(false);
+  const filterButton = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(true), [stale, setStale] = useState(false);
   const [warning, setWarning] = useState("");
-  const [creating, setCreating] = useState(false), [existing, setExisting] = useState<string | null>(null);
   const currentKey = useRef(""), currentData = useRef<CatalogPage | null>(null), leaving = useRef(false);
   const setSearch = useCallback((search: URLSearchParams, mode: "push" | "replace") => {
     if (mode === "push") setWarning("");
@@ -100,38 +101,58 @@ export default function RecipeList() {
     if (unified) return;
     leaving.current = true;
     const cached = catalogMemory.get(currentKey.current); if (cached) cached.scroll = window.scrollY;
-    catalogOrigin.current = { recipeId, href: `${window.location.pathname}${window.location.search}`, entry: entryId(), pending: true };
+    rememberCatalogOrigin(recipeId, `${window.location.pathname}${window.location.search}`, entryId());
   }
-  async function create(event: React.FormEvent) {
-    event.preventDefault(); setCreating(true); setError(""); setExisting(null);
-    try {
-      const response = await fetch("/api/recipes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, tags: newTags }) });
-      const body = await response.json(); if (!response.ok) { if (body.existing) setExisting(body.existing.id); throw new Error(body.error); }
-      remember(body.idea.id); router.push(`/recetas/${body.idea.id}`);
-    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo crear."); } finally { setCreating(false); }
-  }
+  function clearFilters() { setTyped(""); setSearch(new URLSearchParams(), "push"); }
   const selected = slugs.map(slug => ({ slug, name: data?.tags.find(t => t.slug === slug)?.name ?? slug }));
-  return <><h1>Recetas</h1><p className={styles.muted}>Los platos de siempre, con un lugar para completar cómo los preparamos.</p>
-    <form className={styles.form} onSubmit={event => void create(event)}>
-      <div className={styles.toolbar}><label>Nombre del nuevo plato<input value={title} onChange={e => setTitle(e.target.value)} maxLength={160} required /></label><button className={styles.primary} disabled={creating}>Crear receta</button></div>
-      <TagSelector label="Etiquetas del nuevo plato" selected={parseTags(newTags)} onChange={tags => setNewTags(tags.map(t => t.name))} disabled={creating} />
-    </form>
-    <div className={styles.toolbar}><label>Buscar recetas<input type="search" value={typed} onChange={e => { setWarning(""); setTyped(e.target.value); }} maxLength={160} /></label>
-      <button data-legacy-sections aria-pressed={!archived} onClick={() => changeArchived(false)}>Disponibles</button><button data-legacy-sections aria-pressed={archived} onClick={() => changeArchived(true)}>Ocultas</button></div>
-    <TagSelector label="Filtrar por etiquetas" selected={selected} options={data?.tags ?? []} onChange={changeTags} disabled={busy} />
-    {(query || slugs.length > 0) && <button onClick={() => { const search = new URLSearchParams(queryKey); search.delete("q"); search.delete("tag"); setTyped(""); setSearch(search, unified ? "replace" : "push"); }}>Limpiar filtros</button>}
-    {error && <p role="alert" className={styles.error}>{error} {existing ? <Link href={`/recetas/${existing}`}>Abrir receta existente</Link> : <button onClick={() => void load()}>Reintentar consulta</button>}</p>}
-    <p role="status" aria-live="polite">{busy ? "Buscando…" : data ? `${data.total} recetas encontradas. ${notice} ${warning}` : notice}</p>
-    {stale && <div className={styles.notice} role="status">El catálogo cambió. Actualizá la lista para continuar. <button disabled={busy} onClick={() => void load()}>Actualizar lista</button></div>}
-    <ul className={styles.recipeList} aria-label="Recetas de la familia" aria-busy={busy}>{(data?.ideas ?? []).map(item => <li className={styles.recipeRow} key={item.id}>
-      <h2><Link href={`/recetas/${item.id}`} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) remember(item.id); }}>{item.title}</Link></h2>
-      {item.note && <p className={styles.noteSummary}>{item.note}</p>}
-      <div className={styles.tags}>{(item.tags ?? []).map(tag => <button key={tag.id} aria-pressed={slugs.includes(tag.slug)} disabled={busy || (!slugs.includes(tag.slug) && slugs.length >= 10)} onClick={() => {
-        changeTags(slugs.includes(tag.slug) ? selected.filter(t => t.slug !== tag.slug) : [...selected, tag]);
-      }}>#{tag.name}</button>)}</div>
+  const filterCount = slugs.length + (archived ? 1 : 0);
+  return <div className={styles.catalog}>
+    <div className={styles.catalogHeading}>
+      <div><p className={styles.eyebrow}><RecipeIcon name="book" /> EL RECETARIO FAMILIAR</p><h1>Recetas</h1><p className={styles.catalogIntro}>Los platos que nos gusta compartir.</p></div>
+      <button className={`${styles.primary} ${styles.newRecipeButton}`} onClick={() => setCreateOpen(true)}><RecipeIcon name="plus" />Nueva receta</button>
+    </div>
+    <div className={styles.catalogTools}>
+      <div className={styles.searchField}>
+        <RecipeIcon name="search" />
+        <label className={styles.srOnly} htmlFor="recipe-search">Buscar recetas</label>
+        <input id="recipe-search" name="recipeSearch" type="search" autoComplete="off" placeholder="Buscá por nombre…" value={typed} onChange={e => { setWarning(""); setTyped(e.target.value); }} maxLength={160} />
+      </div>
+      <button ref={filterButton} className={styles.filterButton} aria-label="Filtros" aria-expanded={filtersOpen} aria-controls="recipe-filter-panel" data-active={filterCount > 0} onClick={() => setFiltersOpen(!filtersOpen)}>
+        <RecipeIcon name="filters" />Filtros{filterCount > 0 && <span className={styles.filterBadge} aria-hidden="true">{filterCount}</span>}
+      </button>
+    </div>
+    {filtersOpen && <section id="recipe-filter-panel" className={styles.filterPanel} aria-label="Filtros de recetas" onKeyDown={e => { if (e.key === "Escape" && !e.defaultPrevented) { setFiltersOpen(false); filterButton.current?.focus(); } }}>
+      <div className={styles.filterPanelHeading}><h2>Filtrar recetas</h2><button className={styles.quietButton} onClick={() => { setFiltersOpen(false); filterButton.current?.focus(); }}>Listo</button></div>
+      <div data-legacy-sections className={styles.availability} role="group" aria-label="Estado de las recetas"><button aria-pressed={!archived} onClick={() => changeArchived(false)}>Disponibles</button><button aria-pressed={archived} onClick={() => changeArchived(true)}>Ocultas</button></div>
+      <TagSelector label="Filtrar por etiquetas" selected={selected} options={data?.tags ?? []} onChange={changeTags} showSelected={false} />
+    </section>}
+    <div className={styles.collectionHeading}>
+      <p role="status" aria-live="polite">{busy ? "Buscando…" : data ? <><strong>{data.total}</strong> {data.total === 1 ? "receta" : "recetas"}{archived ? " ocultas" : ""}<span className={styles.srOnly}>. {notice}</span></> : notice}</p>
+      {(query || filterCount > 0) && <button className={styles.clearFilters} onClick={clearFilters}>Limpiar filtros</button>}
+    </div>
+    {filterCount > 0 && <div className={`${styles.tags} ${styles.activeFilters}`} aria-label="Filtros activos" role="group">
+      {archived && <button aria-label="Quitar filtro Ocultas" onClick={() => changeArchived(false)}>Ocultas<RecipeIcon name="close" /></button>}
+      {selected.map(tag => <button key={tag.slug} aria-label={`Quitar etiqueta ${tag.name}`} onClick={() => changeTags(selected.filter(t => t.slug !== tag.slug))}>#{tag.name}<RecipeIcon name="close" /></button>)}
+    </div>}
+    {warning && <p className={styles.filterWarning} role="status">{warning}</p>}
+    {error && <div role="alert" className={styles.error}>{error} <button onClick={() => void load()}>Reintentar consulta</button></div>}
+    {stale && <div className={styles.notice} role="status">El recetario se actualizó. Actualizá la lista para seguir viendo recetas. <button disabled={busy} onClick={() => void load()}>Actualizar lista</button></div>}
+    <ul className={styles.recipeList} aria-label="Recetas de la familia" aria-busy={busy}>{(data?.ideas ?? []).map((item, index) => <li className={styles.recipeRow} key={item.id}>
+      <Link className={styles.recipeRowLink} aria-label={item.title} href={`/recetas/${item.id}`} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) remember(item.id); }}>
+        <span className={styles.recipeMark} data-tone={index % 3}><RecipeIcon name="bowl" /></span>
+        <div className={styles.recipeRowText}><h2>{item.title}</h2>{item.note && <p className={styles.noteSummary}>{item.note}</p>}</div>
+        <RecipeIcon name="arrow" className={styles.rowArrow} />
+      </Link>
+      {!!item.tags?.length && <div className={`${styles.tags} ${styles.rowTags}`}>{item.tags.map(tag => <button key={tag.id} aria-pressed={slugs.includes(tag.slug)} disabled={busy || (!slugs.includes(tag.slug) && slugs.length >= 10)} onClick={() => changeTags(slugs.includes(tag.slug) ? selected.filter(t => t.slug !== tag.slug) : [...selected, tag])}>#{tag.name}</button>)}</div>}
     </li>)}</ul>
-    {!busy && !error && data && !data.ideas.length && <p>{query || slugs.length ? "No hay recetas con estos filtros. Probá quitar alguna etiqueta o cambiar el nombre." : "Todavía no hay recetas en esta vista."}</p>}
-    {data?.nextCursor && <button disabled={busy || stale} onClick={() => void load(data.nextCursor!)}>Ver más recetas</button>}
-  </>;
+    {!data && busy && <div className={styles.listSkeleton} aria-hidden="true">{[0, 1, 2].map(n => <div key={n}><span /><i /></div>)}</div>}
+    {!busy && !error && data && !data.ideas.length && <div className={styles.emptyCatalog}>
+      <span className={styles.emptyMark}><RecipeIcon name={query || filterCount ? "search" : "book"} /></span>
+      <h2>{query || filterCount ? "No encontramos esa receta" : "Tu recetario empieza acá"}</h2>
+      <p>{query || filterCount ? "Probá con otro nombre o quitá alguna etiqueta." : "Agregá tu primera receta y tené tus platos favoritos siempre a mano."}</p>
+    </div>}
+    {data?.nextCursor && <div className={styles.loadMore}><button disabled={busy || stale} onClick={() => void load(data.nextCursor!)}>{busy ? "Cargando…" : "Ver más recetas"}<RecipeIcon name="arrow" /></button></div>}
+    {createOpen && <NewRecipeDialog onClose={() => setCreateOpen(false)} onVisit={remember} onCreated={id => { remember(id); setCreateOpen(false); router.push(`/recetas/${id}`); }} />}
+  </div>;
 }
 function slugsFrom(search: string) { return new URLSearchParams(search).getAll("tag"); }
