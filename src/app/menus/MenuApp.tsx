@@ -190,7 +190,7 @@ export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
     </header>
     <section className={styles.intro}>
       <h1 className={styles.dailyTitle}>¿Qué comemos?</h1>
-      <DateNavigation className={styles.dailyNavigation} date={date} today={today} min={bounds.earliest} max={bounds.latest} disabled={busy} onSelect={(next, follow) => navigate(next, "day", follow)} />
+      <DateNavigation className={styles.dailyNavigation} date={date} today={today} min={bounds.earliest} max={bounds.latest} disabled={busy} onSelect={(next, follow) => navigate(next, follow ? "day" : view, follow)} />
       <p className={styles.dateLabel}>{date === today ? "Hoy · " : ""}{dayLabel(date)}{date < today ? " · Solo lectura" : ""}</p>
       {view === "day" && weekReady && data && <p className={styles.dailySummary}>{countChosenMeals(data.meals, date)} de 4 comidas elegidas</p>}
       <div data-legacy-sections className={styles.viewButtons} aria-label="Vista del planificador"><button aria-pressed={view === "day"} disabled={busy} onClick={() => navigate(date, "day", followsToday.current)}>Día</button><button aria-pressed={view === "week"} disabled={busy} onClick={() => navigate(date, "week", followsToday.current)}>Semana</button></div>

@@ -293,3 +293,13 @@ test("incompatible history preserves three original dishes and past days remain 
   await dinner.getByRole("button",{name:/Quiénes comen/}).click();
   await expect(dinner.getByRole("group",{name:"Preparación para Alex"}).getByRole("button",{name:"Come en casa",exact:true})).toBeDisabled();
 });
+
+test("shared date controls preserve the week view and Today returns to day", async ({ page }) => {
+  await page.goto("/menus");
+  await page.getByRole("button", { name: "Semana", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Semana, solo lectura" })).toBeVisible();
+  await page.getByRole("button", { name: "Día siguiente", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Semana", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Hoy", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Día", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
