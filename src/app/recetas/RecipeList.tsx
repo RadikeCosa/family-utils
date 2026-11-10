@@ -123,7 +123,7 @@ export default function RecipeList() {
     </div>
     {filtersOpen && <section id="recipe-filter-panel" className={styles.filterPanel} aria-label="Filtros de recetas" onKeyDown={e => { if (e.key === "Escape" && !e.defaultPrevented) { setFiltersOpen(false); filterButton.current?.focus(); } }}>
       <div className={styles.filterPanelHeading}><h2>Filtrar recetas</h2><button className={styles.quietButton} onClick={() => { setFiltersOpen(false); filterButton.current?.focus(); }}>Listo</button></div>
-      <div className={styles.availability} role="group" aria-label="Estado de las recetas"><button aria-pressed={!archived} onClick={() => changeArchived(false)}>Disponibles</button><button aria-pressed={archived} onClick={() => changeArchived(true)}>Ocultas</button></div>
+      <div data-legacy-sections className={styles.availability} role="group" aria-label="Estado de las recetas"><button aria-pressed={!archived} onClick={() => changeArchived(false)}>Disponibles</button><button aria-pressed={archived} onClick={() => changeArchived(true)}>Ocultas</button></div>
       <TagSelector label="Filtrar por etiquetas" selected={selected} options={data?.tags ?? []} onChange={changeTags} showSelected={false} />
     </section>}
     <div className={styles.collectionHeading}>
