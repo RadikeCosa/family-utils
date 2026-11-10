@@ -439,6 +439,81 @@ test("profile change without logout isolates recent views", async ({
       .getByRole("link", { name: /Compras/ }),
   ).toBeVisible();
 });
+test("sign out from access clears only the outgoing profile navigation", async ({
+  page,
+}) => {
+  const secondary = await request.newContext({ baseURL: base });
+  let secondaryUser: string | undefined;
+  try {
+    const prepared = await secondary.post("/api/access/prepare", {
+      headers: {
+        Origin: base,
+        "x-forwarded-for": `2001:db8:${randomUUID().slice(0, 4)}::1`,
+      },
+    });
+    expect(prepared.status(), await prepared.text()).toBe(200);
+    secondaryUser = (
+      await (await secondary.get("/api/auth/get-session")).json()
+    ).user.id;
+    await pool.query(
+      "INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)",
+      [memberId, secondaryUser],
+    );
+    await page.context().clearCookies();
+    await page.context().addCookies((await secondary.storageState()).cookies);
+    const scope = `family-navigation:v1:${familyId}:${memberId}`;
+    const other = `family-navigation:v1:${familyId}:another-profile`;
+    await page.goto("/compras?archived=true");
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), scope))
+      .toContain("shopping");
+    await page.evaluate(
+      ({ scope, other }) => {
+        localStorage.setItem(
+          other,
+          JSON.stringify([{ appId: "kitchen", href: "/cocina" }]),
+        );
+        sessionStorage.setItem(
+          `${scope}:origin:/compras/example`,
+          "/compras?archived=true",
+        );
+      },
+      { scope, other },
+    );
+    await page.goto("/acceso");
+    await page
+      .getByRole("button", {
+        name: "Cerrar sesión para usar otro perfil",
+        exact: true,
+      })
+      .click();
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), scope))
+      .toBeNull();
+    expect(
+      await page.evaluate(
+        (key) => sessionStorage.getItem(`${key}:origin:/compras/example`),
+        scope,
+      ),
+    ).toBeNull();
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), other),
+    ).toContain("kitchen");
+    const session = await secondary.get("/api/auth/get-session");
+    // The browser session is signed out; the primary fixture's separate session still works.
+    expect((await api.get("/api/family")).status()).toBe(200);
+    expect(session.status()).toBe(200);
+    expect(await session.json()).toBeNull();
+  } finally {
+    if (secondaryUser) {
+      await pool.query("DELETE FROM member_devices WHERE auth_user_id=$1", [
+        secondaryUser,
+      ]);
+      await pool.query('DELETE FROM "user" WHERE id=$1', [secondaryUser]);
+    }
+    await secondary.dispose();
+  }
+});
 test("Home performance budget, five cold navigations per variant", async ({
   page,
   browser,

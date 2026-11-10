@@ -6,6 +6,7 @@ import { libraryEnabled } from "@/lib/library/config";
 import { trainingEnabled } from "@/lib/training/config";
 import { sportsEnabled, championsEnabled } from "@/lib/sports/config";
 import { unifiedUIEnabled } from "@/lib/navigation/config";
+import { navigationKey } from "@/lib/navigation/storage";
 import { appCatalog } from "@/lib/navigation/catalog";
 import { NavigationObserver } from "./navigation";
 import PublicFrame from "./PublicFrame";
@@ -43,7 +44,11 @@ export default async function Experience({
   });
   if (!actor || publicOnly)
     return (
-      <PublicFrame>
+      <PublicFrame
+        navigationScope={
+          actor ? navigationKey(actor.familyId, actor.memberId) : null
+        }
+      >
         <Suspense>{children}</Suspense>
       </PublicFrame>
     );

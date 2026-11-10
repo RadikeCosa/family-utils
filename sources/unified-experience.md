@@ -47,7 +47,7 @@ Los breadcrumbs y el enlace al padre abren la vista predeterminada de ese nivel.
 
 Los orígenes se registran en aperturas explícitas de detalles y conexiones entre apps. Se guardan en `sessionStorage`, asociados al destino y separados por familia e integrante. No se añade `from` a la URL ni se reemplaza el estado interno de Next.js. Se rechazan destinos externos, desconocidos, deshabilitados o iguales al origen.
 
-Recientes guarda hasta cuatro apps, sin duplicados, en `localStorage`. Cada registro contiene solo identificador de app y URL; no guarda nombres de elementos ni borradores. Las claves incluyen familia e integrante. Un cambio de identidad usa otro espacio de almacenamiento. Salir borra recientes y orígenes del perfil saliente. El bloqueo del almacenamiento no impide navegar.
+Recientes guarda hasta cuatro apps, sin duplicados, en `localStorage`. Cada registro contiene solo identificador de app y URL; no guarda nombres de elementos ni borradores. Las claves incluyen familia e integrante. Un cambio de identidad usa otro espacio de almacenamiento. Salir borra recientes y orígenes del perfil saliente desde cualquiera de sus controles, incluida la página de acceso, después de confirmar el cierre. El bloqueo del almacenamiento no impide navegar.
 
 ## Sistema visual
 

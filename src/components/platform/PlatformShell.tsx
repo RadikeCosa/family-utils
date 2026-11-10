@@ -25,6 +25,7 @@ import {
   validDestination,
   type Recent,
 } from "@/lib/navigation/storage";
+import { registerNavigationScope } from "@/lib/navigation/client";
 import { normalizeNavigationSearch } from "@/lib/navigation/query";
 import {
   PlatformContext,
@@ -71,6 +72,7 @@ export default function PlatformShell({
     opener = useRef<HTMLElement | null>(null);
   const activeNav = useRef<HTMLAnchorElement | null>(null);
   const key = navigationKey(member.familyId, member.memberId);
+  useEffect(() => registerNavigationScope(key), [key]);
   const setDetailTitle = useCallback((title: string) => setDetail(title), []);
   const recordOrigin = useCallback(
     (destination: string) => {
