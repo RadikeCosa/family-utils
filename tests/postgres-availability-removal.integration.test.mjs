@@ -21,7 +21,9 @@ test('availability removal drops only its tables/functions/data and preserves mo
   pool = new pg.Pool({connectionString:url.toString()});
   const journal=JSON.parse(await readFile('drizzle/meta/_journal.json','utf8'));
   await mkdir(join(folder,'meta'));
-  const previous=journal.entries.slice(0,-1);
+  const removalIndex=journal.entries.findIndex(entry=>entry.tag==='0064_remove_cinemateca_availability');
+  assert.ok(removalIndex>0,'availability removal migration must exist');
+  const previous=journal.entries.slice(0,removalIndex);
   await writeFile(join(folder,'meta/_journal.json'),JSON.stringify({...journal,entries:previous}));
   for(const entry of previous) await writeFile(join(folder,`${entry.tag}.sql`),await readFile(`drizzle/${entry.tag}.sql`));
   await migrate(drizzle(pool),{migrationsFolder:folder});
@@ -44,13 +46,16 @@ test('availability removal drops only its tables/functions/data and preserves mo
    return data;
   };
   const before=await snapshot();
-  await migrate(drizzle(pool),{migrationsFolder:'drizzle'});
+  const removal=journal.entries[removalIndex];
+  await writeFile(join(folder,`${removal.tag}.sql`),await readFile(`drizzle/${removal.tag}.sql`));
+  await writeFile(join(folder,'meta/_journal.json'),JSON.stringify({...journal,entries:journal.entries.slice(0,removalIndex+1)}));
+  await migrate(drizzle(pool),{migrationsFolder:folder});
   assert.deepEqual(await snapshot(),before);
   for(const table of removed) assert.equal((await pool.query('SELECT to_regclass($1) AS relation',[`public.${table}`])).rows[0].relation,null);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'availability_%'")).rows[0].n,0);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_events WHERE entity_type IN ('library_availability','streaming_platform')")).rows[0].n,0);
   assert.equal(Number((await pool.query('SELECT library_revision FROM families WHERE id=$1',[f])).rows[0].library_revision),1);
-  await migrate(drizzle(pool),{migrationsFolder:'drizzle'});
+  await migrate(drizzle(pool),{migrationsFolder:folder});
   assert.deepEqual(await snapshot(),before);
  }finally{
   await pool?.end();await admin.query(`DROP DATABASE IF EXISTS "${name}"`);await admin.end();await rm(folder,{recursive:true,force:true});

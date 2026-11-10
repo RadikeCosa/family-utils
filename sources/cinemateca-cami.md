@@ -66,3 +66,7 @@ La suite completa se verifica además sobre una copia de HEAD con los cambios
 exclusivos de esta funcionalidad, para separar la validación de la modificación
 simultánea de navegación. WebKit usa bibliotecas ya existentes en /tmp, sin
 instalar dependencias del sistema. No se publica ni se migra producción.
+
+La publicación amplía la verificación a las 175 pruebas de reglas y PostgreSQL
+del proyecto. La prueba de retiro de disponibilidad queda fijada a su migración
+0064, para que las migraciones posteriores no alteren su preparación ni alcance.
