@@ -1030,3 +1030,43 @@ export const recipeTagLinks = pgTable("recipe_tag_links", {
   foreignKey({ columns: [table.familyId, table.recipeId], foreignColumns: [mealIdeas.familyId, mealIdeas.id], name: "recipe_tag_links_family_recipe_fk" }).onDelete("cascade"),
   foreignKey({ columns: [table.familyId, table.tagId], foreignColumns: [recipeTags.familyId, recipeTags.id], name: "recipe_tag_links_family_tag_fk" }).onDelete("cascade"),
 ]);
+
+// Diary tables are additive: the legacy session contract remains unchanged.
+export const trainingDiaryState = pgTable("training_diary_state", {
+  singleton: boolean("singleton").primaryKey().default(true),
+  transitionedAt: timestamp("transitioned_at", { withTimezone: true }),
+}, t => [check("training_diary_singleton", sql`${t.singleton} = true`)]);
+export const trainingDiaryRevisions = pgTable("training_diary_revisions", {
+  ownerMemberId: uuid("owner_member_id").primaryKey(), familyId: uuid("family_id").notNull(),
+  revision: bigint("revision", { mode: "bigint" }).notNull().default(sql`0`),
+}, t => [foreignKey({ columns: [t.ownerMemberId, t.familyId], foreignColumns: [members.id, members.familyId] })]);
+export const trainingEntries = pgTable("training_entries", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), ownerMemberId: uuid("owner_member_id").notNull(),
+  date: date("date", { mode: "string" }).notNull(), kind: text("kind").$type<"training" | "rest">().notNull(),
+  plan: jsonb("plan").$type<import("@/lib/training/diary").DiaryContent | null>(),
+  result: jsonb("result").$type<import("@/lib/training/diary").DiaryContent | null>(),
+  disposition: text("disposition").notNull().default("open"), sourceRoutineId: uuid("source_routine_id"),
+  version: integer("version").notNull().default(1), archivedAt: timestamp("archived_at", { withTimezone: true }),
+  searchText: text("search_text").notNull().default(""), createdAt: createdAt(), updatedAt: updatedAt(),
+}, t => [
+  foreignKey({ columns: [t.ownerMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
+  foreignKey({ columns: [t.sourceRoutineId, t.ownerMemberId, t.familyId], foreignColumns: [trainingRoutines.id, trainingRoutines.ownerMemberId, trainingRoutines.familyId] }).onDelete("restrict"),
+  uniqueIndex("training_entries_identity_unique").on(t.id, t.ownerMemberId, t.familyId),
+  uniqueIndex("training_entries_rest_unique").on(t.ownerMemberId, t.familyId, t.date).where(sql`${t.kind}='rest' AND ${t.archivedAt} IS NULL`),
+  index("training_entries_page_idx").on(t.ownerMemberId, t.familyId, t.date.desc(), t.id.desc()),
+  index("training_entries_search_idx").using("gin", t.searchText.op("gin_trgm_ops")),
+  check("training_entries_date", sql`${t.date} BETWEEN DATE '1900-01-01' AND DATE '2200-12-31'`),
+  check("training_entries_kind", sql`${t.kind} IN ('training','rest')`),
+  check("training_entries_content", sql`(${t.plan} IS NOT NULL OR ${t.result} IS NOT NULL) AND public.training_diary_content_valid(${t.plan},${t.kind}) AND public.training_diary_content_valid(${t.result},${t.kind})`),
+  check("training_entries_disposition", sql`${t.disposition} IN ('open','skipped') AND (${t.disposition}='open' OR (${t.plan} IS NOT NULL AND ${t.result} IS NULL))`),
+  check("training_entries_version", sql`${t.version}>0`),
+]);
+export const trainingDiaryOperations = pgTable("training_diary_operations", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), ownerMemberId: uuid("owner_member_id").notNull(),
+  operationKey: uuid("operation_key").notNull(), hash: varchar("hash", { length: 64 }).notNull(),
+  entryId: uuid("entry_id").notNull(), action: text("action").notNull(), confirmedVersion: integer("confirmed_version").notNull(), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.entryId, t.ownerMemberId, t.familyId], foreignColumns: [trainingEntries.id, trainingEntries.ownerMemberId, trainingEntries.familyId] }).onDelete("restrict"),
+  uniqueIndex("training_diary_operation_unique").on(t.ownerMemberId, t.operationKey),
+  check("training_diary_operation_hash", sql`${t.hash} ~ '^[0-9a-f]{64}$'`),
+]);

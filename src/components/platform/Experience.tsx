@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getMemberContext } from "@/lib/auth/context";
 import { recipesEnabled } from "@/lib/recipes/config";
 import { libraryEnabled } from "@/lib/library/config";
+import { diaryTransitioned } from "@/lib/training/diary-state";
 import { trainingEnabled } from "@/lib/training/config";
 import { sportsEnabled, championsEnabled } from "@/lib/sports/config";
 import { unifiedUIEnabled } from "@/lib/navigation/config";
@@ -41,6 +42,7 @@ export default async function Experience({
     sports: sportsEnabled(),
     champions: championsEnabled(),
     training: trainingEnabled(),
+    trainingDiary: !!actor && trainingEnabled() && await diaryTransitioned(),
   });
   if (!actor || publicOnly)
     return (

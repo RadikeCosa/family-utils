@@ -1,11 +1,13 @@
 "use client";
 
+import { announceTrainingIdentity } from "../training/drafts";
 import { clearNavigation } from "./storage";
 
 let activeScope: string | null = null;
 let registration = 0;
 
 export function registerNavigationScope(scope: string | null) {
+  announceTrainingIdentity(scope);
   const token = ++registration;
   activeScope = scope;
   return () => {

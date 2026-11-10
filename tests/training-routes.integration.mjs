@@ -150,7 +150,7 @@ test("training authenticated API: gates, isolation, replay, concurrency, history
     });
   } finally {
     await stop(server);
-    for (const table of ["training_sessions", "training_routines", "audit_events", "access_codes"]) await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
+    for (const table of ["training_diary_operations", "training_entries", "training_diary_revisions", "training_sessions", "training_routines", "audit_events", "access_codes"]) await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
     if (families.length) await pool.query("DELETE FROM families WHERE id=ANY($1::uuid[])",[families]);
     if (users.length) await pool.query('DELETE FROM "user" WHERE id=ANY($1::text[])',[users]);
     await pool.end();

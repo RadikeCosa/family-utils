@@ -85,7 +85,7 @@ ficticios.
 
 Utilidad personal en `/entrenamiento`, controlada por `TRAINING_ENABLED=true`.
 Requiere la migración `0053_training` y el cierre operativo de respaldo y ensayo.
-Contratos, límites, pruebas y activación en [Entrenamiento](sources/training.md).
+Contratos anteriores en [Entrenamiento](sources/training.md). El [diario personal](sources/training-diary.md) incorpora planificación y resultados separados mediante la migración aditiva `0067_training_diary`, una bandera apagada por defecto y transición administrativa explícita.
 
 ## Cinemateca familiar
 

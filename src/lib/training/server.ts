@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { getPool } from "@/db";
 import { getMemberContext, type MemberContext } from "@/lib/auth/context";
-import { optionalTrainingMetricsEnabled, trainingEnabled } from "./config";
+import { optionalTrainingMetricsEnabled, trainingEnabled, trainingDiaryEnabled } from "./config";
+import { diaryTransitioned } from "./diary-state";
 import { cursorScope, decodeCursor, encodeCursor } from "./cursor";
 import { identifier, integer, LIMITS, object, onlyKeys, todayInZone, TrainingValidationError, UUID, validateRoutine, validateSession } from "./rules";
 import type { RoutineInput, SessionInput, TrainingBlock } from "./types";
@@ -11,25 +12,26 @@ import type { RoutineInput, SessionInput, TrainingBlock } from "./types";
 type Kind = "routines" | "sessions";
 const tables = { routines: "training_routines", sessions: "training_sessions" } as const;
 const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
-class TrainingError extends Error {
+export class TrainingError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
-function fail(status: number, code: string, message: string): never { throw new TrainingError(status, code, message); }
+export function fail(status: number, code: string, message: string): never { throw new TrainingError(status, code, message); }
 function missing(): never { return fail(404, "NOT_FOUND", "No encontramos este registro."); }
 export function trainingUnavailable() { return NextResponse.json({ error: "No encontrado.", code: "NOT_FOUND" }, { status: 404, headers: privateHeaders }); }
-function response(body: unknown, status = 200) { return NextResponse.json(body, { status, headers: privateHeaders }); }
-function errorResponse(error: unknown) {
+export function response(body: unknown, status = 200) { return NextResponse.json(body, { status, headers: privateHeaders }); }
+export function errorResponse(error: unknown) {
+  if ((error as { code?: string })?.code === "P3001") return response({ error: "El diario cambió. Conservá o copiá tu formulario antes de actualizar.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
   if (error instanceof TrainingValidationError) return response({ error: error.message, code: "INVALID" }, 400);
   if (error instanceof TrainingError) return response({ error: error.message, code: error.code }, error.status);
   console.error("training_request_failed", { code: error && typeof error === "object" && "code" in error ? error.code : "UNAVAILABLE" });
   return response({ error: "No se pudo guardar o consultar. Conservamos tu formulario para reintentar.", code: "UNAVAILABLE" }, 500);
 }
-async function actorFor(request: Request) {
+export async function actorFor(request: Request) {
   const actor = await getMemberContext(request.headers);
   if (!actor) fail(403, "NO_ACCESS", "Ingresá a tu familia.");
   return actor;
 }
-async function activeActor(tx: PoolClient, actor: MemberContext) {
+export async function activeActor(tx: PoolClient, actor: MemberContext) {
   // Follow access/recovery lock ordering: family, member, then device.
   await tx.query("SELECT id FROM families WHERE id=$1 FOR KEY SHARE", [actor.familyId]);
   // Hold identity rows until commit so revocation/archive cannot race a write.
@@ -76,7 +78,9 @@ export async function readTraining(request: Request, kind: Kind, id?: string) {
   if (!trainingEnabled()) return trainingUnavailable();
   let tx: PoolClient | undefined;
   try {
-    const actor = await actorFor(request); const today = todayInZone(actor.familyTimeZone);
+    const actor = await actorFor(request);
+    if (kind === "sessions" && await diaryTransitioned()) return response({ error: "El diario cambió. Conservá o copiá tu formulario antes de actualizar la página.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
+    const today = todayInZone(actor.familyTimeZone);
     if (kind === "sessions" && optionalTrainingMetricsEnabled() && request.headers.get("x-training-contract") !== "2") {
       return response({ error: "Actualizá la página para consultar o registrar entrenamientos.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
     }
@@ -116,10 +120,13 @@ export async function mutateTraining(request: Request, kind: Kind, id?: string) 
   try {
     const origin = request.headers.get("origin");
     if (origin && origin !== new URL(request.url).origin) fail(403, "NO_ACCESS", "Origen no permitido.");
-    const actor = await actorFor(request); const today = todayInZone(actor.familyTimeZone);
+    const actor = await actorFor(request);
+    if (kind === "sessions" && await diaryTransitioned()) return response({ error: "El diario cambió. Conservá o copiá tu formulario antes de actualizar la página.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
+    const today = todayInZone(actor.familyTimeZone);
     if (kind === "sessions" && optionalTrainingMetricsEnabled() && request.headers.get("x-training-contract") !== "2") {
       return response({ error: "Actualizá la página para consultar o registrar entrenamientos.", code: "CLIENT_UPDATE_REQUIRED" }, 409);
     }
+    if (kind === "routines" && await diaryTransitioned() && !trainingDiaryEnabled()) return response({ error: "El diario está en modo de consulta.", code: "DIARY_READ_ONLY" }, 503);
     const body = await readTrainingBody(request);
     tx = await getPool().connect(); await tx.query("BEGIN"); await activeActor(tx, actor);
     let item: TrainingRow;

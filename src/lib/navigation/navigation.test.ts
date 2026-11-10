@@ -215,3 +215,7 @@ test("recipe tags remain in normalized URLs and recent views", () => {
   assert.equal(params.get("q"), "Tarta");
   assert.equal(params.has("unknown"), false);
 });
+
+test("training persistent navigation never retains private search terms", () => {
+  assert.equal(validDestination("/entrenamiento?fecha=2026-11-10&q=private#q=private", apps), "/entrenamiento?fecha=2026-11-10");
+});

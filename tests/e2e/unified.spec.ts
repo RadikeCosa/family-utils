@@ -104,6 +104,9 @@ test.afterAll(async () => {
       familyId,
     ]);
     for (const table of [
+      "training_diary_operations",
+      "training_entries",
+      "training_diary_revisions",
       "training_sessions",
       "training_routines",
       "library_works",

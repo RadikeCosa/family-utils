@@ -24,6 +24,7 @@ export function validDestination(
     )
       return null;
     if (url.search.length > 2000) return null;
+    if (url.pathname === "/entrenamiento") { url.hash = ""; url.searchParams.delete("q"); }
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;

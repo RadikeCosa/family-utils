@@ -38,7 +38,7 @@ La URL prevalece sobre el almacenamiento local. Secciones y detalles crean entra
 | Compras | `archived=true`; detalle en la ruta |
 | Cinemateca | Parámetros existentes, incluida selección familiar, estados, género y búsqueda; detalle en la ruta |
 | Deportes | Deporte, evento y ronda existentes; filtro de integrante del tablero UFC |
-| Entrenamiento | `seccion=historial`, `archived=true`, `detalle` |
+| Entrenamiento | Antes de transición: `seccion=historial`; diario: `fecha`, `seccion=plantillas`, `archived=true`, `detalle`; búsqueda privada en fragmento, excluida de recientes/orígenes |
 | Conversor | `temperatura=true`; no se guardan cantidades ni ingredientes |
 
 No se restauran scroll, cursores, cantidad de páginas ni resultados anteriores. Las colecciones consultan datos actuales desde la primera página.

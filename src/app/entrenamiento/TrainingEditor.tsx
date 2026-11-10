@@ -1,6 +1,9 @@
 "use client";
+import { clearTrainingHandoffs, saveTrainingHandoff } from "@/lib/training/drafts";
+import type { DiaryInput } from "@/lib/training/diary";
+import BlockFields from "./BlockFields";
 import { useEffect, useRef, useState } from "react";
-import { effortLabel, formatDuration, LIMITS, validateRoutine, validateSession } from "@/lib/training/rules";
+import { effortLabel, formatDuration, validateRoutine, validateSession } from "@/lib/training/rules";
 import type { TrainingBlock, TrainingRoutine, TrainingSession } from "@/lib/training/types";
 import styles from "./training.module.css";
 
@@ -12,9 +15,6 @@ const newBlock = (): BlockDraft => ({ key: crypto.randomUUID(), name: "", rounds
 function draftBlocks(blocks?: TrainingBlock[]): BlockDraft[] {
   return blocks?.map((block) => ({ key: crypto.randomUUID(), name: block.name, rounds: String(block.rounds), exercises: block.exercises.map((exercise) => ({ key: crypto.randomUUID(), name: exercise.name, mode: exercise.mode, amount: String(exercise.mode === "time" ? exercise.seconds : exercise.repetitions) })) })) ?? [newBlock()];
 }
-function move<T>(items: T[], index: number, delta: number): T[] {
-  const next = [...items]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; return next;
-}
 export async function trainingRequest(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
   if (path === "sessions" || path.startsWith("sessions/") || path.startsWith("sessions?")) headers.set("X-Training-Contract", "2");
@@ -25,7 +25,7 @@ export async function trainingRequest(path: string, init?: RequestInit) {
   if (!result.ok) throw Object.assign(new Error(body.error ?? "No se pudo completar la operación."), { code: body.code, status: result.status });
   return body;
 }
-export default function TrainingEditor({ target, today, optionalMetrics, onClose, onSaved }: { target: EditorTarget; today: string; optionalMetrics: boolean; onClose: () => void; onSaved: () => void }) {
+export default function TrainingEditor({ target, today, optionalMetrics, draftScope, templateMode = false, onClose, onSaved }: { target: EditorTarget; today: string; optionalMetrics: boolean; draftScope?: string; templateMode?: boolean; onClose: () => void; onSaved: () => void }) {
   const existing = target.kind === "sessions" ? target.session : target.duplicate ? undefined : target.routine;
   const source = target.kind === "sessions" ? target.session ?? target.routine : target.routine;
   const session = target.kind === "sessions" ? target.session : undefined;
@@ -39,6 +39,7 @@ export default function TrainingEditor({ target, today, optionalMetrics, onClose
   const [effort, setEffort] = useState(session?.effort != null ? String(session.effort) : "");
   const [note, setNote] = useState(session?.note ?? "");
   const [adjusting, setAdjusting] = useState(false);
+  const [clientUpdate, setClientUpdate] = useState(false);
   const [error, setError] = useState(""); const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false); const [uncertain, setUncertain] = useState(false);
   const [confirm, setConfirm] = useState<"reload" | "close" | null>(null);
@@ -46,10 +47,6 @@ export default function TrainingEditor({ target, today, optionalMetrics, onClose
   const heading = useRef<HTMLHeadingElement>(null); const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => { operationKey.current = crypto.randomUUID(); heading.current?.focus(); }, []);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
-  const updateBlock = (key: string, patch: Partial<BlockDraft>) => setBlocks((current) => current.map((block) => block.key === key ? { ...block, ...patch } : block));
-  function updateExercise(blockKey: string, exerciseKey: string, patch: Partial<ExerciseDraft>) {
-    setBlocks((current) => current.map((block) => block.key === blockKey ? { ...block, exercises: block.exercises.map((exercise) => exercise.key === exerciseKey ? { ...exercise, ...patch } : exercise) } : block));
-  }
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return;
     setError(""); setConflict(false);
@@ -67,14 +64,20 @@ export default function TrainingEditor({ target, today, optionalMetrics, onClose
     setBusy(true);
     try {
       await trainingRequest(`${target.kind}${existing ? `/${existing.id}` : ""}`, { method: existing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: payload });
-      onSaved();
+      clearTrainingHandoffs(); onSaved();
     } catch (error) {
       const failure = error as Error & { status?: number; code?: string };
       const unknown = !failure.status || failure.status >= 500;
       setUncertain(unknown);
       setError(unknown ? "No pudimos confirmar el guardado. Conservamos tus datos. Reintentá para recuperar el resultado sin duplicarlo." : failure.message);
-      setConflict(failure.status === 409);
+      setClientUpdate(failure.code === "CLIENT_UPDATE_REQUIRED");
+      setConflict(failure.code === "VERSION_CONFLICT");
     } finally { setBusy(false); }
+  }
+  function preserveAndUpdate() {
+    const input: DiaryInput = { date: performedOn, kind: "training", plan: null, result: { title: name, text: note, blocks: blocks.map(block => ({ name: block.name, rounds: Number(block.rounds), exercises: block.exercises.map(exercise => exercise.mode === "time" ? { name: exercise.name, mode: "time" as const, seconds: Number(exercise.amount) } : { name: exercise.name, mode: "repetitions" as const, repetitions: Number(exercise.amount) }) })), durationSeconds: minutes === "" && seconds === "" ? null : Number(minutes) * 60 + Number(seconds), effort: effort === "" ? null : Number(effort) }, disposition: "open", sourceRoutineId: session?.sourceRoutineId ?? (target.kind === "sessions" ? target.routine?.id ?? null : null) };
+    if (!draftScope || !saveTrainingHandoff(draftScope, input, session?.id)) { setError("No pudimos conservar el formulario en esta pestaña. Copiá tus datos antes de actualizar."); return; }
+    window.location.reload();
   }
   async function reload() {
     if (!existing) { onClose(); return; }
@@ -87,10 +90,12 @@ export default function TrainingEditor({ target, today, optionalMetrics, onClose
     } catch (error) { setError((error as Error).message); }
     finally { setBusy(false); }
   }
-  const title = isSession ? session ? "Corregir entrenamiento" : "Registrar entrenamiento" : target.duplicate ? "Duplicar rutina" : existing ? "Editar rutina" : "Nueva rutina";
+  const routineNoun = templateMode ? "plantilla" : "rutina";
+  const title = isSession ? session ? "Corregir entrenamiento" : "Registrar entrenamiento" : target.duplicate ? `Duplicar ${routineNoun}` : existing ? `Editar ${routineNoun}` : `Nueva ${routineNoun}`;
   return <section className={styles.editor} aria-labelledby="editor-title">
     <h2 id="editor-title" ref={heading} tabIndex={-1}>{title}</h2>
     <p className={styles.muted}>{isSession ? "Registrá esta rutina y ajustá la copia si hiciste algo distinto. La rutina original se conserva." : "Armá tus bloques. Las cantidades de cada ejercicio se repiten en todas las vueltas del bloque."}</p>
+    {clientUpdate && <div className={styles.notice}><p>Podés conservar este formulario durante 30 minutos en esta sesión de pestaña y recuperarlo al actualizar.</p><button type="button" onClick={preserveAndUpdate}>Conservar y actualizar</button></div>}
     {error && <div className={styles.error} role="alert" tabIndex={-1} ref={errorRef}>{error}{conflict && <button type="button" onClick={() => setConfirm("reload")}>{existing ? "Recargar registro" : "Volver al listado"}</button>}</div>}
     {confirm && <div className={styles.confirm} role="group" aria-label="Confirmar salida">
       <p>{confirm === "reload" ? "Se reemplazará este formulario por el registro guardado. Tus cambios sin guardar se descartarán." : "¿Descartar los cambios de este formulario?"}</p>
@@ -112,39 +117,13 @@ export default function TrainingEditor({ target, today, optionalMetrics, onClose
           <label>Nota (opcional)<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} aria-describedby="note-help" /></label><small id="note-help">Hasta 2.000 caracteres. Podés anotar diferencias entre vueltas.</small>
         </fieldset>}
         {isSession && <section aria-label="Resumen de la rutina"><h3>Rutina</h3><BlockSummary blocks={blocks.map((block) => ({ name: block.name, rounds: Number(block.rounds) || 0, exercises: block.exercises.map((exercise) => exercise.mode === "time" ? { name: exercise.name, mode: "time", seconds: Number(exercise.amount) || 0 } : { name: exercise.name, mode: "repetitions", repetitions: Number(exercise.amount) || 0 }) }))} /></section>}
-        {isSession && <details className={styles.adjustments} open={adjusting} onToggle={(event) => setAdjusting(event.currentTarget.open)}><summary>Ajustar lo realizado</summary><div className={styles.fields}><label>Nombre<input required value={name} onChange={(event) => setName(event.target.value)} /></label>{blocks.map((block, blockIndex) => <fieldset className={styles.block} key={block.key}>
-          <legend>Bloque {blockIndex + 1}</legend><div className={styles.actions}><button type="button" aria-label={`Subir bloque ${blockIndex + 1}`} disabled={blockIndex === 0} onClick={() => setBlocks((current) => move(current, blockIndex, -1))}>↑ Subir</button><button type="button" aria-label={`Bajar bloque ${blockIndex + 1}`} disabled={blockIndex === blocks.length - 1} onClick={() => setBlocks((current) => move(current, blockIndex, 1))}>↓ Bajar</button><button type="button" disabled={blocks.length === 1} onClick={() => setBlocks((current) => current.filter((item) => item.key !== block.key))}>Quitar bloque {blockIndex + 1}</button></div>
-          <div className={styles.row}><label>Nombre del bloque (opcional)<input value={block.name} onChange={(event) => updateBlock(block.key, { name: event.target.value })} /></label><label>Vueltas<input required type="number" inputMode="numeric" min="1" max={LIMITS.rounds} step="1" value={block.rounds} onChange={(event) => updateBlock(block.key, { rounds: event.target.value })} /></label></div>
-          {block.exercises.map((exercise, exerciseIndex) => <fieldset className={styles.exercise} key={exercise.key}><legend>Ejercicio {exerciseIndex + 1}</legend><label>Nombre del ejercicio<input required value={exercise.name} onChange={(event) => updateExercise(block.key, exercise.key, { name: event.target.value })} /></label><div className={styles.row}><label>Medida<select value={exercise.mode} onChange={(event) => updateExercise(block.key, exercise.key, { mode: event.target.value as ExerciseDraft["mode"], amount: "" })}><option value="repetitions">Repeticiones</option><option value="time">Tiempo</option></select></label><label>{exercise.mode === "time" ? "Tiempo por vuelta (segundos)" : "Repeticiones por vuelta"}<input required type="number" inputMode="numeric" min="1" max={exercise.mode === "time" ? LIMITS.seconds : LIMITS.repetitions} step="1" value={exercise.amount} onChange={(event) => updateExercise(block.key, exercise.key, { amount: event.target.value })} /></label></div><div className={styles.actions}><button type="button" aria-label={`Subir ejercicio ${exerciseIndex + 1} del bloque ${blockIndex + 1}`} disabled={exerciseIndex === 0} onClick={() => updateBlock(block.key, { exercises: move(block.exercises, exerciseIndex, -1) })}>↑ Subir</button><button type="button" aria-label={`Bajar ejercicio ${exerciseIndex + 1} del bloque ${blockIndex + 1}`} disabled={exerciseIndex === block.exercises.length - 1} onClick={() => updateBlock(block.key, { exercises: move(block.exercises, exerciseIndex, 1) })}>↓ Bajar</button><button type="button" disabled={block.exercises.length === 1} onClick={() => updateBlock(block.key, { exercises: block.exercises.filter((item) => item.key !== exercise.key) })}>Quitar ejercicio {exerciseIndex + 1}</button></div></fieldset>)}<button type="button" disabled={block.exercises.length >= LIMITS.exercises} onClick={() => updateBlock(block.key, { exercises: [...block.exercises, newExercise()] })}>Agregar ejercicio al bloque {blockIndex + 1}</button>
-        </fieldset>)}<button type="button" disabled={blocks.length >= LIMITS.blocks} onClick={() => setBlocks((current) => [...current, newBlock()])}>Agregar bloque</button></div></details>}
+        {isSession && <details className={styles.adjustments} open={adjusting} onToggle={(event) => setAdjusting(event.currentTarget.open)}><summary>Ajustar lo realizado</summary><div className={styles.fields}><label>Nombre<input required value={name} onChange={(event) => setName(event.target.value)} /></label><BlockFields value={blocks.map(block => ({ name: block.name, rounds: Number(block.rounds), exercises: block.exercises.map(exercise => exercise.mode === "time" ? { name: exercise.name, mode: "time" as const, seconds: Number(exercise.amount) } : { name: exercise.name, mode: "repetitions" as const, repetitions: Number(exercise.amount) }) }))} onChange={next => setBlocks(draftBlocks(next))} /></div></details>}
         {!isSession && <>
         <label>Nombre<input required value={name} onChange={(event) => setName(event.target.value)} /></label>
-        {blocks.map((block, blockIndex) => <fieldset className={styles.block} key={block.key}>
-          <legend>Bloque {blockIndex + 1}</legend>
-          <div className={styles.actions}>
-            <button type="button" aria-label={`Subir bloque ${blockIndex + 1}`} disabled={blockIndex === 0} onClick={() => setBlocks((current) => move(current, blockIndex, -1))}>↑ Subir</button>
-            <button type="button" aria-label={`Bajar bloque ${blockIndex + 1}`} disabled={blockIndex === blocks.length - 1} onClick={() => setBlocks((current) => move(current, blockIndex, 1))}>↓ Bajar</button>
-            <button type="button" disabled={blocks.length === 1} onClick={() => setBlocks((current) => current.filter((item) => item.key !== block.key))}>Quitar bloque {blockIndex + 1}</button>
-          </div>
-          <div className={styles.row}><label>Nombre del bloque (opcional)<input value={block.name} onChange={(event) => updateBlock(block.key, { name: event.target.value })} /></label>
-            <label>Vueltas<input required type="number" inputMode="numeric" min="1" max={LIMITS.rounds} step="1" value={block.rounds} onChange={(event) => updateBlock(block.key, { rounds: event.target.value })} /></label></div>
-          {block.exercises.map((exercise, exerciseIndex) => <fieldset className={styles.exercise} key={exercise.key}>
-            <legend>Ejercicio {exerciseIndex + 1}</legend>
-            <label>Nombre del ejercicio<input required value={exercise.name} onChange={(event) => updateExercise(block.key, exercise.key, { name: event.target.value })} /></label>
-            <div className={styles.row}><label>Medida<select value={exercise.mode} onChange={(event) => updateExercise(block.key, exercise.key, { mode: event.target.value as ExerciseDraft["mode"], amount: "" })}><option value="repetitions">Repeticiones</option><option value="time">Tiempo</option></select></label>
-              <label>{exercise.mode === "time" ? "Tiempo por vuelta (segundos)" : "Repeticiones por vuelta"}<input required type="number" inputMode="numeric" min="1" max={exercise.mode === "time" ? LIMITS.seconds : LIMITS.repetitions} step="1" value={exercise.amount} onChange={(event) => updateExercise(block.key, exercise.key, { amount: event.target.value })} /></label></div>
-            <div className={styles.actions}>
-              <button type="button" aria-label={`Subir ejercicio ${exerciseIndex + 1} del bloque ${blockIndex + 1}`} disabled={exerciseIndex === 0} onClick={() => updateBlock(block.key, { exercises: move(block.exercises, exerciseIndex, -1) })}>↑ Subir</button>
-              <button type="button" aria-label={`Bajar ejercicio ${exerciseIndex + 1} del bloque ${blockIndex + 1}`} disabled={exerciseIndex === block.exercises.length - 1} onClick={() => updateBlock(block.key, { exercises: move(block.exercises, exerciseIndex, 1) })}>↓ Bajar</button>
-              <button type="button" disabled={block.exercises.length === 1} onClick={() => updateBlock(block.key, { exercises: block.exercises.filter((item) => item.key !== exercise.key) })}>Quitar ejercicio {exerciseIndex + 1}</button>
-            </div>
-          </fieldset>)}
-          <button type="button" disabled={block.exercises.length >= LIMITS.exercises} onClick={() => updateBlock(block.key, { exercises: [...block.exercises, newExercise()] })}>Agregar ejercicio al bloque {blockIndex + 1}</button>
-        </fieldset>)}
-        <button type="button" disabled={blocks.length >= LIMITS.blocks} onClick={() => setBlocks((current) => [...current, newBlock()])}>Agregar bloque</button>
+        <BlockFields value={blocks.map(block => ({ name: block.name, rounds: Number(block.rounds), exercises: block.exercises.map(exercise => exercise.mode === "time" ? { name: exercise.name, mode: "time" as const, seconds: Number(exercise.amount) } : { name: exercise.name, mode: "repetitions" as const, repetitions: Number(exercise.amount) }) }))} onChange={next => setBlocks(draftBlocks(next))} />
         </>}
       </fieldset>
-      <div className={styles.saveBar}><button className={styles.primary} type="submit" disabled={busy}>{busy ? "Guardando…" : uncertain ? "Reintentar guardado" : isSession ? "Guardar entrenamiento" : "Guardar rutina"}</button><button type="button" disabled={busy} onClick={() => setConfirm("close")}>Cancelar</button></div>
+      <div className={styles.saveBar}><button className={styles.primary} type="submit" disabled={busy}>{busy ? "Guardando…" : uncertain ? "Reintentar guardado" : isSession ? "Guardar entrenamiento" : `Guardar ${routineNoun}`}</button><button type="button" disabled={busy} onClick={() => setConfirm("close")}>Cancelar</button></div>
     </form>
   </section>;
 }

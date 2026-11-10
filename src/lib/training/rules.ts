@@ -26,11 +26,8 @@ export function identifier(value: unknown): string {
   if (typeof value !== "string" || !UUID.test(value)) invalid("Identificador inválido.");
   return value.toLowerCase();
 }
-export function todayInZone(timeZone: string, now = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
-  const part = (name: string) => parts.find((entry) => entry.type === name)!.value;
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}
+import { dayInZone } from "../calendar/civil.ts";
+export function todayInZone(timeZone: string, now = new Date()) { return dayInZone(now, timeZone); }
 export function calendarDate(value: unknown): string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < "0001-01-01") invalid("Fecha inválida.");
   const parsed = new Date(`${value}T00:00:00Z`);

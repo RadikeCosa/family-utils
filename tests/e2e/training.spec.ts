@@ -4,7 +4,7 @@ import AxeBuilder from "@axe-core/playwright";
 import pg from "pg";
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 test.skip(!connectionString, "requires isolated PostgreSQL");
-const baseURL = "http://localhost:3318";
+const baseURL = `http://localhost:${process.env.PLAYWRIGHT_PORT ?? "3318"}`;
 let pool: pg.Pool, familyId: string, memberId: string, userId: string, api: APIRequestContext;
 test.beforeEach(async ({ page }) => {
   pool = new pg.Pool({ connectionString });
@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(async () => {
   await api?.dispose();
   if (familyId) {
-    for (const table of ["training_sessions", "training_routines"]) await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
+    for (const table of ["training_diary_operations", "training_entries", "training_diary_revisions", "training_sessions", "training_routines"]) await pool.query(`DELETE FROM ${table} WHERE family_id=$1`, [familyId]);
     await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
   }
   if (userId) await pool.query('DELETE FROM "user" WHERE id=$1', [userId]);

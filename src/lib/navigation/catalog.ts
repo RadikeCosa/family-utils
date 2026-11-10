@@ -23,6 +23,7 @@ export type Capabilities = {
   sports: boolean;
   champions: boolean;
   training: boolean;
+  trainingDiary?: boolean;
 };
 export function appCatalog(c: Capabilities): AppDefinition[] {
   const apps: AppDefinition[] = [
@@ -110,8 +111,8 @@ export function appCatalog(c: Capabilities): AppDefinition[] {
             href: "/entrenamiento",
             accent: "mint" as const,
             sections: [
-              { label: "Mis rutinas", href: "/entrenamiento" },
-              { label: "Historial", href: "/entrenamiento?seccion=historial" },
+              { label: c.trainingDiary ? "Diario" : "Mis rutinas", href: "/entrenamiento" },
+              { label: c.trainingDiary ? "Plantillas" : "Historial", href: c.trainingDiary ? "/entrenamiento?seccion=plantillas" : "/entrenamiento?seccion=historial" },
             ],
           },
         ]
@@ -146,7 +147,8 @@ export function activeSection(
   query: URLSearchParams,
 ) {
   if (app.id === "menus") return query.get("vista") === "semana" ? 1 : 0;
-  if (app.id === "tasks" || app.id === "training")
+  if (app.id === "training") return ["historial", "plantillas"].includes(query.get("seccion") ?? "") ? 1 : 0;
+  if (app.id === "tasks")
     return query.get("seccion") === "historial" ? 1 : 0;
   if (["recipes", "shopping", "library"].includes(app.id))
     return query.get("archived") === "true" ? 1 : 0;

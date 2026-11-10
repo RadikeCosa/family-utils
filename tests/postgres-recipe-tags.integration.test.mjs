@@ -18,7 +18,8 @@ test("recipe tag migration: Unicode identity, unique keys, family integrity and 
     await admin.query(`CREATE DATABASE "${name}"`);
     const url = new URL(connectionString); url.pathname = `/${name}`; pool = new pg.Pool({ connectionString: url.toString() });
     const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-    const entries = journal.entries.filter(e => e.tag !== "0066_recipe_tags");
+    // Rehearse the prefix before tags; later migrations must not advance the watermark.
+    const entries = journal.entries.slice(0, journal.entries.findIndex(e => e.tag === "0066_recipe_tags"));
     await mkdir(join(folder, "meta"));
     await writeFile(join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries }));
     for (const entry of entries) await writeFile(join(folder, `${entry.tag}.sql`), await readFile(`drizzle/${entry.tag}.sql`));
