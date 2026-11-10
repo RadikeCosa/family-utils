@@ -349,6 +349,29 @@ test("loading another page notices membership changes and retains both pages", a
   await expect(page.getByText("Hay cambios. Actualizá para ver la colección al día.", { exact: false })).toBeVisible();
 });
 
+test("collection remembers filters on return, honors explicit links and remembers clearing", async ({ page }) => {
+  const storageKey = `cinemateca:filters:v1:${familyId}:${memberId}`;
+  await page.goto("/cinemateca");
+  await page.getByRole("button", { name: "Quiero ver", exact: true }).click();
+  await page.getByRole("button", { name: "Cine con Cami", exact: true }).click();
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), storageKey)).toBe("selection=cine_with_cami&status=pending");
+  await page.goto("/");
+  await page.goto("/cinemateca");
+  await expect(page.getByRole("button", { name: "Quiero ver", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Cine con Cami", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Quiero ver", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/cinemateca?status=finished");
+  await expect(page.getByRole("button", { name: "Vistas", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Cine con Cami", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), storageKey)).toBe("status=finished");
+  await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
+  await page.goto("/");
+  await page.goto("/cinemateca");
+  await expect(page.getByRole("button", { name: "Todas", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), storageKey)).toBe("");
+});
+
 test("compact collection and canonical filters retain archive and common semantics", async ({ page }, testInfo) => {
   const title = "Una película para compartir en familia";
   const response = await api.post("/api/library", { data: { title, creator: "Una dirección familiar de prueba completa", year: 2024, genres: ["ciencia_ficcion", "documental"] } });
@@ -386,6 +409,8 @@ test("compact collection and canonical filters retain archive and common semanti
   await expect(page).toHaveURL(/cinemateca\?extra=keep$/); await expect(card).toHaveCount(0);
   await page.goto("/cinemateca?view=common_pending&status=finished&extra=keep");
   await expect(show).toHaveAttribute("aria-pressed", "true"); await expect(page).not.toHaveURL(/status=/);
+  // Start URL normalization checks without a remembered selection to restore.
+  await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
   for (const genre of ["", "wrong", "drama&genre=terror", "drama&genre=drama"]) {
     await page.goto(`/biblioteca?kind=book&type=music&cursor=old&genre=${genre}&extra=keep`);
     await expect(page).toHaveURL(/cinemateca\?extra=keep$/);
