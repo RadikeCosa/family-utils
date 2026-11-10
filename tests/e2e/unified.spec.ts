@@ -203,8 +203,8 @@ test("recipe filter, direct detail, native history, origin and parent have disti
   await expect(
     page.getByRole("searchbox", { name: "Buscar recetas" }),
   ).toHaveValue("Tarta");
-  await expect(page.getByRole("button", { name: "Quitar etiqueta casera", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Quitar etiqueta horno", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Quitar etiqueta casera$/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Quitar etiqueta horno$/i })).toBeVisible();
   await page
     .getByRole("link", { name: "Tarta de prueba", exact: true })
     .click();

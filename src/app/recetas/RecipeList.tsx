@@ -123,7 +123,7 @@ export default function RecipeList() {
     {error && <p role="alert" className={styles.error}>{error} {existing ? <Link href={`/recetas/${existing}`}>Abrir receta existente</Link> : <button onClick={() => void load()}>Reintentar consulta</button>}</p>}
     <p role="status" aria-live="polite">{busy ? "Buscando…" : data ? `${data.total} recetas encontradas. ${notice} ${warning}` : notice}</p>
     {stale && <div className={styles.notice} role="status">El catálogo cambió. Actualizá la lista para continuar. <button disabled={busy} onClick={() => void load()}>Actualizar lista</button></div>}
-    <ul className={styles.recipeList} aria-label="Recetas de la familia" aria-busy={busy}>{(data?.ideas ?? []).map(item => <li data-ui-surface className={styles.recipeRow} key={item.id}>
+    <ul className={styles.recipeList} aria-label="Recetas de la familia" aria-busy={busy}>{(data?.ideas ?? []).map(item => <li className={styles.recipeRow} key={item.id}>
       <h2><Link href={`/recetas/${item.id}`} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) remember(item.id); }}>{item.title}</Link></h2>
       {item.note && <p className={styles.noteSummary}>{item.note}</p>}
       <div className={styles.tags}>{(item.tags ?? []).map(tag => <button key={tag.id} aria-pressed={slugs.includes(tag.slug)} disabled={busy || (!slugs.includes(tag.slug) && slugs.length >= 10)} onClick={() => {
