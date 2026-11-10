@@ -14,15 +14,15 @@ export async function diaryDatabase(options = {}) {
   await admin.query(`CREATE DATABASE "${name}"`); url.pathname = `/${name}`;
   const pool = new pg.Pool({ connectionString: url.toString() });
   try {
-    if (options.beforeDiary) {
+    if (options.beforeDiary || options.beforeTiming) {
       const { mkdtemp, mkdir, readFile, writeFile, copyFile, rm } = await import("node:fs/promises");
       const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
       const folder = await mkdtemp(join(tmpdir(), "diary-before-"));
       try {
-        const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8")); journal.entries = journal.entries.slice(0, journal.entries.findIndex(entry => entry.tag === "0067_training_diary"));
+        const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8")); journal.entries = journal.entries.slice(0, journal.entries.findIndex(entry => entry.tag === (options.beforeTiming ? "0068_training_activity_timing" : "0067_training_diary")));
         await mkdir(join(folder, "meta")); await writeFile(join(folder, "meta/_journal.json"), JSON.stringify(journal));
         for (const entry of journal.entries) await copyFile(`drizzle/${entry.tag}.sql`, join(folder, `${entry.tag}.sql`));
-        await migrate(drizzle(pool), { migrationsFolder: folder }); await options.beforeDiary(pool);
+        await migrate(drizzle(pool), { migrationsFolder: folder }); await (options.beforeTiming ?? options.beforeDiary)(pool);
       } finally { await rm(folder, { recursive: true, force: true }); }
     }
     try { await migrate(drizzle(pool), { migrationsFolder: "drizzle" }); }
@@ -31,10 +31,10 @@ export async function diaryDatabase(options = {}) {
   catch (error) { await pool.end(); await admin.query(`DROP DATABASE "${name}"`); await admin.end(); throw error; }
   return { pool, url: url.toString(), async close() { await pool.end(); await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`); await admin.end(); } };
 }
-export async function diaryServer(databaseURL, writable, unified = true) {
+export async function diaryServer(databaseURL, writable, unified = true, activityForm = false) {
   const listener = createServer(); await new Promise(resolve => listener.listen(0, "127.0.0.1", resolve)); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
   const origin = `http://localhost:${port}`, logs = [];
-  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: databaseURL, TRAINING_ENABLED: "true", TRAINING_DIARY_ENABLED: String(writable), TRAINING_OPTIONAL_METRICS_ENABLED: "true", TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true", UNIFIED_UI_ENABLED: String(unified), BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "diary-test-only-secret-not-production", CODE_PEPPER: "diary-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: ["ignore", "pipe", "pipe"] });
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: databaseURL, TRAINING_ENABLED: "true", TRAINING_DIARY_ENABLED: String(writable), TRAINING_ACTIVITY_FORM_ENABLED: String(activityForm), TRAINING_OPTIONAL_METRICS_ENABLED: "true", TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true", UNIFIED_UI_ENABLED: String(unified), BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "diary-test-only-secret-not-production", CODE_PEPPER: "diary-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: ["ignore", "pipe", "pipe"] });
   server.stdout.on("data", value => logs.push(value.toString())); server.stderr.on("data", value => logs.push(value.toString()));
   for (let i = 0; i < 200; i++) {
     if (server.exitCode !== null) throw new Error(`Diary test server exited: ${logs.join("")}`);
@@ -54,6 +54,6 @@ export async function diaryProfile(server, name, pool, familyId, role = "member"
   return { cookie, id: member.id, familyId, userId: session.user.id };
 }
 export async function diaryCall(server, profile, path, method = "GET", body, contract = "3") {
-  const res = await fetch(`${server.origin}/api/training/${path}`, { method, headers: { Cookie: profile.cookie, Origin: server.origin, "Content-Type": "application/json", "X-Training-Contract": contract }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+  const res = await fetch(`${server.origin}/api/training/${path}`, { method, headers: { Cookie: profile.cookie, Origin: server.origin, "Content-Type": "application/json", "X-Training-Contract": contract, "X-Training-Timing": "1" }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   return { status: res.status, body: await res.json() };
 }

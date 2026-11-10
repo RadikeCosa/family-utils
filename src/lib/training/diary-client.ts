@@ -1,6 +1,6 @@
 import type { DiaryContext, DiaryEntry } from "./diary";
 export async function diaryRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers); headers.set("X-Training-Contract", "3");
+  const headers = new Headers(init?.headers); headers.set("X-Training-Contract", "3"); headers.set("X-Training-Timing", "1");
   if (init?.body) headers.set("Content-Type", "application/json");
   const result = await fetch(`/api/training/${path}`, { ...init, headers, cache: "no-store" });
   let body;

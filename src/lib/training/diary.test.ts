@@ -1,9 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addCivilDays, civilWeekStart, dayInZone, nextCivilDayAt } from "../calendar/civil.ts";
-import { countsLabel, dayIndicator, diaryDate, diaryStatus, diaryWeek, emptyCounts, validateDiary, weekDates } from "./diary.ts";
+import { countsLabel, dayIndicator, diaryDate, diaryStatus, diaryWeek, emptyCounts, validateDiary, weekDates, diaryContent, mergeDiaryContent } from "./diary.ts";
+import { activityTiming, clockCandidates, timingFromClocks, timingDuration, formatActivityDuration } from "./timing.ts";
 const today = "2026-11-10";
 const entry = (patch: Record<string, unknown> = {}) => ({ date: today, kind: "training", plan: null, result: { text: " Caminé 40 minutos " }, disposition: "open", sourceRoutineId: null, ...patch });
+test("real durations resolve gaps, folds, overnight sessions and inclusive 24h", () => {
+  assert.equal(formatActivityDuration(6300), "1 h 45 min");
+  const zone = "America/New_York";
+  assert.deepEqual(clockCandidates("2026-03-08", "02:30", zone), []);
+  assert.equal(clockCandidates("2026-11-01", "01:30", zone).length, 2);
+  assert.throws(() => timingFromClocks("2026-11-01", "01:30", "03:00", false, zone), /dos veces/);
+  assert.equal(timingDuration(timingFromClocks("2026-03-08", "01:30", "03:30", false, zone)), 3600);
+  assert.equal(timingDuration(timingFromClocks("2026-03-07", "12:00", "12:00", true, zone)), 23 * 3600);
+  assert.throws(() => timingFromClocks("2026-10-31", "12:00", "12:00", true, zone), /24 horas/);
+  assert.equal(timingDuration(timingFromClocks(today, "12:00", "12:00", true, "UTC")), 86400);
+  assert.throws(() => timingFromClocks(today, "12:00", "12:00", false, "UTC"));
+  assert.throws(() => timingFromClocks(today, "23:00", "01:00", false, "UTC"), /día siguiente/);
+  assert.throws(() => timingFromClocks(today, "", "01:00", false, "UTC"));
+  assert.throws(() => timingFromClocks("2200-12-31", "23:00", "01:00", true, "UTC"));
+  assert.throws(() => activityTiming({ startAt: "2026-02-30T12:00:00Z", endAt: "2026-03-02T12:00:00Z", timeZone: "UTC" }));
+});
+test("timing omissions preserve snapshots; explicit null clears hours and duration", () => {
+  const timing = timingFromClocks(today, "10:00", "11:00", false, "UTC"), previous = { text: "Corrí", timing, durationSeconds: 3600 };
+  const merged = diaryContent(mergeDiaryContent({ text: "Editado", durationSeconds: 99 }, previous), "training")!;
+  assert.deepEqual(merged.timing, timing); assert.equal(merged.durationSeconds, 3600);
+  assert.equal(diaryContent(mergeDiaryContent({ text: "Editado" }, { text: "x", durationSeconds: 80 }), "training")!.durationSeconds, 80);
+  assert.equal(diaryContent(mergeDiaryContent({ text: "Editado", timing: null }, previous), "training")!.durationSeconds, null);
+  assert.throws(() => diaryContent({ text: "x", timing: { startAt: timing.startAt } }, "training"));
+  assert.throws(() => validateDiary(entry({ date: "2026-11-09", result: previous }), today));
+  assert.doesNotThrow(() => validateDiary(entry({ plan: { ...previous, timing: timingFromClocks("2026-11-09", "10:00", "11:00", false, "UTC") }, result: previous }), today));
+});
 test("a phrase is sufficient; content presence distinguishes rest from invalid training", () => {
   assert.equal(validateDiary(entry(), today).result?.text, "Caminé 40 minutos");
   for (const patch of [{ plan: null, result: null }, { result: {} }, { result: { durationSeconds: 100 } }, { result: { text: "x", extra: true } }, { extra: true }, { result: { text: "x", blocks: {} } }, { result: { text: "x", effort: 11 } }]) assert.throws(() => validateDiary(entry(patch), today));

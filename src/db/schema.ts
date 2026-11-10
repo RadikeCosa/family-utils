@@ -1049,6 +1049,7 @@ export const trainingEntries = pgTable("training_entries", {
   version: integer("version").notNull().default(1), archivedAt: timestamp("archived_at", { withTimezone: true }),
   searchText: text("search_text").notNull().default(""), createdAt: createdAt(), updatedAt: updatedAt(),
 }, t => [
+  check("training_activity_date", sql`public.training_activity_date_valid(${t.date},${t.plan},${t.result})`),
   foreignKey({ columns: [t.ownerMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }),
   foreignKey({ columns: [t.sourceRoutineId, t.ownerMemberId, t.familyId], foreignColumns: [trainingRoutines.id, trainingRoutines.ownerMemberId, trainingRoutines.familyId] }).onDelete("restrict"),
   uniqueIndex("training_entries_identity_unique").on(t.id, t.ownerMemberId, t.familyId),

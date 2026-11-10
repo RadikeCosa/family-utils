@@ -3,13 +3,28 @@ import type { PoolClient } from "pg";
 import { getPool } from "@/db";
 import type { MemberContext } from "@/lib/auth/context";
 import { dayInZone, nextCivilDayAt } from "@/lib/calendar/civil";
-import { trainingDiaryEnabled, trainingEnabled } from "./config";
-import { actorFor, activeActor, errorResponse, fail, readTrainingBody, response, trainingUnavailable } from "./server";
+import { trainingActivityFormEnabled, trainingDiaryEnabled, trainingEnabled } from "./config";
+import { actorFor, activeActor, errorResponse, fail, readTrainingBody, response as baseResponse, trainingUnavailable } from "./server";
 import { identifier, integer, object, onlyKeys, TrainingValidationError } from "./rules";
-import { diaryContent, diaryDate, diaryStatus, diaryWeek, emptyCounts, SEARCH_MIN, validateDiary, weekDates, type DiaryContext, type DiaryEntry, type DiaryInput } from "./diary";
+import { diaryContent, mergeDiaryContent, diaryDate, diaryStatus, diaryWeek, emptyCounts, SEARCH_MIN, validateDiary, weekDates, type DiaryContext, type DiaryEntry, type DiaryInput } from "./diary";
 
 type Row = { id: string; family_id: string; owner_member_id: string; date: string; kind: DiaryInput["kind"]; plan: DiaryInput["plan"]; result: DiaryInput["result"]; disposition: DiaryInput["disposition"]; source_routine_id: string | null; version: number; archived_at: Date | null; created_at: Date; updated_at: Date };
 const columns = "id,family_id,owner_member_id,date::text AS date,kind,plan,result,disposition,source_routine_id,version,archived_at,created_at,updated_at";
+
+function diaryResponse(request: Request, body: Record<string, unknown>, status = 200) {
+  // Old cached validators reject unknown content keys. Their views omit timing;
+  // their writes preserve the stored interval through mergeDiaryContent.
+  if (request.headers.get("x-training-timing") !== "1") {
+    const legacy = (item: DiaryEntry) => {
+      const content = (value: DiaryEntry["plan"]) => { if (value == null) return value; const copy = { ...value }; delete copy.timing; return copy; };
+      return { ...item, plan: content(item.plan), result: content(item.result) };
+    };
+    if (body.item) body = { ...body, item: legacy(body.item as DiaryEntry) };
+    if (Array.isArray(body.items)) body = { ...body, items: body.items.map(legacy) };
+  }
+  return baseResponse(body, status);
+}
+
 function map(row: Row, today: string): DiaryEntry {
   const entry = { id: row.id, date: row.date, kind: row.kind, plan: row.plan, result: row.result, disposition: row.disposition, sourceRoutineId: row.source_routine_id, version: row.version, archivedAt: row.archived_at?.toISOString() ?? null, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString() };
   return { ...entry, status: diaryStatus(entry, today) };
@@ -20,6 +35,34 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 function digest(value: unknown) { return createHash("sha256").update(canonical(value)).digest("hex"); }
+
+function fingerprint(value: unknown): Record<string, unknown> {
+  function normalize(v: unknown): unknown {
+    if (Array.isArray(v)) return v.map(normalize);
+    if (v && typeof v === "object") {
+      const raw = v as Record<string, unknown>;
+      const result = Object.fromEntries(Object.entries(raw).map(([key, item]) => [key, typeof item === "string" ? item.trim() : normalize(item)]));
+      // Existing optional effort null and omission represent the same operation.
+      if ("text" in raw || "title" in raw || "blocks" in raw) { result.effort ??= null; }
+      return result;
+    }
+    return v;
+  }
+  return normalize(value) as Record<string, unknown>;
+}
+
+function legacyFingerprint(id: string | undefined, version: number | undefined, action: string, normalized: Record<string, unknown>, kind?: DiaryInput["kind"]): string | null {
+  if (JSON.stringify(normalized).includes('"timing"')) return null;
+  try {
+    const original = action === "create" || action === "edit" ? { input: validateDiary(normalized.input, "2200-12-31") } : action === "result" && kind && !("date" in normalized) ? { content: diaryContent(normalized.content, kind) } : normalized;
+    return digest({ id: id ?? null, version: version ?? null, action, ...original });
+  } catch { return null; }
+}
+
+function requireTimingForMove(previous: Row | null, date: unknown, content: unknown) {
+  if (previous && date !== previous.date && (previous.result ?? previous.plan)?.timing && (!content || !object(content).timing)) fail(409, "TIMING_REQUIRED_FOR_DATE_CHANGE", "Para cambiar la fecha, reenviá los horarios completos. Tu anotación se conserva.");
+}
+
 async function owned(tx: PoolClient, actor: MemberContext, id: string): Promise<Row> {
   identifier(id);
   const { rows } = await tx.query<Row>(`SELECT ${columns} FROM training_entries WHERE id=$1 AND owner_member_id=$2 AND family_id=$3`, [id, actor.memberId, actor.familyId]);
@@ -31,7 +74,7 @@ async function context(tx: PoolClient, actor: MemberContext): Promise<DiaryConte
   const state = await tx.query("SELECT transitioned_at FROM training_diary_state WHERE singleton=true FOR SHARE");
   if (!state.rows[0]?.transitioned_at) fail(404, "NOT_FOUND", "El diario todavía no está habilitado.");
   const now = new Date();
-  return { today: dayInZone(now, actor.familyTimeZone), timeZone: actor.familyTimeZone, serverNow: now.toISOString(), nextDayAt: nextCivilDayAt(now, actor.familyTimeZone).toISOString(), writable: trainingDiaryEnabled() };
+  return { today: dayInZone(now, actor.familyTimeZone), timeZone: actor.familyTimeZone, serverNow: now.toISOString(), nextDayAt: nextCivilDayAt(now, actor.familyTimeZone).toISOString(), writable: trainingDiaryEnabled(), activityFormEnabled: trainingActivityFormEnabled() };
 }
 function originCheck(request: Request) {
   const origin = request.headers.get("origin");
@@ -43,6 +86,7 @@ function queryBoolean(value: unknown): boolean {
   throw new TrainingValidationError("Filtro inválido.");
 }
 export async function diaryRead(request: Request, mode: "entries" | "search" | "summary", id?: string) {
+  const response = (body: Record<string, unknown>, status = 200) => diaryResponse(request, body, status);
   if (!trainingEnabled()) return trainingUnavailable();
   let tx: PoolClient | undefined;
   try {
@@ -98,6 +142,7 @@ export async function diaryRead(request: Request, mode: "entries" | "search" | "
   finally { tx?.release(); }
 }
 export async function diaryWrite(request: Request, id?: string) {
+  const response = (body: Record<string, unknown>, status = 200) => diaryResponse(request, body, status);
   if (!trainingEnabled()) return trainingUnavailable();
   let tx: PoolClient | undefined;
   try {
@@ -116,28 +161,30 @@ export async function diaryWrite(request: Request, id?: string) {
     const version = id ? integer(body.version, "Versión", 2147483646) : undefined;
     if (!id && action === "create" || id && action === "edit") {
       onlyKeys(body, ["action", "operationKey", ...(id ? ["version"] : []), "input"]);
-      normalized = { input: validateDiary(body.input, ctx.today) };
+      normalized = { input: object(body.input) };
     } else if (!id && action === "copy") {
-      onlyKeys(body, ["action", "operationKey", "sourceId", "content", "date"]);
+      onlyKeys(body, ["action", "operationKey", "sourceId", "content", "date", "timing"]);
       if (body.content !== "plan" && body.content !== "result") throw new TrainingValidationError("Elegí qué contenido copiar.");
-      normalized = { sourceId: identifier(body.sourceId), content: body.content, date: diaryDate(body.date) };
+      normalized = { sourceId: identifier(body.sourceId), content: body.content, date: diaryDate(body.date), ...("timing" in body ? { timing: body.timing } : {}) };
     } else if (id && action === "result") {
-      onlyKeys(body, ["action", "operationKey", "version", "content"]); normalized = { content: diaryContent(object(body.content), previous!.kind) };
+      onlyKeys(body, ["action", "operationKey", "version", "content", "date"]); normalized = { content: object(body.content), ...(body.date !== undefined ? { date: diaryDate(body.date) } : {}) };
     } else if (id && ["skip", "reschedule", "archive", "restore"].includes(action)) {
-      onlyKeys(body, ["action", "operationKey", "version", ...(action === "reschedule" ? ["date"] : [])]);
-      normalized = action === "reschedule" ? { date: diaryDate(body.date) } : {};
+      onlyKeys(body, ["action", "operationKey", "version", ...(action === "reschedule" ? ["date", "timing"] : [])]);
+      normalized = action === "reschedule" ? { date: diaryDate(body.date), ...("timing" in body ? { timing: body.timing } : {}) } : {};
     } else throw new TrainingValidationError("Operación inválida.");
-    const hash = digest({ id: id ?? null, version: version ?? null, action, ...normalized });
+    const hash = digest({ id: id ?? null, version: version ?? null, action, ...fingerprint(normalized) });
     const previousOp = (await tx.query("SELECT entry_id,hash,confirmed_version FROM training_diary_operations WHERE owner_member_id=$1 AND family_id=$2 AND operation_key=$3", [actor.memberId, actor.familyId, operationKey])).rows[0];
     if (previousOp) {
-      if (previousOp.hash !== hash) fail(409, "OPERATION_CONFLICT", "Este intento ya se confirmó con otros datos.");
+      if (previousOp.hash !== hash && previousOp.hash !== legacyFingerprint(id, version, action, normalized, previous?.kind)) fail(409, "OPERATION_CONFLICT", "Este intento ya se confirmó con otros datos.");
       const item = map(await owned(tx, actor, previousOp.entry_id), ctx.today);
       await tx.query("COMMIT"); return response({ item, confirmedVersion: previousOp.confirmed_version, replayed: true, ...ctx });
     }
     if (previous && previous.version !== version) fail(409, "VERSION_CONFLICT", "La anotación cambió en otro dispositivo. Tu plan y resultado sin guardar se conservan para revisar los cambios.");
     let input: DiaryInput, archivedAt: Date | null = previous?.archived_at ?? null;
     if (action === "create" || action === "edit") {
-      input = normalized.input as DiaryInput;
+      const raw = object(normalized.input);
+      requireTimingForMove(previous, raw.date, raw.result ?? raw.plan);
+      input = validateDiary({ ...raw, plan: mergeDiaryContent(raw.plan, previous?.plan), result: mergeDiaryContent(raw.result, previous?.result) }, ctx.today);
       if (previous) {
         if (previous.archived_at) fail(409, "ENTRY_ARCHIVED", "Restaurá la anotación antes de editarla.");
         if (input.kind !== previous.kind || input.sourceRoutineId !== previous.source_routine_id) throw new TrainingValidationError("El tipo y origen de una anotación no se cambian.");
@@ -150,21 +197,33 @@ export async function diaryWrite(request: Request, id?: string) {
     } else if (action === "copy") {
       const source = await owned(tx, actor, normalized.sourceId as string), content = source[normalized.content as "plan" | "result"];
       if (content === null) throw new TrainingValidationError("Ese contenido no existe.");
-      input = validateDiary({ date: normalized.date, kind: source.kind, plan: content, result: null, disposition: "open", sourceRoutineId: source.source_routine_id }, ctx.today);
+      requireTimingForMove({ ...source, result: content, plan: null }, normalized.date, normalized);
+      input = validateDiary({ date: normalized.date, kind: source.kind, plan: "timing" in normalized ? diaryContent({ ...content, timing: normalized.timing }, source.kind) : content, result: null, disposition: "open", sourceRoutineId: source.source_routine_id }, ctx.today);
     } else {
       input = inputOf(previous!);
       if (previous!.archived_at && action !== "restore") fail(409, "ENTRY_ARCHIVED", "Restaurá la anotación primero.");
       if (action === "result") {
-        input.result = diaryContent(normalized.content, input.kind); input.disposition = "open";
+        if (normalized.date !== undefined) input.date = normalized.date as string;
+        requireTimingForMove(previous, input.date, normalized.content);
+        input.result = diaryContent(mergeDiaryContent(normalized.content, previous?.result), input.kind); input.disposition = "open";
       } else if (action === "skip") {
         if (input.result !== null) throw new TrainingValidationError("Una anotación realizada no se puede omitir.");
         input.disposition = "skipped";
       } else if (action === "reschedule") {
         if (input.result !== null || (normalized.date as string) < ctx.today) throw new TrainingValidationError("Solo se reprograman planes sin resultado hacia hoy o el futuro.");
+        requireTimingForMove(previous, normalized.date, normalized);
         input.date = normalized.date as string; input.disposition = "open";
+        if ("timing" in normalized && input.plan) input.plan = diaryContent({ ...input.plan, timing: normalized.timing }, input.kind);
       } else if (action === "archive") archivedAt = new Date();
       else if (action === "restore") archivedAt = null;
       input = validateDiary(input, ctx.today);
+    }
+    for (const target of ["plan", "result"] as const) {
+      const timing = input[target]?.timing, oldTiming = previous?.[target]?.timing;
+      if (timing && canonical(timing) !== canonical(oldTiming ?? null)) {
+        if (timing.timeZone !== actor.familyTimeZone) throw new TrainingValidationError("Los horarios nuevos deben usar la zona familiar vigente.");
+        if (target === "result" && Date.parse(timing.endAt) > Date.parse(ctx.serverNow)) throw new TrainingValidationError("La actividad no puede finalizar después de ahora en la zona familiar.");
+      }
     }
     if (input.kind === "rest" && !archivedAt && (await tx.query("SELECT id FROM training_entries WHERE owner_member_id=$1 AND family_id=$2 AND date=$3::date AND kind='rest' AND archived_at IS NULL AND ($4::uuid IS NULL OR id<>$4)", [actor.memberId, actor.familyId, input.date, id ?? null])).rowCount) fail(409, "REST_ALREADY_EXISTS", "Ya hay un descanso en esa fecha. La anotación se conserva sin cambios.");
     const values = [actor.familyId, actor.memberId, input.date, input.kind, input.plan === null ? null : JSON.stringify(input.plan), input.result === null ? null : JSON.stringify(input.result), input.disposition, input.sourceRoutineId, archivedAt];
@@ -178,6 +237,8 @@ export async function diaryWrite(request: Request, id?: string) {
   } catch (error) {
     if (tx) await tx.query("ROLLBACK");
     const dbError = error as { code?: string; constraint?: string };
+    if (dbError.code === "P3003") return response({ code: "TIMING_REQUIRED_FOR_DATE_CHANGE", error: "Para cambiar la fecha, reenviá los horarios completos. Tu anotación se conserva." }, 409);
+    if (dbError.code === "P3004" || dbError.code === "23514" && dbError.constraint?.startsWith("training_activity")) return response({ code: "INVALID", error: "Revisá los horarios y la fecha de la actividad." }, 400);
     if (dbError.code === "P3002") return response({ code: "DAY_FULL", error: "Ese día ya tiene 100 anotaciones activas. Tu formulario se conserva." }, 409);
     if (dbError.code === "23505" && dbError.constraint === "training_entries_rest_unique") return response({ code: "REST_ALREADY_EXISTS", error: "Ya hay un descanso en esa fecha." }, 409);
     return errorResponse(error);
