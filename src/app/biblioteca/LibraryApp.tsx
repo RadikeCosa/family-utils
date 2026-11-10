@@ -20,6 +20,10 @@ import GenreFilter from "./GenreFilter";
 import styles from "./library.module.css";
 const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "Quiero ver" }, { value: "in_progress", label: "Viendo" }, { value: "finished", label: "Vistas" }, { value: "none", label: "Sin estado" }, { value: "common_pending", label: "Todos queremos ver" }];
 function readSearchFilters() { return readLibraryFilters(new URLSearchParams(window.location.search)); }
+function rememberFilters(key: string | null, filters: SearchFilters) {
+  if (!key) return;
+  try { localStorage.setItem(key, libraryFilterString(filters)); } catch { /* Filtering still works when browser storage is unavailable. */ }
+}
 export default function LibraryApp({ workId, initialFilters = { selection: "", q: "", view: "", status: "", archived: "", genre: "", withMember: "" } }: { workId?: string; initialFilters?: SearchFilters }) {
   const router = useRouter();
   const navigationSearch = useNavigationQuery().toString();
@@ -39,6 +43,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
   const composingRef = useRef(false);
   const lastAppliedSearch = useRef(initialFilters.q);
   const deferredPop = useRef<SearchFilters | null>(null);
+  const filterStorageKey = useRef<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const detailHeading = useRef<HTMLHeadingElement>(null);
@@ -55,6 +60,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
     // Next.js merges its router state for external History API updates and syncs useSearchParams without a server navigation.
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     setFilters(libraryFilterString(next));
+    rememberFilters(filterStorageKey.current, next);
   }, []);
   const recoverUnavailableMember = useCallback(() => {
     const next = readSearchFilters();
@@ -92,11 +98,33 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
       if (debounce.current) clearTimeout(debounce.current);
       setSearch(next.q); setView(next.view); setStatus(next.status); setArchived(next.archived); setGenre(next.genre); setSelection(next.selection ?? ""); setWithMember(next.withMember);
       setFilters(libraryFilterString(next));
+      if (!workId) rememberFilters(filterStorageKey.current, next);
     };
     onPopState();
     window.addEventListener("popstate", onPopState);
     return () => { window.removeEventListener("popstate", onPopState); if (debounce.current) clearTimeout(debounce.current); };
-  }, [navigationSearch]);
+  }, [navigationSearch, workId]);
+  useEffect(() => {
+    if (workId || !data) return;
+    const key = `cinemateca:filters:v1:${data.familyId}:${data.currentMemberId}`;
+    if (filterStorageKey.current === key) return;
+    const current = readSearchFilters();
+    // An explicit filtered link takes precedence over the remembered selection.
+    if (!libraryFilterString(current)) {
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const restore = setTimeout(() => {
+            filterStorageKey.current = key;
+            writeSearch(readLibraryFilters(new URLSearchParams(saved)));
+          }, 0);
+          return () => clearTimeout(restore);
+        }
+      } catch { /* Keep the current selection if browser storage is unavailable. */ }
+    }
+    filterStorageKey.current = key;
+    rememberFilters(key, current);
+  }, [data, workId, writeSearch]);
   const applyCurrent = (q: string, nextView = view, nextStatus = status, nextArchived = archived, nextGenre = genre, nextMember = withMember, nextSelection = selection) => { setFilterNotice(""); writeSearch({ selection: nextSelection, q: (composingRef.current ? lastAppliedSearch.current : q).trim(), view: nextView, status: nextStatus, archived: nextArchived, genre: nextGenre, withMember: nextMember }); };
   return <main data-app-frame className={styles.page}>
     <header data-legacy-chrome className={styles.header}><Link className={styles.brand} href="/">family utils</Link><nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/cinemateca" aria-current="page">Cinemateca</Link><Link href="/familia">Mi familia</Link></nav></header>
