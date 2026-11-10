@@ -1,3 +1,6 @@
+import { unifiedUIEnabled } from "@/lib/navigation/config";
+import AppIcon from "@/components/platform/AppIcon";
+import Experience from "@/components/platform/Experience";
 import { recipesEnabled } from "@/lib/recipes/config";
 import Link from "next/link";
 import { libraryEnabled } from "@/lib/library/config";
@@ -6,10 +9,11 @@ import { sportsEnabled } from "@/lib/sports/config";
 export const dynamic = "force-dynamic";
 import styles from "./platform.module.css";
 
-export default function Home() {
+function Home() {
+  const unified = unifiedUIEnabled();
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
+      <header data-legacy-chrome className={styles.header}>
         <Link className={styles.brand} href="/" aria-label="Family Utils, inicio"><span className={styles.mark}>f</span>family<span>utils</span></Link>
         <div className={styles.headerActions}><Link className={styles.installLink} href="/acceso#instalar">Instalar</Link><Link className={styles.signIn} href="/acceso">Entrar a mi familia</Link></div>
       </header>
@@ -22,13 +26,13 @@ export default function Home() {
         <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>TU ESPACIO</p><h2 id="apps-heading">Aplicaciones</h2></div></div>
         <div className={styles.cards}>
           <Link className={styles.appCard} href="/tareas" aria-label="Abrir Tareas y rutinas">
-            <span className={`${styles.appIcon} ${styles.lavender}`}>✳</span>
+            <span className={`${styles.appIcon} ${styles.lavender}`} aria-hidden="true">{unified ? <AppIcon id="tasks" /> : "✳"}</span>
             <span className={styles.cardTitle}>Tareas y rutinas</span>
             <span className={styles.cardCopy}>Organicen las cosas de casa entre todos.</span>
             <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
           </Link>
           <Link className={styles.appCard} href="/menus" aria-label="Abrir Planificador de menús">
-            <span className={`${styles.appIcon} ${styles.peach}`}>◒</span>
+            <span className={`${styles.appIcon} ${styles.peach}`} aria-hidden="true">{unified ? <AppIcon id="menus" /> : "◒"}</span>
             <span className={styles.cardTitle}>Planificador de menús</span>
             <span className={styles.cardCopy}>Propongan comidas y organicen la semana entre todos.</span>
             <span className={styles.cardArrow}>Planificar <span aria-hidden="true">→</span></span>
@@ -37,7 +41,7 @@ export default function Home() {
             <span className={`${styles.appIcon} ${styles.peach}`} aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4zM7 4v16M10 8h6m-6 4h6" /></svg></span><span className={styles.cardTitle}>Recetas</span><span className={styles.cardCopy}>Los platos de la familia, sus ingredientes y cómo prepararlos.</span><span className={styles.cardArrow}>Cocinar <span aria-hidden="true">→</span></span>
           </Link>}
           <Link className={styles.appCard} href="/compras" aria-label="Abrir Listas de compras">
-            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">☷</span>
+            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">{unified ? <AppIcon id="shopping" /> : "☷"}</span>
             <span className={styles.cardTitle}>Listas de compras</span>
             <span className={styles.cardCopy}>Anoten lo que hace falta y compartan las compras.</span>
             <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
@@ -49,7 +53,7 @@ export default function Home() {
             <span className={styles.cardArrow}>Explorar <span aria-hidden="true">→</span></span>
           </Link>}
           {sportsEnabled() && <Link className={styles.appCard} href="/deportes" aria-label="Abrir Deportes">
-            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">⚽</span>
+            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">{unified ? <AppIcon id="sports" /> : "⚽"}</span>
             <span className={styles.cardTitle}>Deportes</span>
             <span className={styles.cardCopy}>Agenda y conversaciones para compartir en familia.</span>
             <span className={styles.cardArrow}>Abrir <span aria-hidden="true">→</span></span>
@@ -67,7 +71,7 @@ export default function Home() {
             <span className={styles.cardArrow}>Convertir <span aria-hidden="true">→</span></span>
           </Link>
           <Link className={`${styles.appCard} ${styles.familyCard}`} href="/familia">
-            <span className={`${styles.appIcon} ${styles.mint}`}>⌂</span>
+            <span className={`${styles.appIcon} ${styles.mint}`} aria-hidden="true">{unified ? <AppIcon id="family" /> : "⌂"}</span>
             <span className={styles.cardTitle}>Mi familia</span>
             <span className={styles.cardCopy}>Integrantes y formas de acceso.</span>
             <span className={styles.cardArrow}>Administrar <span aria-hidden="true">→</span></span>
@@ -78,3 +82,5 @@ export default function Home() {
     </main>
   );
 }
+
+export default function Page() { return <Experience home><Home /></Experience>; }

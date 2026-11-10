@@ -13,7 +13,7 @@ export default function UfcInsights({ reference }: { reference: string | null })
   }).format(new Date(data.checkedAt));
 
   return (
-    <section className={styles.panel} aria-label="Datos y bonos de la velada">
+    <section data-ui-surface className={styles.panel} aria-label="Datos y bonos de la velada">
       <h3>Datos y bonos de la velada</h3>
       <h4>Bonos oficiales</h4>
       <ul>

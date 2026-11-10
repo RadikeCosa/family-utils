@@ -1,3 +1,4 @@
+import Experience from "@/components/platform/Experience";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getMemberContext } from "@/lib/auth/context";
@@ -13,7 +14,7 @@ import { createAuth } from "@/lib/auth/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function SportsPage({ searchParams }: { searchParams: Promise<{ event?: string; sport?: string; round?: string }> }) {
+async function SportsPage({ searchParams }: { searchParams: Promise<{ event?: string; sport?: string; round?: string }> }) {
   if (!sportsEnabled()) notFound();
   const actor = await getMemberContext(await headers());
   if (!actor) redirect("/acceso");
@@ -25,4 +26,8 @@ export default async function SportsPage({ searchParams }: { searchParams: Promi
   const loadedChampions = session ? await loadChampionsData(actor,session.session.token,params.round??null) : undefined;
   const champions = loadedChampions ?? undefined;
   return sportsFeatures().agenda ? <AgendaApp key={`${initial.familyId}:${initial.currentMemberId}`} initial={{...initial,championsEnabled:championsEnabled(),champions}} /> : <SportsApp initial={initial} />;
+}
+
+export default async function Page(props: Parameters<typeof SportsPage>[0]) {
+  return <Experience>{await SportsPage(props)}</Experience>;
 }

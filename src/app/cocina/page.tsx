@@ -1,3 +1,4 @@
+import Experience from "@/components/platform/Experience";
 import type { Metadata } from "next";
 import Link from "next/link";
 import KitchenConverter from "./KitchenConverter";
@@ -9,9 +10,9 @@ export const metadata: Metadata = {
   description: "Convertí medidas, ingredientes y temperaturas de cocina, sin iniciar sesión.",
 };
 
-export default function KitchenPage() {
-  return <main className={`${platform.page} ${styles.page}`}>
-    <header className={platform.header}>
+function KitchenPage() {
+  return <main data-app-frame className={`${platform.page} ${styles.page}`}>
+    <header data-legacy-chrome className={platform.header}>
       <Link className={platform.brand} href="/" aria-label="Family Utils, inicio"><span className={platform.mark}>f</span>family<span>utils</span></Link>
       <Link className={styles.back} href="/">← Aplicaciones</Link>
     </header>
@@ -25,4 +26,8 @@ export default function KitchenPage() {
       <p className={styles.footer}>Sin cuenta ni consultas guardadas. Los cálculos funcionan en tu dispositivo con esta página abierta.</p>
     </div>
   </main>;
+}
+
+export default async function Page() {
+  return <Experience>{await KitchenPage()}</Experience>;
 }

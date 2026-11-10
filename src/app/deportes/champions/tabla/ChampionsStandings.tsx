@@ -16,13 +16,13 @@ export default function ChampionsStandings({ data }: { data: ChampionsStandingsD
   }, [router]);
 
   return <>
-    <section className={styles.panel} aria-label="Estado de la clasificación">
+    <section data-ui-surface className={styles.panel} aria-label="Estado de la clasificación">
       <div className={styles.agendaHeading}><h2>Fase liga</h2><button type="button" disabled={pending} onClick={() => startTransition(() => router.refresh())}>{pending ? "Actualizando…" : "Actualizar tabla"}</button></div>
       <p>Consultada el <time dateTime={data.checkedAt}>{new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "short" }).format(new Date(data.checkedAt))}</time> · hora argentina. <a href={data.sourceUrl} target="_blank" rel="noreferrer">Ver en UEFA ↗</a></p>
       {data.fallback ? <p role="status" className={styles.notice}>No pudimos consultar UEFA. Mostramos la última copia verificada de la fecha indicada; puede haber cambios posteriores.</p> : <p>Se consulta UEFA cada minuto mientras esta pantalla está abierta. Las filas con “En juego” incluyen marcadores en vivo.</p>}
       <div className={styles.standingsLegend} aria-label="Referencias de clasificación"><span className={styles.standingsDirect}>1–8 · Pase directo a octavos</span><span className={styles.standingsPlayoff}>9–24 · Play-offs (16 equipos)</span><span className={styles.standingsOutside}>25–36 · Fuera de clasificación</span></div>
     </section>
-    <section className={styles.panel} aria-label="Clasificación de equipos de Champions" aria-busy={pending}>
+    <section data-ui-surface className={styles.panel} aria-label="Clasificación de equipos de Champions" aria-busy={pending}>
       <div className={styles.standingsScroll} role="region" aria-label="Tabla de posiciones, desplazable horizontalmente" tabIndex={0}>
         <table className={`${styles.ranking} ${styles.teamStandings}`}>
           <caption>Champions {data.season} · clasificación provisional de UEFA</caption>

@@ -18,3 +18,5 @@ test-results/
 
 /test-results-a11y/
 /.release-private/
+
+/test-results-unified/

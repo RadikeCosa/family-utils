@@ -45,9 +45,24 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:navigation
       - run: npm run build
       - run: npm run test:routes
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Use the Ubuntu archive for browser dependencies
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          for path in Path("/etc/apt").rglob("*"):
+              if path.is_file() and path.suffix in {".list", ".sources", ".txt"}:
+                  current = path.read_text()
+                  updated = current.replace("http://azure.archive.ubuntu.com", "https://archive.ubuntu.com").replace("https://azure.archive.ubuntu.com", "https://archive.ubuntu.com")
+                  if updated != current:
+                      path.write_text(updated)
+                      print(f"Ubuntu archive configured in {path}")
+          PYTHON
+      - name: Install browser dependencies
+        timeout-minutes: 10
+        run: npx playwright install --with-deps chromium webkit
       - run: npm run test:recipes:e2e
       - run: npm run test:e2e
       - run: npm run test:sports-next
@@ -67,3 +82,21 @@ jobs:
           path: test-results/*.png
           if-no-files-found: warn
       - run: npm run test:a11y
+      - name: Prepare isolated unified UI database
+        run: psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE family_unified_test'
+      - name: Migrate isolated unified UI database
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
+          DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/family_unified_test
+      - name: Verify unified UI, accessibility and performance
+        run: npm run test:unified
+        env:
+          FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
+      - name: Upload unified UI screenshots and performance samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-ui-acceptance
+          path: test-results-unified/
+          if-no-files-found: warn

@@ -38,8 +38,8 @@
 .noteSummary { margin: 4px 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tags { display: flex; flex-wrap: wrap; gap: 8px; }
 .tags a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; }
-.page .tags button { padding: 8px 12px; border-radius: 20px; background: var(--paper); }
-.page button[aria-pressed=true], .page [role=option][aria-selected=true] { background: var(--green-dark); color: white; }
+.tags button { padding: 8px 12px; border-radius: 20px; background: var(--paper); }
+.page button[aria-pressed=true], .tags button[aria-pressed=true], .tagOptions [role=option][aria-selected=true] { background: var(--green-dark); color: white; }
 .tagSelector { display: grid; gap: 8px; min-width: 0; margin-bottom: 16px; }
 .tagSelector p { margin: 0; }
 .tagOptions { list-style: none; padding: 4px; margin: 0; max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }

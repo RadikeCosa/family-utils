@@ -117,8 +117,8 @@ export default function FamilyManager({ currentMemberId, currentRole, googleAuto
   }
 
   return (
-    <main className={styles.page}>
-      <header className={styles.header}><Link className={styles.brand} href="/"><span className={styles.mark}>f</span>family<span>utils</span></Link><div className={styles.headerActions}><Link className={styles.signIn} href="/">Inicio</Link><button className={styles.plainButton} onClick={() => void authClient.signOut().then(() => router.push("/acceso"))}>Salir</button></div></header>
+    <main data-app-frame className={styles.page}>
+      <header data-legacy-chrome className={styles.header}><Link className={styles.brand} href="/"><span className={styles.mark}>f</span>family<span>utils</span></Link><div className={styles.headerActions}><Link className={styles.signIn} href="/">Inicio</Link><button className={styles.plainButton} onClick={() => void authClient.signOut().then(() => router.push("/acceso"))}>Salir</button></div></header>
       <section className={styles.familyWrap}>
         <p className={styles.eyebrow}>ADMINISTRACIÓN FAMILIAR</p>
         <h1 className={styles.accessTitle}>{familyName}</h1>

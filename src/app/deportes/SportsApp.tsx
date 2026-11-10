@@ -1,4 +1,5 @@
 "use client";
+import { useURLState } from "@/components/platform/navigation";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -14,7 +15,9 @@ const countLabel = (count: number, singular: string, plural: string) => `${count
 
 export default function SportsApp({ initial }: { initial: SportsPageData }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"football" | "ufc">("football");
+  const [sport, setSport] = useURLState("sport", "river", "push", ["river", "ufc"]);
+  const tab = sport === "ufc" ? "ufc" : "football";
+  const setTab = (next: "football" | "ufc") => setSport(next === "ufc" ? "ufc" : "river");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [bundleText, setBundleText] = useState("");
@@ -56,11 +59,11 @@ export default function SportsApp({ initial }: { initial: SportsPageData }) {
     } finally { setImportBusy(false); }
   }
 
-  return <main className={styles.page}>
-    <header className={styles.header}><Link href="/" className={styles.back}>‹ Inicio</Link><span className={styles.brand}>Deportes</span><span className={styles.role}>{admin ? "Administración" : "Familia"}</span></header>
+  return <main data-app-frame className={styles.page}>
+    <header data-legacy-chrome className={styles.header}><Link href="/" className={styles.back}>‹ Inicio</Link><span className={styles.brand}>Deportes</span><span className={styles.role}>{admin ? "Administración" : "Familia"}</span></header>
     <section className={styles.intro}><p className={styles.eyebrow}>EN EQUIPO</p><h1>Deportes</h1><p>River, UFC y las conversaciones de casa.</p></section>
     {admin && <details className={styles.importPanel}><summary>Importar datos curados desde el chat</summary><p>Pegá el JSON revisado que te entregue el chat. Primero se valida sin escribir datos; la importación conserva comentarios, formaciones y eventos ocultos.</p><label>Archivo JSON<input type="file" accept="application/json,.json" onChange={async event => { const file = event.currentTarget.files?.[0]; if (file) { setBundleText(await file.text()); setImportPreview(null); setImportError(""); } }} /></label><label>Contenido JSON<textarea rows={8} value={bundleText} onChange={event => { setBundleText(event.target.value); setImportPreview(null); setImportError(""); }} placeholder="Pegá acá el JSON curado" /></label><div className={styles.actions}><button type="button" className={styles.secondary} disabled={importBusy || !bundleText.trim()} onClick={() => void importBundle("preview")}>{importBusy ? "Validando…" : "Validar JSON"}</button>{importPreview && <button type="button" className={styles.primary} disabled={importBusy} onClick={() => void importBundle("import")}>{importBusy ? "Importando…" : "Confirmar importación"}</button>}</div>{importPreview && <div className={styles.importPreview} role="status"><strong>{countLabel(importPreview.summary.riverMatches, "partido", "partidos")} · {countLabel(importPreview.summary.ufcCards, "cartelera", "carteleras")} · {countLabel(importPreview.summary.ufcFights, "pelea", "peleas")}</strong><span>Horizonte: River hasta {formatSportsDate(importPreview.summary.through.river)}; UFC hasta {formatSportsDate(importPreview.summary.through.ufc)}.</span>{importPreview.warnings.map(warning => <small key={warning}>{warning}</small>)}</div>}{importMessage && <p role="status">{importMessage}</p>}{importError && <p role="alert" className={styles.error}>{importError}</p>}</details>}
-    <nav className={styles.tabs} aria-label="Deportes">
+    <nav data-legacy-sections className={styles.tabs} aria-label="Deportes">
       <button type="button" aria-pressed={tab === "football"} className={tab === "football" ? styles.activeTab : ""} onClick={() => setTab("football")}>River</button>
       <button type="button" aria-pressed={tab === "ufc"} className={tab === "ufc" ? styles.activeTab : ""} onClick={() => setTab("ufc")}>UFC</button>
     </nav>
@@ -75,7 +78,7 @@ export default function SportsApp({ initial }: { initial: SportsPageData }) {
         </article>
         <Formations key={match.id} initial={initial} eventId={match.id} />
         <Comments key={match.id} contextKind="river_match" eventId={match.id} members={initial.members} currentMemberId={initial.currentMemberId} isAdmin={admin} />
-      </> : <div className={styles.empty}><strong>No hay un próximo partido de River importado.</strong><span>{admin ? "Pegá el JSON curado en el importador para incorporarlo." : "Todavía no hay un próximo encuentro cargado."}</span></div>}
+      </> : <div data-ui-surface className={styles.empty}><strong>No hay un próximo partido de River importado.</strong><span>{admin ? "Pegá el JSON curado en el importador para incorporarlo." : "Todavía no hay un próximo encuentro cargado."}</span></div>}
     </> : <>
       <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>SEMANA DEL {formatSportsDate(initial.week.start)}</p><h2>UFC de esta semana</h2></div></div>
       {admin && <div className={styles.actions}><button type="button" disabled={busy} className={styles.secondary} onClick={() => void save("/api/sports/week", "PUT", { noUfcEvent: !initial.noUfcEvent })}>{initial.noUfcEvent ? "Quitar marca de semana sin evento" : "Sin evento esta semana"}</button></div>}
@@ -84,7 +87,7 @@ export default function SportsApp({ initial }: { initial: SportsPageData }) {
           <h4>Peleas</h4><ol className={styles.fights}>{initial.fights.map((fight) => <li key={fight.id} className={fight.isMainEvent ? styles.mainFight : ""}><span>{fight.firstFighter} <small>vs</small> {fight.secondFighter}</span><b>{fight.isMainEvent ? "Estelar · " : ""}{fight.boutBlock === "main" ? "Principal" : fight.boutBlock === "early_preliminaries" ? "Preliminares tempranas" : "Preliminares"}</b></li>)}</ol>
           {admin && <div className={styles.actions}><button disabled={busy} className={styles.dangerText} onClick={() => hide(initial.card!)}>Ocultar cartelera</button></div>}
         </article><Comments key={initial.card.id} contextKind="ufc_card" eventId={initial.card.id} members={initial.members} currentMemberId={initial.currentMemberId} isAdmin={admin} />
-      </> : <div className={styles.empty}><strong>{initial.noUfcEvent ? "No hay evento esta semana" : "No hay una cartelera importada para esta semana"}</strong><span>{admin ? "Pegá el JSON curado en el importador para incorporarla." : "Los datos se actualizan desde un archivo curado."}</span></div>}
+      </> : <div data-ui-surface className={styles.empty}><strong>{initial.noUfcEvent ? "No hay evento esta semana" : "No hay una cartelera importada para esta semana"}</strong><span>{admin ? "Pegá el JSON curado en el importador para incorporarla." : "Los datos se actualizan desde un archivo curado."}</span></div>}
     </>}
     <p className={styles.timeNote}>Horarios en Argentina (UTC−3). Los datos se renuevan mediante archivos JSON curados.</p>
   </main>;

@@ -17,7 +17,7 @@ function InsightsContent({content,homeTeam="Local",awayTeam="Visitante"}:{conten
   </>;
 }
 export function RiverInsights({insights,homeTeam,awayTeam}:{insights:RiverMatchInsights|null;homeTeam:string;awayTeam:string}) {
-  return <section className={styles.panel} aria-label="Datos del partido"><h3>Datos del partido</h3><InsightsContent content={insights??{statistics:null,curiosities:null}} homeTeam={homeTeam} awayTeam={awayTeam}/></section>;
+  return <section data-ui-surface className={styles.panel} aria-label="Datos del partido"><h3>Datos del partido</h3><InsightsContent content={insights??{statistics:null,curiosities:null}} homeTeam={homeTeam} awayTeam={awayTeam}/></section>;
 }
 type Preview = { title:string; before:Content; after:Content; changed:boolean;token:string };
 export function RiverInsightsImporter({ eventId }: { eventId: string }) {

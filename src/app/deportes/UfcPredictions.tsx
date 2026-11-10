@@ -123,7 +123,7 @@ export default function UfcPredictions({ eventId }: { eventId: string }) {
     );
   return (
     <section id="predictions" aria-label="Pronósticos UFC">
-      <div className={styles.panel}>
+      <div data-ui-surface className={styles.panel}>
         <p className={styles.eyebrow}>UFC · PRONÓSTICOS</p>
         <h3>Tus pronósticos</h3>
         <div className={styles.predictionProgress}>

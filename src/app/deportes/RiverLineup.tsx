@@ -5,7 +5,7 @@ import type { RiverOfficialLineup } from "@/lib/sports/types";
 import styles from "./agenda.module.css";
 const date = (v: string | Date) => new Intl.DateTimeFormat("es-AR", {dateStyle:"medium",timeStyle:"short",timeZone:"America/Argentina/Buenos_Aires"}).format(new Date(v));
 export function RiverLineup({ lineup }: { lineup: RiverOfficialLineup | null }) {
-  return <section className={styles.panel} aria-label="Formación oficial"><h3>Formación oficial</h3>{lineup ? <><p className={styles.body}>{lineup.body}</p><p><a href={lineup.source} target="_blank" rel="noopener noreferrer">Ver fuente de la formación</a></p><small>Revisada el {date(lineup.checkedAt)} · Publicada por {lineup.authorName} · {date(lineup.updatedAt)}</small></> : <p>Todavía no se publicó.</p>}</section>;
+  return <section data-ui-surface className={styles.panel} aria-label="Formación oficial"><h3>Formación oficial</h3>{lineup ? <><p className={styles.body}>{lineup.body}</p><p><a href={lineup.source} target="_blank" rel="noopener noreferrer">Ver fuente de la formación</a></p><small>Revisada el {date(lineup.checkedAt)} · Publicada por {lineup.authorName} · {date(lineup.updatedAt)}</small></> : <p>Todavía no se publicó.</p>}</section>;
 }
 type Preview = { title: string; before: {body:string;source:string;checkedAt:string} | null; after: {body:string;source:string;checkedAt:string}; changed: boolean; token: string };
 export function RiverLineupImporter({ eventId }: { eventId: string }) {

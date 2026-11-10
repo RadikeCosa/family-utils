@@ -1,4 +1,5 @@
 "use client";
+import { useUnifiedUI, useURLState, useNavigationQuery } from "@/components/platform/navigation";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -68,6 +69,8 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export default function Home() {
   const router = useRouter();
+  const unified = useUnifiedUI();
+  const navigationQuery = useNavigationQuery().toString();
   const { data: session } = authClient.useSession();
   const [family, setFamily] = useState<{ id: string; name: string; timeZone: string; revision: number } | null>(null);
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(null);
@@ -115,12 +118,17 @@ export default function Home() {
   const [editWeekdays, setEditWeekdays] = useState<number[]>([]);
   const [editCarryPolicy, setEditCarryPolicy] = useState<"expires_daily" | "carry_forward">("expires_daily");
   const [taskOptions, setTaskOptions] = useState<Task | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [historySection, setHistorySection] = useURLState("seccion", "", "push", ["", "historial"]);
+  const [legacyHistory, setLegacyHistory] = useState(false);
+  const showHistory = unified ? historySection === "historial" : legacyHistory;
+  const setShowHistory = (next: boolean) => unified ? setHistorySection(next ? "historial" : "") : setLegacyHistory(next);
+  const historySequence = useRef(0);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyFilter, setHistoryFilter] = useState<"all" | "completed" | "archived">("all");
+  const [historyFilterValue, setHistoryFilter] = useURLState("estado", "all", "replace", ["all", "completed", "archived"]);
+  const historyFilter = historyFilterValue as "all" | "completed" | "archived";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const etagRef = useRef<string | null>(null);
@@ -284,7 +292,7 @@ export default function Home() {
     queueMicrotask(() => { setEditingTask(null); setNotice("La programación cambió y esta ocasión ya no está disponible."); });
   }, [tasks, editingTask, busy, syncState]);
 
-  function navigateDate(day: string, follow = false) {
+  function navigateDate(day: string, follow = false, write = true) {
     if (!isTaskDateInRange(day, familyDay)) return;
     followsToday.current = follow;
     requestSequence.current += 1;
@@ -297,7 +305,7 @@ export default function Home() {
     setSelectedDate(day); setError("");
     const url = new URL(window.location.href);
     if (follow) url.searchParams.delete("fecha"); else url.searchParams.set("fecha", day);
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    if (write) window.history[unified ? "pushState" : "replaceState"](window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     if (day === selectedDate) void refresh(true);
   }
 
@@ -437,18 +445,20 @@ export default function Home() {
   }
 
   async function loadHistory(reset = false, filter = historyFilter) {
+    const sequence = ++historySequence.current;
     setHistoryLoading(true);
     try {
       const query = new URLSearchParams({ limit: "30" });
       if (filter !== "all") query.set("status", filter);
       if (!reset && historyCursor) query.set("cursor", historyCursor);
       const page = await requestJson<{ items: HistoryItem[]; nextCursor: string | null }>(`/api/tasks/history?${query}`);
+      if (sequence !== historySequence.current || unified && new URLSearchParams(location.search).get("seccion") !== "historial") return;
       setHistoryItems((current) => reset ? page.items : [...current, ...page.items]);
       setHistoryCursor(page.nextCursor);
       setHistoryHasMore(!!page.nextCursor);
-      setShowHistory(true);
+      if (!unified) setShowHistory(true);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo cargar el historial."); }
-    finally { setHistoryLoading(false); }
+    finally { if (sequence === historySequence.current) setHistoryLoading(false); }
   }
 
   function openTaskEditor(task: Task) {
@@ -490,14 +500,32 @@ export default function Home() {
     });
   }
 
+  const dateNavigator = useRef(navigateDate);
+  const historyLoader = useRef(loadHistory);
+  useEffect(() => { dateNavigator.current = navigateDate; historyLoader.current = loadHistory; });
+  useEffect(() => {
+    if (!unified) return;
+    const read = () => {
+      const value = new URLSearchParams(location.search).get("fecha");
+      const valid = value && isTaskDateInRange(value, getFamilyDay());
+      dateNavigator.current(valid ? value : getFamilyDay(), !valid, false);
+    };
+    queueMicrotask(read);
+    window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, [unified, navigationQuery]);
+  useEffect(() => {
+    if (unified && showHistory && session?.user?.id) void historyLoader.current(true, historyFilter);
+  }, [unified, showHistory, session?.user?.id, historyFilter]);
+
   const dateLabel = labelTaskDay(selectedDate).toLocaleUpperCase("es-AR");
   const currentMemberName = members.find((person) => person.id === currentMemberId)?.name ?? "Integrante";
   const currentRole = members.find((person) => person.id === currentMemberId)?.role ?? "member";
   const weekdayOptions = [[0, "Do"], [1, "Lu"], [2, "Ma"], [3, "Mi"], [4, "Ju"], [5, "Vi"], [6, "Sá"]] as const;
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar} aria-label="Navegación principal">
+    <main data-app-frame className={styles.shell}>
+      <aside data-legacy-chrome className={styles.sidebar} aria-label="Navegación principal">
         <Link className={styles.brand} href="/" aria-label="Family Utils, inicio"><span className={styles.brandMark}>f</span><span>family<span className={styles.brandLight}>utils</span></span></Link>
         <div className={styles.sidebarLabel}>TU ESPACIO</div>
         <nav className={styles.nav}>
@@ -512,8 +540,8 @@ export default function Home() {
         <div className={styles.sidebarFooter}><div className={styles.familyAvatar}>⌂</div><div><strong>{family?.name ?? "Mi familia"}</strong><small>{members.length} integrantes</small></div><Link className={styles.moreButton} href="/familia" aria-label="Administrar familia">···</Link></div>
       </aside>
 
-      <section className={styles.content} id="inicio">
-        <header className={styles.topbar}>
+      <section data-task-content className={styles.content} id="inicio">
+        <header data-legacy-chrome className={styles.topbar}>
           <span className={styles.breadcrumb}><Link href="/">Family Utils</Link> <span>/</span> Tareas y rutinas</span>
           <div className={styles.topActions}>
             {session?.user && <span className={styles.signedInName}>{currentMemberName}</span>}
@@ -522,12 +550,12 @@ export default function Home() {
           </div>
         </header>
 
-        <div className={styles.pageBody}>
+        <div data-task-body className={styles.pageBody}>
           {error && <p className={styles.errorMessage} role="alert">{error}</p>}
 
-          <div className={styles.greetingRow}>
+          <div data-page-heading className={styles.greetingRow}>
             <div><p className={styles.dateLabel}>{dateLabel}</p><h1>Un día a la vez<span>.</span></h1><p className={styles.subtitle}>{isToday ? "Esto es lo que tenemos para hoy." : past ? "Consultá las tareas y la actividad de esta fecha." : "Un vistazo a lo que viene."}</p></div>
-            <div className={styles.createActions}>{!past && <button className={styles.addButton} onClick={() => setShowCreate(true)}><span>＋</span> Nueva tarea</button>}</div>
+            <div className={styles.createActions}>{!past && <button className={styles.addButton} onClick={() => setShowCreate(true)}><span aria-hidden="true">＋</span> Nueva tarea</button>}</div>
           </div>
 
           <div className={styles.dateNav} aria-label="Navegar por fecha">
@@ -545,7 +573,7 @@ export default function Home() {
             <div className={`${styles.summaryCard} ${styles.summaryQuote}`}><span className={styles.quoteMark}>“</span><p>Las pequeñas cosas<br />también cuentan.</p><span className={styles.quoteBy}>— para hoy</span></div>
           </div>
 
-          <div className={styles.tasksHeader}><div><h2>{showHistory ? "Historial" : isToday ? "Hoy en casa" : "Tareas de la fecha"}</h2><span>{showHistory ? "Completadas y ocasiones omitidas" : labelTaskDay(selectedDate)}</span></div><div className={styles.topActions}><button className={styles.filterButton} onClick={() => showHistory ? void loadHistory(true) : void refresh(true)}>{showHistory ? historyLoading ? "Cargando…" : "Actualizar historial" : syncState === "loading" ? "Actualizando…" : "Actualizar"} <span>↻</span></button><button className={styles.filterButton} onClick={() => showHistory ? (setShowHistory(false), void refresh(true)) : void loadHistory(true)}>{showHistory ? "Volver a tareas" : "Historial"}</button></div></div>
+          <div className={styles.tasksHeader}><div><h2>{showHistory ? "Historial" : isToday ? "Hoy en casa" : "Tareas de la fecha"}</h2><span>{showHistory ? "Completadas y ocasiones omitidas" : labelTaskDay(selectedDate)}</span></div><div className={styles.topActions}><button className={styles.filterButton} onClick={() => showHistory ? void loadHistory(true) : void refresh(true)}>{showHistory ? historyLoading ? "Cargando…" : "Actualizar historial" : syncState === "loading" ? "Actualizando…" : "Actualizar"} <span>↻</span></button><button data-legacy-sections className={styles.filterButton} onClick={() => showHistory ? (setShowHistory(false), void refresh(true)) : void loadHistory(true)}>{showHistory ? "Volver a tareas" : "Historial"}</button></div></div>
 
           {showHistory ? <><div className={styles.topActions} aria-label="Filtrar historial"><button className={styles.filterButton} aria-pressed={historyFilter === "all"} onClick={() => { setHistoryFilter("all"); void loadHistory(true, "all"); }}>Todo</button><button className={styles.filterButton} aria-pressed={historyFilter === "completed"} onClick={() => { setHistoryFilter("completed"); void loadHistory(true, "completed"); }}>Completadas</button><button className={styles.filterButton} aria-pressed={historyFilter === "archived"} onClick={() => { setHistoryFilter("archived"); void loadHistory(true, "archived"); }}>Omitidas y archivadas</button></div><div className={styles.taskList}>
             {historyItems.length === 0 && !historyLoading && <div className={styles.emptyState}>Todavía no hay actividad en el historial.</div>}

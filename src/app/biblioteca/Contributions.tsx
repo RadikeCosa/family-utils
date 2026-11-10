@@ -60,5 +60,5 @@ export default function Contributions({ data, busy, loading, save, more, issue }
 export function NewContribution({ data, busy, save, issue }: { data: LibraryDetail; busy: boolean; save: Save; issue: OperationIssue | null }) {
   const [generation, setGeneration] = useState(0);
   if (data.work.archivedAt) return null;
-  return <section className={styles.card}><ContributionForm issue={issue} key={`${data.familyId}:${data.currentMemberId}:${data.work.id}:new:${generation}`} data={data} busy={busy} save={save} close={() => setGeneration((current) => current + 1)} /></section>;
+  return <section data-ui-surface className={styles.card}><ContributionForm issue={issue} key={`${data.familyId}:${data.currentMemberId}:${data.work.id}:new:${generation}`} data={data} busy={busy} save={save} close={() => setGeneration((current) => current + 1)} /></section>;
 }
