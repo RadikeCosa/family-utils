@@ -27,7 +27,9 @@
     "test:ufc-dashboard": "node --experimental-strip-types --test src/lib/sports/ufc-dashboard-rules.test.ts",
     "test:champions": "playwright test --config playwright.champions.config.ts",
     "test:river-championship": "node --experimental-strip-types --test src/lib/sports/river-championship-rules.test.ts",
-    "test:recipes:e2e": "playwright test --config playwright.recipes.config.ts"
+    "test:recipes:e2e": "playwright test --config playwright.recipes.config.ts",
+    "test:navigation": "node --experimental-strip-types --test src/lib/navigation/navigation.test.ts",
+    "test:unified": "playwright test --config playwright.unified.config.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.6",

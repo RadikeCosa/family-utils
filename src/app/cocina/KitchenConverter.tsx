@@ -1,4 +1,5 @@
 "use client";
+import { useURLState, useUnifiedUI } from "@/components/platform/navigation";
 
 import { useEffect, useRef, useState } from "react";
 import { ingredients, US_CUP_ML } from "@/lib/kitchen/ingredients";
@@ -21,7 +22,8 @@ function Announcement({ sentence }: { sentence: string }) {
 }
 
 export default function KitchenConverter() {
-  const [temperature, setTemperature] = useState(false);
+  const unified = useUnifiedUI();
+  const [temperature, setTemperature] = useURLState("temperatura", false, "push");
   const [quantity, setQuantity] = useState("1");
   const [from, setFrom] = useState<Unit>("cup");
   const [to, setTo] = useState<Unit>("g");
@@ -45,6 +47,10 @@ export default function KitchenConverter() {
   }
   const sentence = result ? `${input}, ${cross ? "aproximadamente " : "equivale a "}${result.replace("<", "menos de").replace(">", "más de")}.` : "";
 
+  useEffect(() => {
+    if (!unified) return;
+    queueMicrotask(() => { setFrom(temperature ? "C" : "cup"); setTo(temperature ? "F" : "g"); setQuantity(temperature ? "180" : "1"); });
+  }, [temperature, unified]);
   function changeMode(next: boolean) {
     if (next === temperature) return;
     setTemperature(next);

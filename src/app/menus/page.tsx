@@ -1,3 +1,4 @@
+import Experience from "@/components/platform/Experience";
 import { recipesEnabled } from "@/lib/recipes/config";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -6,8 +7,12 @@ import MenuApp from "./MenuApp";
 
 export const runtime = "nodejs";
 
-export default async function MenusPage() {
+async function MenusPage() {
   const member = await getMemberContext(await headers());
   if (!member) redirect("/acceso");
   return <MenuApp recipes={recipesEnabled()} />;
+}
+
+export default async function Page() {
+  return <Experience>{await MenusPage()}</Experience>;
 }

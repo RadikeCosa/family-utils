@@ -1,5 +1,6 @@
 "use client";
 import { useRecipeQuery } from "./useRecipeQuery";
+import { useUnifiedUI } from "@/components/platform/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,6 +14,7 @@ function entryId() {
   return window.history.state.recipeEntry as string;
 }
 export default function RecipeList() {
+  const unified = useUnifiedUI();
   const router = useRouter(), sequence = useRef(0), params = useRecipeQuery();
   const { query, archived, slugs, queryKey } = readRecipeFilters(params);
   const [typing, setTyping] = useState({ source: query, value: query }), [data, setData] = useState<CatalogPage | null>(null);
@@ -28,10 +30,10 @@ export default function RecipeList() {
     if (mode === "push") setWarning("");
     const href = `/recetas${search.size ? `?${search}` : ""}`;
     if (`${window.location.pathname}${window.location.search}` === href) return;
-    window.history[mode === "push" ? "pushState" : "replaceState"]({ ...window.history.state,
+    window.history[mode === "push" ? "pushState" : "replaceState"](unified ? window.history.state : { ...window.history.state,
       recipeEntry: mode === "push" ? crypto.randomUUID() : entryId() }, "", href);
     window.dispatchEvent(new Event("family-navigation"));
-  }, []);
+  }, [unified]);
   useEffect(() => {
     if (typed === query) return;
     const timer = setTimeout(() => { const search = new URLSearchParams(window.location.search); if (typed.trim()) search.set("q", typed.trim()); else search.delete("q"); setSearch(search, "replace"); }, 220);
@@ -40,7 +42,7 @@ export default function RecipeList() {
   async function load(cursor?: string, restore = false) {
     const seq = ++sequence.current;
     setBusy(true); setError("");
-    const key = `${entryId()}|${queryKey}`, cached = restore ? catalogMemory.get(key) : undefined;
+    const key = `${unified ? "unified" : entryId()}|${queryKey}`, cached = restore && !unified ? catalogMemory.get(key) : undefined;
     try {
       if (cached) {
         const response = await fetch("/api/recipes?revisionOnly=1", { cache: "no-store" }), body = await response.json();
@@ -85,15 +87,17 @@ export default function RecipeList() {
     return () => { clearTimeout(timer); requests.current++; };
   }, [queryKey]);
   useEffect(() => {
+    if (unified) return;
     const scroll = () => { if (leaving.current) return; const cached = catalogMemory.get(currentKey.current); if (cached) cached.scroll = window.scrollY; };
     // Keep already loaded pages on focus; only validate their revision.
     const focus = () => { if (catalogMemory.has(currentKey.current)) void loadFromEffect(undefined, true); else void loadFromEffect(); };
     window.addEventListener("scroll", scroll, { passive: true }); window.addEventListener("focus", focus);
     return () => { window.removeEventListener("scroll", scroll); window.removeEventListener("focus", focus); };
-  }, []);
-  function changeTags(tags: { slug: string }[]) { const search = new URLSearchParams(queryKey); search.delete("tag"); tags.forEach(t => search.append("tag", t.slug)); setSearch(search, "push"); }
+  }, [unified]);
+  function changeTags(tags: { slug: string }[]) { const search = new URLSearchParams(queryKey); search.delete("tag"); tags.forEach(t => search.append("tag", t.slug)); setSearch(search, unified ? "replace" : "push"); }
   function changeArchived(value: boolean) { const search = new URLSearchParams(queryKey); if (value) search.set("archived", "true"); else search.delete("archived"); setSearch(search, "push"); }
   function remember(recipeId: string) {
+    if (unified) return;
     leaving.current = true;
     const cached = catalogMemory.get(currentKey.current); if (cached) cached.scroll = window.scrollY;
     catalogOrigin.current = { recipeId, href: `${window.location.pathname}${window.location.search}`, entry: entryId(), pending: true };
@@ -119,7 +123,7 @@ export default function RecipeList() {
     {error && <p role="alert" className={styles.error}>{error} {existing ? <Link href={`/recetas/${existing}`}>Abrir receta existente</Link> : <button onClick={() => void load()}>Reintentar consulta</button>}</p>}
     <p role="status" aria-live="polite">{busy ? "Buscando…" : data ? `${data.total} recetas encontradas. ${notice} ${warning}` : notice}</p>
     {stale && <div className={styles.notice} role="status">El catálogo cambió. Actualizá la lista para continuar. <button disabled={busy} onClick={() => void load()}>Actualizar lista</button></div>}
-    <ul className={styles.recipeList} aria-label="Recetas de la familia" aria-busy={busy}>{(data?.ideas ?? []).map(item => <li className={styles.recipeRow} key={item.id}>
+    <ul className={styles.recipeList} aria-label="Recetas de la familia" aria-busy={busy}>{(data?.ideas ?? []).map(item => <li data-ui-surface className={styles.recipeRow} key={item.id}>
       <h2><Link href={`/recetas/${item.id}`} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) remember(item.id); }}>{item.title}</Link></h2>
       {item.note && <p className={styles.noteSummary}>{item.note}</p>}
       <div className={styles.tags}>{(item.tags ?? []).map(tag => <button key={tag.id} aria-pressed={slugs.includes(tag.slug)} disabled={busy || (!slugs.includes(tag.slug) && slugs.length >= 10)} onClick={() => {

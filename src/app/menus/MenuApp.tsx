@@ -1,4 +1,5 @@
 "use client";
+import { useUnifiedUI, useNavigationQuery } from "@/components/platform/navigation";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -22,6 +23,8 @@ const mealButtonId = (date: string, type: MealType) => `meal-${date}-${type}-tog
 
 export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
   const router = useRouter();
+  const unified = useUnifiedUI();
+  const navigationQuery = useNavigationQuery().toString();
   const [dayState, setDayState] = useState(() => ({ date: familyDay(), meals: {} as Partial<Record<MealType, MealDisclosure>> }));
   const date = dayState.date;
   const selectDate = useCallback((next: string) => {
@@ -60,17 +63,22 @@ export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
       followsToday.current = !requested || !valid;
       activeWeek.current = startOfWeek(valid ? requested : now);
       selectDate(valid ? requested : now);
+      const meal = params.get("comida");
+      if (unified && MEAL_TYPES.includes(meal as MealType)) {
+        const mealType = meal as MealType;
+        setDayState(current => ({ ...current, meals: { ...current.meals, [mealType]: { ...(current.meals[mealType] ?? closedMeal), detail: true } } }));
+      }
       setView(params.get("vista") === "semana" ? "week" : "day");
       if (requested && !valid) {
         setNotice("La fecha no es válida. Mostramos hoy.");
-        const url = new URL(window.location.href); url.searchParams.set("fecha", now); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
+        const url = new URL(window.location.href); if (unified) url.searchParams.delete("fecha"); else url.searchParams.set("fecha", now); window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
       }
       setReady(true);
     }
     readUrl();
     window.addEventListener("popstate", readUrl);
     return () => window.removeEventListener("popstate", readUrl);
-  }, [selectDate]);
+  }, [selectDate, navigationQuery, unified]);
 
   const refresh = useCallback(async () => {
     if (activeWeek.current !== week) return null;
@@ -121,8 +129,9 @@ export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
     selectDate(chosen); setView(nextView); setUndo(null); setRetry(null); setError("");
     if (!valid) setNotice("La fecha no es válida. Mostramos hoy."); else setNotice("");
     const url = new URL(window.location.href);
-    url.searchParams.set("fecha", chosen); url.searchParams.set("vista", nextView === "week" ? "semana" : "dia");
+    if (unified && follow) url.searchParams.delete("fecha"); else url.searchParams.set("fecha", chosen); url.searchParams.set("vista", nextView === "week" ? "semana" : "dia");
     window.history.pushState(window.history.state, "", `${url.pathname}${url.search}`);
+    window.dispatchEvent(new Event("family-navigation"));
   }
 
   async function mutate(meal: PlannerMeal, action: Action, success: string, remember?: DailyPerson): Promise<boolean> {
@@ -172,8 +181,8 @@ export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
     if (await mutate({ ...currentMeal, version: c.version }, action, "Plan guardado.")) setConfirmation(null);
   }
 
-  return <main className={styles.page}>
-    <header className={styles.header}>
+  return <main data-app-frame className={styles.page}>
+    <header data-legacy-chrome className={styles.header}>
       <Link className={styles.brand} href="/" aria-label="Family Utils, inicio"><span className={styles.mark} aria-hidden="true">f</span>family<span>utils</span></Link>
       <nav className={styles.headerLinks} aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link className={styles.activeLink} href="/menus" onClick={e => { e.preventDefault(); navigate(today, "day", true); }}>Menús</Link>{recipes && <Link href="/recetas">Recetas</Link>}<Link href="/compras">Compras</Link><Link href="/familia">Mi familia</Link></nav>
       <button className={styles.exitButton} onClick={() => void authClient.signOut().then(() => router.push("/acceso"))}>Salir</button>
@@ -188,7 +197,7 @@ export default function MenuApp({ recipes = false }: { recipes?: boolean }) {
       </div>
       <p className={styles.dateLabel}>{date === today ? "Hoy · " : ""}{dayLabel(date)}{date < today ? " · Solo lectura" : ""}</p>
       {view === "day" && weekReady && data && <p className={styles.dailySummary}>{countChosenMeals(data.meals, date)} de 4 comidas elegidas</p>}
-      <div className={styles.viewButtons} aria-label="Vista del planificador"><button aria-pressed={view === "day"} disabled={busy} onClick={() => navigate(date, "day", followsToday.current)}>Día</button><button aria-pressed={view === "week"} disabled={busy} onClick={() => navigate(date, "week", followsToday.current)}>Semana</button></div>
+      <div data-legacy-sections className={styles.viewButtons} aria-label="Vista del planificador"><button aria-pressed={view === "day"} disabled={busy} onClick={() => navigate(date, "day", followsToday.current)}>Día</button><button aria-pressed={view === "week"} disabled={busy} onClick={() => navigate(date, "week", followsToday.current)}>Semana</button></div>
       <p className={styles.srOnly} role="status">{busy ? "Guardando…" : loading ? "Actualizando…" : "Plan actualizado"}</p>
       {notice && <p className={styles.notice} role="status">{notice}{undo && <button disabled={busy} onClick={() => {
         const meal = data?.meals.find(m => m.date === undo.date && m.mealType === undo.type);
@@ -258,7 +267,7 @@ function DailyMeal({ meal, data, busy, adult, readOnly, disclosure, onToggle, on
       {meal.plan.menus.map(menu => <div className={styles.dailyMenu} key={menu.number}>
         <div>{meal.plan.menus.length > 1 && <small>OPCIÓN {menu.number}</small>}<strong>{menu.selection?.title ?? "Todavía no elegimos qué comer"}</strong>
           {menu.selection?.note && <p>{menu.selection.note}</p>}
-          {menu.selection && meal.recipeLinks?.[menu.selection.suggestionId] && <Link href={`/recetas/${meal.recipeLinks[menu.selection.suggestionId]}`}>Ver receta</Link>}
+          {menu.selection && meal.recipeLinks?.[menu.selection.suggestionId] && <Link href={`/recetas/${meal.recipeLinks[menu.selection.suggestionId]}?fecha=${meal.date}&comida=${meal.mealType}`}>Ver receta</Link>}
           {attendance && <span>{menuSummary(meal.plan, menu.number)}</span>}
           {attendance && <small>{meal.plan.people.filter(p => p.menu === menu.number).map(p => data.members.find(m => m.id === p.memberId)?.name).filter(Boolean).join(" · ")}</small>}
         </div>

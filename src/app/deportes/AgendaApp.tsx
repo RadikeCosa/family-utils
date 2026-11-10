@@ -183,9 +183,9 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
   }
   return (
     <>
-    <a className={styles.skipLink} href="#sports-intro">Saltar al contenido</a>
-    <main className={styles.page}>
-      <header className={styles.header}>
+    <a data-legacy-chrome className={styles.skipLink} href="#sports-intro">Saltar al contenido</a>
+    <main data-app-frame className={styles.page}>
+      <header data-legacy-chrome className={styles.header}>
         <Link href="/">‹ Inicio</Link>
         <span>Family Utils / Deportes</span>
       </header>
@@ -194,7 +194,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         <h1>Deportes</h1>
         <span>El partido, la cartelera y la charla de casa.</span>
       </div>
-      <nav className={styles.tabs} aria-label="Deportes">
+      <nav data-legacy-sections className={styles.tabs} aria-label="Deportes">
         <button
           aria-pressed={sport === "river"}
           onClick={() => navigate("river")}
@@ -283,7 +283,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
             <div className={styles.agendaHeading}>
               <div>
                 <p className={styles.eyebrow}>AGENDA</p>
-                <h3>{sport === "river" ? "Partidos de River" : "Carteleras UFC"}</h3>
+                <h2>{sport === "river" ? "Partidos de River" : "Carteleras UFC"}</h2>
               </div>
               <button type="button" disabled={refreshing} onClick={refresh}>
                 {refreshing ? "Actualizando…" : "Actualizar"}
@@ -454,7 +454,7 @@ export default function AgendaApp({ initial }: { initial: SportsPageData }) {
         <>
           <section className={styles.agenda} aria-label="Agenda deportiva">
             <div className={styles.agendaHeading}>
-              <h3>{sport === "river" ? "Partidos de River" : "Carteleras UFC"}</h3>
+              <h2>{sport === "river" ? "Partidos de River" : "Carteleras UFC"}</h2>
               <button type="button" disabled={refreshing} onClick={refresh}>
                 {refreshing ? "Actualizando…" : "Actualizar"}
               </button>

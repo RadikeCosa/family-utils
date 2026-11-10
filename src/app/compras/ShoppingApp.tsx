@@ -1,4 +1,5 @@
 "use client";
+import { useURLState, useDetailTitle } from "@/components/platform/navigation";
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,7 +20,7 @@ export default function ShoppingApp({ listId }: { listId?: string }) {
   const [busy, setBusy] = useState(false);
   const [updatedAt, setUpdatedAt] = useState("");
   const [name, setName] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useURLState("archived", false, "push");
   const [draft, setDraft] = useState<ProductDraft>(emptyProduct);
   const [management, setManagement] = useState<ManagementDraft | null>(null);
   const etag = useRef("");
@@ -131,12 +132,13 @@ export default function ShoppingApp({ listId }: { listId?: string }) {
     setManagement({ name: value.name, memberIds: value.editorIds.filter((id) => data?.members.some((member) => member.id === id && !member.archivedAt)), ownerMemberId: "", reason: "", expectedVersion: value.version });
   }
 
-  return <main className={styles.page}>
-    <header className={styles.header}>
+  useDetailTitle(list?.name);
+  return <main data-app-frame className={styles.page}>
+    <header data-legacy-chrome className={styles.header}>
       <Link className={styles.brand} href="/">family utils</Link>
       <nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras" aria-current="page">Compras</Link><Link href="/familia">Mi familia</Link></nav>
     </header>
-    <div className={styles.heading}><div><p className={styles.eyebrow}>EN FAMILIA</p><h1>{list?.name ?? "Listas de compras"}</h1><p>Lo que hace falta, en un mismo lugar.</p></div><button type="button" disabled={busy} onClick={() => void refresh(true)}>Actualizar</button></div>
+    <div data-page-heading className={styles.heading}><div><p className={styles.eyebrow}>EN FAMILIA</p><h1>{list?.name ?? "Listas de compras"}</h1><p>Lo que hace falta, en un mismo lugar.</p></div><button type="button" disabled={busy} onClick={() => void refresh(true)}>Actualizar</button></div>
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {notice && <p role="status" className={styles.notice}>{notice}</p>}
     {updatedAt && <p className={styles.muted}>Última actualización: <time dateTime={updatedAt}>{formatDate(updatedAt)}</time></p>}
@@ -147,14 +149,14 @@ export default function ShoppingApp({ listId }: { listId?: string }) {
         const created = await mutate("", "POST", { name });
         if (created) { setName(""); router.push(`/compras/${created.id}`); }
       }}><h2>Nueva lista</h2><label>Nombre de la lista (opcional)<input value={name} maxLength={160} disabled={busy} onChange={(event) => setName(event.target.value)} placeholder="Usaremos tu nombre si lo dejás vacío" /></label><button className={styles.primary} disabled={busy}>Crear lista</button></form>
-      <div className={styles.actions}><h2>{showArchived ? "Listas archivadas" : "Listas activas"}</h2><button type="button" aria-pressed={showArchived} onClick={() => setShowArchived(!showArchived)}>{showArchived ? "Ver activas" : "Ver archivadas"}</button></div>
+      <div className={styles.actions}><h2>{showArchived ? "Listas archivadas" : "Listas activas"}</h2><button data-legacy-sections type="button" aria-pressed={showArchived} onClick={() => setShowArchived(!showArchived)}>{showArchived ? "Ver activas" : "Ver archivadas"}</button></div>
       <div className={styles.listGrid}>{data.lists.filter((value) => !!value.archivedAt === showArchived).map((value) => <Link className={styles.listCard} key={value.id} href={`/compras/${value.id}`}><h3>{value.name}</h3><p>De {value.ownerName}</p><p>{value.items.filter((item) => item.purchased).length} de {value.items.length} comprados</p><span className={styles.badge}>{value.archivedAt ? "Archivada · solo lectura" : value.canEdit ? "Podés editar" : "Solo lectura"}</span></Link>)}</div>
       {!data.lists.some((value) => !!value.archivedAt === showArchived) && <p>Todavía no hay listas {showArchived ? "archivadas" : "activas"}.</p>}
     </>}
-    {data && listId && !list && <section className={styles.card}><h2>No encontramos esta lista</h2><p>Puede pertenecer a otra familia o haber dejado de estar disponible.</p><Link href="/compras">Volver a las listas</Link></section>}
+    {data && listId && !list && <section data-ui-surface className={styles.card}><h2>No encontramos esta lista</h2><p>Puede pertenecer a otra familia o haber dejado de estar disponible.</p><Link href="/compras">Volver a las listas</Link></section>}
     {data && list && <>
       <Link className={styles.back} href="/compras">← Todas las listas</Link>
-      <section className={styles.card} aria-label="Datos de la lista">
+      <section data-ui-surface className={styles.card} aria-label="Datos de la lista">
         <div className={styles.actions}><span className={styles.badge}>{list.archivedAt ? "Archivada · solo lectura" : list.canEdit ? "Podés editar" : "Solo lectura"}</span><button onClick={() => void shareList(list)}>Compartir enlace</button></div>
         <p>Creada por {list.creatorName} · Dueño actual: {list.ownerName}</p>
         <p>{list.items.filter((item) => item.purchased).length} de {list.items.length} comprados</p>
@@ -164,7 +166,7 @@ export default function ShoppingApp({ listId }: { listId?: string }) {
           {list.canManage && <button disabled={busy} onClick={() => { if (window.confirm(list.archivedAt ? "¿Restaurar esta lista?" : "¿Archivar esta lista y dejarla en modo consulta?")) void mutate(base, "PATCH", { action: list.archivedAt ? "restore" : "archive", expectedVersion: list.version }); }}>{list.archivedAt ? "Restaurar lista" : "Archivar lista"}</button>}
         </div>
       </section>
-      {management && <section className={styles.card} aria-label="Administrar lista"><h2>Administrar lista</h2>
+      {management && <section data-ui-surface className={styles.card} aria-label="Administrar lista"><h2>Administrar lista</h2>
         {management.expectedVersion !== list.version && <p role="alert">La gestión de esta lista cambió. Revisá su nombre, dueño y editores actuales antes de reintentar. <button onClick={() => setManagement({ ...management, expectedVersion: list.version })}>Revisé los cambios: habilitar reintento</button></p>}
         {list.canManage && <>
           <form onSubmit={async (event) => { event.preventDefault(); if (await mutate(base, "PATCH", { action: "rename", name: management.name, expectedVersion: management.expectedVersion })) setManagement(null); }}><label>Nombre de la lista<input required maxLength={160} disabled={busy} value={management.name} onChange={(event) => setManagement({ ...management, name: event.target.value })} /></label><button disabled={busy || management.expectedVersion !== list.version}>Guardar nombre</button></form>

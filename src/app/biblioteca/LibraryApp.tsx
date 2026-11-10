@@ -1,4 +1,5 @@
 "use client";
+import { useDetailTitle, useNavigationQuery } from "@/components/platform/navigation";
 import { genreLabels } from "@/lib/library/genres";
 import { canonicalLibrarySearch, libraryFilterString, readLibraryFilters, type SearchFilters } from "@/lib/library/filters";
 import { familyRating, commonMemberLabels } from "@/lib/library/presentation";
@@ -21,6 +22,7 @@ const showOptions = [{ value: "", label: "Todas" }, { value: "pending", label: "
 function readSearchFilters() { return readLibraryFilters(new URLSearchParams(window.location.search)); }
 export default function LibraryApp({ workId, initialFilters = { selection: "", q: "", view: "", status: "", archived: "", genre: "", withMember: "" } }: { workId?: string; initialFilters?: SearchFilters }) {
   const router = useRouter();
+  const navigationSearch = useNavigationQuery().toString();
   const { layout, setLayout } = useCollectionLayout();
   const [search, setSearch] = useState(initialFilters.q);
   const [view, setView] = useState(initialFilters.view);
@@ -51,7 +53,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
     const url = new URL(window.location.href);
     url.search = canonicalLibrarySearch(url.searchParams, next);
     // Next.js merges its router state for external History API updates and syncs useSearchParams without a server navigation.
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     setFilters(libraryFilterString(next));
   }, []);
   const recoverUnavailableMember = useCallback(() => {
@@ -65,6 +67,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
   const selectedMember = view === "pair_pending" ? commonMembers.find(member => member.id === withMember) : undefined;
   const selectedCount = data && "works" in data ? data.commonPendingCounts.find(entry => entry.memberId === withMember)?.count ?? 0 : 0;
   const work = data && "work" in data ? data.work : null;
+  useDetailTitle(work?.title);
   useEffect(() => { if (!editing && focusAfterEdit.current && work) { detailHeading.current?.focus(); focusAfterEdit.current = false; } }, [editing, work]);
   useEffect(() => {
     if (workId || !data || !("works" in data)) return;
@@ -80,7 +83,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
     const normalizeUrl = () => {
       const cleanUrl = new URL(window.location.href);
       cleanUrl.search = canonicalLibrarySearch(cleanUrl.searchParams);
-      window.history.replaceState({}, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+      window.history.replaceState(window.history.state, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
     };
     const onPopState = () => {
       normalizeUrl();
@@ -93,12 +96,12 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
     onPopState();
     window.addEventListener("popstate", onPopState);
     return () => { window.removeEventListener("popstate", onPopState); if (debounce.current) clearTimeout(debounce.current); };
-  }, []);
+  }, [navigationSearch]);
   const applyCurrent = (q: string, nextView = view, nextStatus = status, nextArchived = archived, nextGenre = genre, nextMember = withMember, nextSelection = selection) => { setFilterNotice(""); writeSearch({ selection: nextSelection, q: (composingRef.current ? lastAppliedSearch.current : q).trim(), view: nextView, status: nextStatus, archived: nextArchived, genre: nextGenre, withMember: nextMember }); };
-  return <main className={styles.page}>
-    <header className={styles.header}><Link className={styles.brand} href="/">family utils</Link><nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/cinemateca" aria-current="page">Cinemateca</Link><Link href="/familia">Mi familia</Link></nav></header>
+  return <main data-app-frame className={styles.page}>
+    <header data-legacy-chrome className={styles.header}><Link className={styles.brand} href="/">family utils</Link><nav aria-label="Aplicaciones"><Link href="/tareas">Tareas</Link><Link href="/menus">Menús</Link><Link href="/compras">Compras</Link><Link href="/cinemateca" aria-current="page">Cinemateca</Link><Link href="/familia">Mi familia</Link></nav></header>
     {workId && <Link className={styles.back} href="/cinemateca">← Volver a la cinemateca</Link>}
-    <div className={styles.heading}><div><h1 ref={detailHeading} tabIndex={-1}>{work?.title ?? "Cinemateca familiar"}</h1></div>{!workId && data && <button className={styles.primary} disabled={adding && busy} onClick={() => { if (!adding) skipDialogFocusReturn.current = false; setAdding(!adding); }}>{adding ? "Cerrar formulario" : "Agregar película"}</button>}</div>
+    <div data-page-heading className={styles.heading}><div><h1 ref={detailHeading} tabIndex={-1}>{work?.title ?? "Cinemateca familiar"}</h1></div>{!workId && data && <button className={styles.primary} disabled={adding && busy} onClick={() => { if (!adding) skipDialogFocusReturn.current = false; setAdding(!adding); }}>{adding ? "Cerrar formulario" : "Agregar película"}</button>}</div>
     {error && <p className={styles.error} role="alert">{error} {library.readErrorCode === "INVALID" && view === "pair_pending" && <button onClick={() => applyCurrent(search, "", "", archived, genre, "")}>Quitar selección</button>} <button onClick={() => void library.refresh()}>Reintentar</button></p>}
     {filterNotice && <p className={styles.notice} role="status">{filterNotice}</p>}
     {library.hasChanges && <p className={styles.notice} role="status">Hay cambios. Actualizá para ver la colección al día. <button onClick={() => void library.refresh()}>Actualizar</button></p>}
@@ -119,7 +122,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
         <div className={styles.collectionTools}>
           <button type="button" className={styles.camiFilter} aria-pressed={!!selection} onClick={() => applyCurrent(search, view, status, archived, genre, withMember, selection ? "" : "cine_with_cami")}>{selection && <span aria-hidden="true">✓ </span>}Cine con Cami</button>
           <GenreFilter value={genre} onChange={(nextGenre) => applyCurrent(search, view, status, archived, nextGenre)} />
-          <div className={styles.archiveSwitch} role="group" aria-label="Ubicación de las películas">
+          <div data-legacy-sections className={styles.archiveSwitch} role="group" aria-label="Ubicación de las películas">
             <button type="button" aria-pressed={!archived} onClick={() => applyCurrent(search, view, status, "")}>Colección</button>
             <button type="button" aria-pressed={archived === "true"} onClick={() => applyCurrent(search, view, status, "true")}>Archivadas</button>
           </div>
@@ -139,7 +142,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
         </div>
       </div>
       <p className={styles.srStatus} role="status" aria-live="polite" aria-atomic="true">{loading ? searchAnnouncement : resultAnnouncement}</p>
-      {data.works.length ? <ul className={layout === "list" ? styles.movieList : styles.grid} aria-label="Películas">{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} compact={layout === "list"} /></li>)}</ul> : <section className={styles.empty}><WorkIcon kind="movie" /><h2>{selection ? "No hay películas de Cine con Cami con estos filtros." : filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selection ? "Podés sumarlas al agregar o editar una película." : selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
+      {data.works.length ? <ul className={layout === "list" ? styles.movieList : styles.grid} aria-label="Películas">{data.works.map(item => <li key={item.id}><MovieCard work={item} memberId={data.currentMemberId} compact={layout === "list"} /></li>)}</ul> : <section data-ui-surface className={styles.empty}><WorkIcon kind="movie" /><h2>{selection ? "No hay películas de Cine con Cami con estos filtros." : filters ? "No encontramos películas con estos filtros" : "Nuestra colección empieza acá"}</h2><p>{selection ? "Podés sumarlas al agregar o editar una película." : selectedMember ? `No hay películas que vos y ${selectedMember.label} quieran ver con estos filtros.` : view === "common_pending" ? "Aparecen cuando todos los integrantes activos las marcan como Quiero ver" : filters ? "Probá otro título o ampliá los filtros." : "Agregá una película que quieran ver o recordar."}</p></section>}
       {data.nextCursor && <button disabled={loading} onClick={() => void library.more()}>{loading ? "Cargando…" : "Cargar más películas"}</button>}
     </>}
     {work && data && <>
@@ -162,7 +165,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
       {work.archivedAt && <p className={styles.notice}>Este contenido está archivado. Podés restaurarlo o retirar tus aportes.</p>}
       {editing && <WorkDialog busy={busy} shouldRestoreFocus={shouldRestoreDialogFocus} onRequestClose={() => { setEditing(false); library.clearDuplicates(); }}><WorkForm key={`${data.familyId}:${data.currentMemberId}:${work.id}`} scope={`${data.familyId}:${data.currentMemberId}:${work.id}:edit-work`} work={work} busy={busy} duplicates={library.duplicates} issue={library.operationIssue} onIdentityChange={library.clearDuplicates} onCancel={() => { setEditing(false); library.clearDuplicates(); }} onSave={async (input) => { if (!await library.mutate(`/${work.id}`, "PATCH", { ...input, action: "edit" })) return false; skipDialogFocusReturn.current = true; focusAfterEdit.current = true; setEditing(false); return true; }} /></WorkDialog>}
       <PersonalForm key={`${data.familyId}:${data.currentMemberId}:${work.id}:personal`} work={work} familyId={data.familyId} memberId={data.currentMemberId} busy={busy} issue={library.operationIssue} onSave={async (input) => !!await library.mutate(`/${work.id}/personal`, "PUT", input)} />
-      <section className={`${styles.card} ${styles.familyPanel}`}>
+      <section data-ui-surface className={`${styles.card} ${styles.familyPanel}`}>
         <div className={styles.familyHeading}><h2>Las miradas de la familia</h2><p>{familyRating(work.personal)}</p></div>
         {work.personal.length ? <ul className={styles.familyOpinions}>{work.personal.map((entry) => <li key={entry.memberId}>
           <strong>{data.members.find((member) => member.id === entry.memberId)?.name ?? "Integrante"}</strong>
@@ -170,7 +173,7 @@ export default function LibraryApp({ workId, initialFilters = { selection: "", q
           <span className={styles.familyScore}>{entry.rating ? `${entry.rating}/5 estrellas` : "Sin valorar"}</span>
         </li>)}</ul> : <p className={styles.fieldHelp}>Todavía no hay estados ni valoraciones.</p>}
       </section>
-      {(work.synopsis || work.cast.length > 0) && <section className={`${styles.card} ${styles.movieDetails}`} aria-label="Más sobre la película">
+      {(work.synopsis || work.cast.length > 0) && <section data-ui-surface className={`${styles.card} ${styles.movieDetails}`} aria-label="Más sobre la película">
         {work.synopsis && <details><summary><h2>Sinopsis</h2></summary><p className={styles.body}>{work.synopsis}</p></details>}
         {work.cast.length > 0 && <details><summary><h2>Reparto</h2><span>{work.cast.length}</span></summary><ul className={styles.detailCast}>{work.cast.map(name => <li key={name}>{name}</li>)}</ul></details>}
       </section>}
