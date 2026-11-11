@@ -29,7 +29,20 @@ export async function diaryDatabase(options = {}) {
     catch (error) { if (options.onMigrationError) await options.onMigrationError(pool); throw error; }
   }
   catch (error) { await pool.end(); await admin.query(`DROP DATABASE "${name}"`); await admin.end(); throw error; }
-  return { pool, url: url.toString(), async close() { await pool.end(); await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`); await admin.end(); } };
+  return { pool, url: url.toString(), async close() {
+    await pool.end();
+    try {
+      // pg-pool resolves end() before every socket has completed its shutdown.
+      // Wait for graceful disconnects rather than terminating our closing clients.
+      for (let attempt = 0; ; attempt++) {
+        const { rows } = await admin.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname=$1", [name]);
+        if (rows[0].count === 0) break;
+        if (attempt >= 100) throw new Error("Diary test connections did not close before database cleanup");
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      await admin.query(`DROP DATABASE "${name}"`);
+    } finally { await admin.end(); }
+  } };
 }
 export async function diaryServer(databaseURL, writable, unified = true, activityForm = false) {
   const listener = createServer(); await new Promise(resolve => listener.listen(0, "127.0.0.1", resolve)); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
