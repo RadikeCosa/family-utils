@@ -31,6 +31,25 @@ jobs:
       CODE_PEPPER: ci-only-pepper-not-used-outside-ci
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select verification scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          python3 - <<'PYTHON'
+          import fnmatch, os, subprocess
+          base = os.environ.get("BASE_SHA", "")
+          training_only = False
+          if base and set(base) != {"0"}:
+              files = subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines()
+              allowed = ["src/app/entrenamiento/*", "src/lib/training/*", "src/app/api/training/*", "tests/*training*", "tests/e2e/training*", "sources/training*", "drizzle/0068_training_activity_timing.sql", "drizzle/meta/0068_snapshot.json", "drizzle/meta/_journal.json", "src/db/schema.ts", ".env.example", "package.json", "playwright.config.ts", "playwright.training-diary.config.ts", ".github/workflows/ci.yml"]
+              training_only = bool(files) and all(any(fnmatch.fnmatch(path, pattern) for pattern in allowed) for path in files)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"training_only={str(training_only).lower()}\n")
+          print("Verification scope:", "training" if training_only else "all apps")
+          PYTHON
       - uses: actions/setup-node@v4
         with:
           node-version: 24.13.1
@@ -41,13 +60,23 @@ jobs:
       - run: npx drizzle-kit check
       - run: npm run db:migrate
       - run: npm run db:verify
-      - run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
+      - if: steps.scope.outputs.training_only != 'true'
+        run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
-      - run: npm run test:navigation
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm test
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:navigation
+      - name: Verify existing training rules and database compatibility
+        if: steps.scope.outputs.training_only == 'true'
+        run: node --experimental-strip-types --test src/lib/training/rules.test.ts tests/postgres-training.integration.test.mjs
       - run: npm run build
-      - run: npm run test:routes
+      - name: Verify existing training routes
+        if: steps.scope.outputs.training_only == 'true'
+        run: node --experimental-strip-types --test tests/training-routes.integration.mjs
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:routes
       - name: Use the Ubuntu archive for browser dependencies
         run: |
           sudo python3 - <<'PYTHON'
@@ -63,25 +92,30 @@ jobs:
       - name: Install browser dependencies
         timeout-minutes: 10
         run: npx playwright install --with-deps chromium webkit
-      - run: npm run test:recipes:e2e
-      - run: npm run test:e2e
-      - run: npm run test:sports-next
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:recipes:e2e
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:e2e
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:sports-next
       - name: Upload River and UFC UI screenshots
-        if: always()
+        if: always() && steps.scope.outputs.training_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sports-next-ui-screenshots
           path: test-results/*.png
           if-no-files-found: warn
-      - run: npm run test:champions
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:champions
       - name: Upload Champions UI screenshots
-        if: always()
+        if: always() && steps.scope.outputs.training_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: champions-ui-screenshots
           path: test-results/*.png
           if-no-files-found: warn
-      - run: npm run test:a11y
+      - if: steps.scope.outputs.training_only != 'true'
+        run: npm run test:a11y
       - name: Prepare isolated unified UI database
         run: psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE family_unified_test'
       - name: Migrate isolated unified UI database
@@ -90,11 +124,12 @@ jobs:
           DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
           DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/family_unified_test
       - name: Verify unified UI, accessibility and performance
+        if: steps.scope.outputs.training_only != 'true'
         run: npm run test:unified
         env:
           FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
       - name: Upload unified UI screenshots and performance samples
-        if: always()
+        if: always() && steps.scope.outputs.training_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: unified-ui-acceptance

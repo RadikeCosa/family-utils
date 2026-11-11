@@ -1,7 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
-  // Keep a failed first attempt visible while retrying transient CI browser races once.
-  retries: process.env.CI ? 1 : 0,
   testDir: "./tests/e2e", testMatch: /recipes\.spec\.ts/, workers: 1, reporter: "list",
   use: { baseURL: "http://localhost:3390", trace: "retain-on-failure" },
   projects: [
