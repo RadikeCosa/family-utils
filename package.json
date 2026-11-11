@@ -30,7 +30,7 @@
     "test:recipes:e2e": "playwright test --config playwright.recipes.config.ts",
     "test:navigation": "node --experimental-strip-types --test src/lib/navigation/navigation.test.ts",
     "test:unified": "playwright test --config playwright.unified.config.ts",
-    "test:training:diary": "node --experimental-strip-types --test src/lib/training/diary.test.ts src/lib/training/drafts.test.ts tests/training-diary.integration.mjs tests/postgres-training-diary-migration.integration.test.mjs",
+    "test:training:diary": "node --experimental-strip-types --test src/lib/training/diary.test.ts src/lib/training/drafts.test.ts tests/training-diary.integration.mjs tests/postgres-training-diary-migration.integration.test.mjs tests/training-activity.integration.mjs",
     "training:diary:transition": "node scripts/training-diary-transition.mjs",
     "test:training:diary:e2e": "playwright test --config playwright.training-diary.config.ts"
   },

@@ -407,6 +407,13 @@
       "when": 1794329754423,
       "tag": "0067_training_diary",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794347990042,
+      "tag": "0068_training_activity_timing",
+      "breakpoints": true
     }
   ]
 }

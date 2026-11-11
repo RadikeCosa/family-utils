@@ -199,3 +199,72 @@ El proyecto no tiene drenajes externos de observabilidad configurados.
 
 Respaldo previo con cifrado y restauración PostgreSQL 18 completos:
 [ejecución 42878274215](https://github.com/RadikeCosa/family-utils-backups/actions/runs/42878274215).
+
+## Registro de actividad y horarios (0068)
+
+`TRAINING_ACTIVITY_FORM_ENABLED=false` incorpora la API y el editor compatibles
+sin habilitar el formulario nuevo. Con la bandera en `true` y el diario habilitado,
+«Registrar actividad» admite una frase o una rutina opcional, horarios e intensidad
+percibida. «Planificar entrenamiento» guarda exclusivamente planes. La intensidad
+es 1–3 suave, 4–7 moderada, 8–10 muy intensa. No se bloquean superposiciones.
+
+Cada contenido admite `timing: {startAt,endAt,timeZone}`: instantes UTC ISO
+normalizados y zona IANA. La duración se calcula en el servidor y se guarda en
+`durationSeconds`; cualquier duración enviada junto a horarios se ignora. Máximo
+inclusivo de 86400 segundos reales. La interfaz resuelve horas inexistentes o
+repetidas según la zona familiar; no infiere finalizar al día siguiente. Fechas
+locales inicial y final dentro de DIARY_MIN/DIARY_MAX (1900–2200).
+
+El inicio del resultado determina la fecha de la entrada; si no hay resultado,
+la determina el inicio del plan. El plan histórico se conserva aunque corresponda
+a otra fecha. PATCH `action:result` admite `date` explícita para mover y registrar
+atómicamente, conservando identidad y plan. La interfaz confirma el movimiento.
+PATCH `action:reschedule` admite `timing` completo para mover planes con horarios.
+La copia también admite `timing` para establecer horarios en su fecha de destino.
+
+En ediciones, timing omitido conserva; `timing:null` borra horarios y duración.
+Cambiar la fecha de una entrada con horarios exige reenviar el objeto completo;
+omitirlo o enviarlo null devuelve 409 TIMING_REQUIRED_FOR_DATE_CHANGE. Sin horarios,
+duración omitida conserva la histórica; null la elimina. La API distingue presencia
+antes de normalizar y de persistir. Reintentos se resuelven antes del reloj, la
+versión y el cupo; modificar horarios con la misma clave produce OPERATION_CONFLICT.
+
+Los clientes compatibles anuncian `X-Training-Timing: 1`. Sin esa cabecera la API
+omite timing en la respuesta, de modo que los validadores estrictos de pestañas
+anteriores puedan leer y editar; sus escrituras no eliminan intervalos guardados.
+Se aceptan también las huellas de operaciones confirmadas antes de esta ampliación.
+
+La base valida intervalo, zona, duración y fecha; el trigger de ahora solo se
+aplica a horarios reales nuevos/modificados. Una edición de texto no reevalúa
+el reloj ni cambia la zona histórica. Planes admiten horarios futuros; resultados
+no pueden finalizar después de ahora. Donde haya totales deben sumar sesiones,
+sin unir intervalos, bajo «Tiempo acumulado de sesiones». Actualmente el resumen
+semanal solo contiene conteos; no hay totales ni exportaciones de duración.
+
+Inventario de accesos verificado: /entrenamiento, fecha/detalle explícitos,
+navegación unificada Diario/Plantillas, acciones del día, detalle de plan,
+estado vacío (remite a acciones del día), «Usar plantilla» en rutinas y recuperación
+del formulario temporal. Todos desembocan en DiaryEditor tras la transición;
+TrainingEditor queda para gestión de rutinas y sesiones previas a la transición.
+
+Orden de entrega: migración 0068 y versión compatible con la nueva bandera apagada;
+ensayos aislados; habilitar variable y redesplegar. Reversión funcional: apagar
+TRAINING_ACTIVITY_FORM_ENABLED y redesplegar la versión compatible, sin revertir
+0068 ni la transición del diario. No revertir a código previo a esta compatibilidad.
+Los ensayos incluyen datos históricos sin horarios, cliente sin cabecera nueva,
+cambios de fecha, DST, movimiento/resultado atómico y cupo 100 con reintentos.
+
+### Verificación del registro de actividad
+
+Ensayo local aislado con PostgreSQL 18 y Next compilado: 187 pruebas generales,
+29 pruebas del diario/API/migraciones y 27 recorridos de navegador (9 por cada
+proyecto: Chromium móvil, escritorio con zona del dispositivo diferente y WebKit).
+Incluye edición con TRAINING_ACTIVITY_FORM_ENABLED=false conservando horarios,
+lectura para validadores antiguos, cambio de fecha con error específico, copia y
+reprogramación con timing, DST y guardado corregible tras un horario incompleto.
+Axe sin incidencias graves/críticas en el formulario y sin desbordamiento horizontal.
+La medición con 100.000 entradas sintéticas dio p95 máximo de 84 ms frente al
+presupuesto de 500 ms. Compilación, tipos, lint de archivos cambiados, metadatos de
+Drizzle y orden de las 59 migraciones verificados. Capturas y muestras en
+`test-results-training-diary/`. La bandera nueva permanece apagada por defecto;
+este ensayo no aplica 0068 ni activa el formulario en producción.

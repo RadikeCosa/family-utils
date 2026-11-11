@@ -3,11 +3,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import DateNavigation from "@/components/calendar/DateNavigation";
 import { updateNavigation, updateNavigationHash, useDetailTitle, useNavigationHash, useNavigationQuery } from "@/components/platform/navigation";
-import { civilLabel, civilWeekStart } from "@/lib/calendar/civil";
+import { civilLabel, civilWeekStart, dayInZone } from "@/lib/calendar/civil";
 import { countsLabel, dayIndicator, diaryDate, DIARY_MAX, DIARY_MIN, entryTitle, statusLabel, weekDates, emptyCounts, type DayCounts, type DiaryContext, type DiaryEntry } from "@/lib/training/diary";
 import { diaryRequest, type EntryPage, type EntryResponse } from "@/lib/training/diary-client";
 import { clearTrainingHandoffs, readTrainingHandoff, type TrainingHandoff } from "@/lib/training/drafts";
-import { formatDuration } from "@/lib/training/rules";
+import { localClock } from "@/lib/training/timing";
+import { formatActivityDuration as formatDuration } from "@/lib/training/timing";
 import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import TrainingApp from "./TrainingApp";
 import { BlockSummary } from "./TrainingEditor";
@@ -96,7 +97,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
     <div data-page-heading className={styles.hero}><p className={styles.eyebrow}>UN DÍA A LA VEZ</p><h1 tabIndex={-1} ref={heading}>Entrenamiento</h1><p>{memberName}, anotá lo que hiciste y lo que tenés previsto.</p></div>
     {!editor && nav}
     {!ctx.writable && <p className={styles.notice}>Modo de consulta. Tus anotaciones se conservan y se pueden consultar.</p>}
-    {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} onClose={closeEditor} onSaved={saved} /> : <>
+    {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} timeZone={ctx.timeZone} serverNow={ctx.serverNow} activityFormEnabled={ctx.activityFormEnabled} onClose={closeEditor} onSaved={saved} /> : <>
       {handoff && <section className={styles.confirm}><p>Hay un formulario conservado al actualizar. Se elimina a los 30 minutos.</p><button disabled={busy || !ctx.writable} onClick={() => void restoreHandoff()}>Recuperar formulario</button><button onClick={() => { clearTrainingHandoffs(); setHandoff(null); }}>Descartar formulario</button></section>}
       <DateNavigation date={date} today={ctx.today} min={DIARY_MIN} max={DIARY_MAX} step={7} className={styles.dateNavigation} onSelect={selectDate} />
       <ol className={styles.week} aria-label="Semana de entrenamiento">{weekDates(week).map(day => {
@@ -106,7 +107,8 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
       <p className={styles.muted}>✓ realizado · ○ planificado · ! no realizado · D descanso</p>
       <h2>{date === ctx.today ? "Hoy · " : ""}{civilLabel(date)}</h2>
       <p className={styles.muted}>{countsLabel(summary?.days.find(day => day.date === date)?.counts ?? emptyCounts())}</p>
-      {ctx.writable && <div className={styles.actions}><button className={styles.primary} disabled={date > ctx.today || busy || !!pending} onClick={() => openEditor({ mode: "create", date, destination: "result" })}>Registrar lo realizado</button><button disabled={busy || !!pending} onClick={() => openEditor({ mode: "create", date, destination: "plan" })}>Planificar entrenamiento</button><button disabled={busy || !!pending} onClick={() => openEditor({ mode: "create", date, kind: "rest", destination: date > ctx.today ? "plan" : "result" })}>Anotar descanso</button></div>}
+      {ctx.writable && <div className={styles.actions}><button className={styles.primary} disabled={date > ctx.today || busy || !!pending} onClick={() => openEditor({ mode: "create", date, destination: "result" })}>{ctx.activityFormEnabled ? "Registrar actividad" : "Registrar lo realizado"}</button><button disabled={busy || !!pending} onClick={() => openEditor({ mode: "create", date, destination: "plan" })}>Planificar entrenamiento</button><button disabled={busy || !!pending} onClick={() => openEditor({ mode: "create", date, kind: "rest", destination: date > ctx.today ? "plan" : "result" })}>Anotar descanso</button></div>}
+      {date > ctx.today && ctx.writable && <p>La fecha es futura. Podés planificar un entrenamiento; registrar actividad se habilita al llegar ese día.</p>}
       <div className={styles.searchBar}><label>Buscar en mi diario<input type="search" value={searchInput} onChange={e => setSearchInput(e.target.value)} maxLength={200} placeholder="Por ejemplo, correr o piernas" /></label><label>Archivo<select value={String(archived)} onChange={e => updateNavigation({ archived: e.target.value === "true" ? "true" : null }, "replace")}><option value="false">Solo activas</option><option value="true">Incluir archivadas</option></select></label></div>
       {searchInput.length > 0 && searchInput.length < 3 && <p>Escribí al menos 3 caracteres para buscar.</p>}
       <p role="status" aria-live="polite" className={styles.muted}>{dateNotice || notice || (loading ? "Cargando anotaciones…" : `${searching ? "Búsqueda" : civilLabel(date)}: ${page?.items.length ?? 0} anotaciones cargadas.`)}</p>
@@ -114,7 +116,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
       {detail && <section data-ui-surface className={styles.card} aria-labelledby="entry-detail-title"><button onClick={() => updateNavigation({ detalle: null }, "push")}>Cerrar detalle</button><h2 id="entry-detail-title" tabIndex={-1} ref={detailHeading}>{entryTitle(detail)}</h2><p>{civilLabel(detail.date)} · {statusLabel(detail)}</p><Content content={detail.result ?? detail.plan} />{detail.result !== null && detail.plan !== null && <details><summary>Lo planificado</summary><Content content={detail.plan} /></details>}
         {ctx.writable && <div className={styles.actions}>
           {detail.archivedAt ? <button disabled={busy || !!pending} onClick={() => void action(detail, "restore")}>Restaurar anotación</button> : <>
-            {detail.result === null && detail.date <= ctx.today && <button disabled={busy || !!pending} className={styles.primary} onClick={() => openEditor({ mode: "result", entry: detail, date: detail.date, destination: "result" })}>Registrar lo realizado</button>}
+            {detail.result === null && (ctx.activityFormEnabled || detail.date <= ctx.today) && <button disabled={busy || !!pending} className={styles.primary} onClick={() => openEditor({ mode: "result", entry: detail, date: detail.date > ctx.today ? ctx.today : detail.date, destination: "result" })}>{ctx.activityFormEnabled ? detail.date > ctx.today ? "Mover a hoy y registrar actividad" : "Registrar actividad" : "Registrar lo realizado"}</button>}
             {detail.result === null && <button disabled={busy || !!pending} onClick={() => openEditor({ mode: "reschedule", entry: detail, date: detail.date > ctx.today ? detail.date : ctx.today })}>{detail.date > ctx.today ? "Reprogramar para hoy" : "Reprogramar"}</button>}
             <button disabled={busy || !!pending} onClick={() => openEditor({ mode: "edit", entry: detail, date: detail.date, destination: detail.result !== null ? "result" : "plan" })}>{detail.result !== null ? "Corregir lo realizado" : "Editar plan"}</button>
             {detail.result === null && detail.disposition !== "skipped" && <button disabled={busy || !!pending} onClick={() => void action(detail, "skip")}>Marcar no realizado</button>}
@@ -131,5 +133,5 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
 }
 function Content({ content }: { content: DiaryEntry["plan"] }) {
   if (content === null) return null;
-  return <div><p className={styles.note}>{content.text}</p>{content.durationSeconds != null && <p>Duración: {formatDuration(content.durationSeconds)}</p>}{content.effort != null && <p>Esfuerzo: {content.effort}/10</p>}{content.blocks?.length ? <BlockSummary blocks={content.blocks} /> : null}</div>;
+  return <div><p className={styles.note}>{content.text}</p>{content.timing && <p>Horario: {localClock(content.timing.startAt, content.timing.timeZone)}–{localClock(content.timing.endAt, content.timing.timeZone)}{dayInZone(new Date(content.timing.startAt), content.timing.timeZone) !== dayInZone(new Date(content.timing.endAt), content.timing.timeZone) ? " (día siguiente)" : ""} · {content.timing.timeZone}</p>}{content.durationSeconds != null && <p>Duración: {formatDuration(content.durationSeconds)}</p>}{content.effort != null && <p>Intensidad percibida: {content.effort}/10</p>}{content.blocks?.length ? <BlockSummary blocks={content.blocks} /> : null}</div>;
 }

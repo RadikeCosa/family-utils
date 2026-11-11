@@ -1,13 +1,15 @@
 import { addCivilDays, civilWeekStart, isCivilDate } from "../calendar/civil.ts";
 import { identifier, integer, LIMITS, object, onlyKeys, TrainingValidationError, validateRoutine } from "./rules.ts";
 import type { TrainingBlock } from "./types.ts";
+import { activityTiming, timingDuration, type ActivityTiming } from "./timing.ts";
+import { dayInZone } from "../calendar/civil.ts";
 export const DIARY_MIN = "1900-01-01", DIARY_MAX = "2200-12-31", SEARCH_MIN = 3;
 export type DiaryKind = "training" | "rest";
-export interface DiaryContent { title?: string; text?: string; blocks?: TrainingBlock[]; durationSeconds?: number | null; effort?: number | null }
+export interface DiaryContent { title?: string; text?: string; blocks?: TrainingBlock[]; durationSeconds?: number | null; effort?: number | null; timing?: ActivityTiming | null }
 export interface DiaryInput { date: string; kind: DiaryKind; plan: DiaryContent | null; result: DiaryContent | null; disposition: "open" | "skipped"; sourceRoutineId: string | null }
 export interface DiaryEntry extends DiaryInput { id: string; version: number; archivedAt: string | null; createdAt: string; updatedAt: string; status: DiaryStatus }
 export type DiaryStatus = "planned" | "completed" | "missed" | "archived";
-export interface DiaryContext { today: string; timeZone: string; serverNow: string; nextDayAt: string; writable: boolean }
+export interface DiaryContext { today: string; timeZone: string; serverNow: string; nextDayAt: string; writable: boolean; activityFormEnabled?: boolean }
 export type DayCounts = Record<"training_planned" | "training_completed" | "training_missed" | "rest_planned" | "rest_completed" | "rest_missed", number>;
 export const emptyCounts = (): DayCounts => ({ training_planned: 0, training_completed: 0, training_missed: 0, rest_planned: 0, rest_completed: 0, rest_missed: 0 });
 export function diaryDate(value: unknown): string {
@@ -26,18 +28,19 @@ function optionalText(value: unknown, max: number): string {
 }
 export function diaryContent(value: unknown, kind: DiaryKind): DiaryContent | null {
   if (value === null) return null;
-  const raw = object(value); onlyKeys(raw, ["title", "text", "blocks", "durationSeconds", "effort"]);
+  const raw = object(value); onlyKeys(raw, ["title", "text", "blocks", "durationSeconds", "effort", "timing"]);
   const title = optionalText(raw.title, LIMITS.name), text = optionalText(raw.text, LIMITS.note);
   if (kind === "rest") {
-    if (["blocks", "durationSeconds", "effort"].some(key => key in raw)) throw new TrainingValidationError("El descanso no lleva ejercicios ni métricas.");
+    if (["blocks", "durationSeconds", "effort", "timing"].some(key => key in raw)) throw new TrainingValidationError("El descanso no lleva ejercicios ni métricas.");
     return { ...(title ? { title } : {}), ...(text ? { text } : {}) };
   }
   const blocks = raw.blocks === undefined ? [] : raw.blocks;
   if (!Array.isArray(blocks)) throw new TrainingValidationError("Bloques inválidos.");
   const validBlocks = blocks.length ? validateRoutine({ name: title || "Entrenamiento", blocks }).blocks : [];
   if (!title && !text && !validBlocks.length) throw new TrainingValidationError("Escribí qué entrenaste o agregá ejercicios.");
-  return { title, text, blocks: validBlocks,
-    durationSeconds: raw.durationSeconds == null ? null : integer(raw.durationSeconds, "Duración", LIMITS.durationSeconds),
+  const timing = raw.timing == null ? null : activityTiming(raw.timing);
+  return { title, text, blocks: validBlocks, ...("timing" in raw ? { timing } : {}),
+    durationSeconds: timing ? timingDuration(timing) : raw.timing === null || raw.durationSeconds == null ? null : integer(raw.durationSeconds, "Duración", LIMITS.durationSeconds),
     effort: raw.effort == null ? null : integer(raw.effort, "Esfuerzo", 10) };
 }
 export function validateDiary(value: unknown, today: string): DiaryInput {
@@ -49,7 +52,18 @@ export function validateDiary(value: unknown, today: string): DiaryInput {
   const disposition = input.disposition ?? "open";
   if (disposition !== "open" && disposition !== "skipped" || disposition === "skipped" && (plan === null || result !== null)) throw new TrainingValidationError("Estado inválido.");
   if (result !== null && date > today) throw new TrainingValidationError("Reprogramá para hoy antes de registrar lo realizado.");
+  const timing = (result ?? plan)?.timing;
+  if (timing && dayInZone(new Date(timing.startAt), timing.timeZone) !== date) throw new TrainingValidationError("El inicio debe corresponder a la fecha de la anotación. Movela explícitamente para registrar otro día.");
   return { date, kind: input.kind, plan, result, disposition, sourceRoutineId: input.sourceRoutineId == null ? null : identifier(input.sourceRoutineId) };
+}
+/** Preserve omitted fields before normalization: old bundles send complete content without timing. */
+export function mergeDiaryContent(value: unknown, previous?: DiaryContent | null): unknown {
+  if (value === null) return null;
+  const raw = object(value), merged = { ...raw };
+  if (!("timing" in raw) && previous?.timing) merged.timing = previous.timing;
+  if (raw.timing === null) merged.durationSeconds = null;
+  else if (!("durationSeconds" in raw) && previous?.durationSeconds != null) merged.durationSeconds = previous.durationSeconds;
+  return merged;
 }
 export function diaryStatus(entry: Pick<DiaryEntry, "archivedAt" | "result" | "date" | "disposition">, today: string): DiaryStatus {
   return entry.archivedAt ? "archived" : entry.result !== null ? "completed" : entry.disposition === "skipped" || entry.date < today ? "missed" : "planned";
