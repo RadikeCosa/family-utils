@@ -1,10 +1,11 @@
+export const TASK_LIST_VERSION = 2;
 export const FAMILY_TIME_ZONE = "America/Argentina/Buenos_Aires";
 
 import { dayInZone, addCivilDays, isCivilDate } from "../calendar/civil.ts";
 export function getFamilyDay(now: Date = new Date()): string { return dayInZone(now, FAMILY_TIME_ZONE); }
 
 export function taskListEtag(familyId: string, revision: number, day: string, selectedDate = day, page = "", mode = ""): string {
-  return `"family-${familyId}-r${revision}-d${day}-view-${selectedDate}-${page}-${mode}"`;
+  return `"tasks-v${TASK_LIST_VERSION}-family-${familyId}-r${revision}-d${day}-view-${selectedDate}-${page}-${mode}"`;
 }
 
 export const isTaskDate = isCivilDate;

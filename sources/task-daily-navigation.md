@@ -37,3 +37,69 @@ Las estimaciones de rutinas que conservan pendientes solo permiten editar la pro
 Validado el 12/10/2026 contra PostgreSQL 18 aislado: lint, tipos, build, 36 pruebas unitarias/invariantes/planes de consulta, 35 pruebas de rutas, 34 casos móviles (iPhone y Android) y tres auditorías de accesibilidad. Incluye 175 tarjetas con continuidad visual, recuperación de cursores en ambas secciones, respuestas fuera de orden, medianoche, otra zona del dispositivo y sincronización rápida, lenta, fallida y con timeout.
 
 La prueba de rendimiento carga 29.208 ocasiones y eventos distribuidos en diez años. Confirma los índices de vencimiento, finalización y causa mediante EXPLAIN ANALYZE; informa tamaño de los índices y duración de inserción de auditoría. En la ejecución local, las consultas diarias midieron 0,044 y 0,024 ms; insertar los 29.208 eventos con índices tomó 288 ms. Un sync sin trabajo respondió en 10 ms, manteniendo filas, auditoría y revisión y sin esperar bloqueos explícitos de fila. Estas mediciones corresponden al servicio aislado de pruebas.
+
+## Pendientes persistentes y compatibilidad
+
+Crear con `carryPolicy: "carry_forward"` admite tareas sin repetición. El alta
+sin política mantiene `expires_daily` para clientes anteriores; en PATCH de
+programación, omitir la política conserva la existente. Una tarea simple no
+vence automáticamente, incluso con el valor antiguo de política.
+
+La lista expone `effectiveDate`: `dueDate` cuando existe, o el día de Buenos Aires
+de `createdAt` de la ocasión. Las fechas nulas permanecen nulas en almacenamiento.
+Las ocasiones conservadas mantienen origen; una responsabilidad nueva tiene su
+propio inicio. Reprogramar cambia `dueDate`, conservando identidad y generación.
+Abiertos primero por fecha efectiva, horario y clave estable; completadas después
+por finalización. Conteos y páginas derivan de la misma lista ordenada.
+
+Una tarea compartida tiene un pendiente ordinario común; una individual tiene
+uno por persona. Cualquier integrante activo puede completar según los permisos
+existentes. Descartar una ocasión individual afecta únicamente a esa persona.
+
+Convertir una simple en rutina conserva sus pendientes y bloquea nueva generación
+para esas responsabilidades. Quitar repetición conserva los pendientes actuales y
+las excepciones futuras editadas explícitamente, con sus snapshots; retira solo
+ocasiones futuras ordinarias abiertas con auditoría. Las excepciones explícitas
+pueden coexistir como compromisos programados independientes. Finalizar también
+conserva esas excepciones; sus ocasiones abiertas pueden descartarse.
+
+Deshacer se permite solo el día familiar de finalización y según los permisos
+existentes. Una previsión calculada no bloquea; una ocasión posterior persistida
+para la misma responsabilidad sí, aunque no haya sido modificada. No se elimina
+automáticamente la próxima ocasión para permitir deshacer.
+
+`tests/tasks-daily-routes.integration.mjs` comprueba sobre fixtures ficticios la
+línea base y las invariantes de política/booleano y unicidad de abiertos conservados.
+Una inconsistencia previa no se corrige silenciosamente: la edición devuelve
+conflicto y revierte su transacción. No se usan datos reales como fixtures.
+
+El orden de lista y los cursores llevan versión 2: un cursor anterior devuelve
+409 y la ETag cambia aunque la revisión familiar sea igual, evitando mezclar
+páginas de órdenes distintos durante un despliegue. Omitir una rutina conservada
+avanza desde el día familiar de la omisión, también si la ocasión original no
+tenía fecha; no recrea un pendiente automáticamente ese mismo día.
+
+## Alta e interacción
+
+El alta inicial pide solo nombre y muestra que la tarea sigue pendiente hasta
+hacerla. «Más opciones» conserva nota, fecha, horario, responsables y repetición
+al plegarse. Crear desde el futuro muestra esa fecha también fuera del desplegable.
+Las opciones son «No se repite», «Todos los días» y «Elegir días»; la nueva interfaz
+envía siempre la política conservada. Las rutinas antiguas muestran su política al
+editar programación y solo cambian de comportamiento por elección explícita.
+
+Un error de validación en opciones abre el desplegable y enfoca el campo. Los
+diálogos mantienen foco, admiten Escape y devuelven foco al control de apertura.
+Un pendiente anterior indica «Pendiente desde…» y conserva el horario original;
+una reprogramación indica «Programada para…». No se muestra el horario arrastrado
+como si fuera una nueva cita de hoy. La fecha de creación, si se muestra, debe
+identificarse separadamente de la fecha programada.
+
+Descartar una tarea individual identifica de quién es ese pendiente. Compartidas
+simples usan «Descartar tarea» y rutinas compartidas «Omitir esta ocasión».
+Administradores mantienen archivo y «Dejar de repetir». Las excepciones conservadas
+se editan como ocasiones independientes incluso después de quitar repetición.
+
+La evidencia y el entorno local de esta entrega están registrados en
+[verificación de tareas persistentes](task-persistence-verification.md). No acredita
+publicación ni integración remota.

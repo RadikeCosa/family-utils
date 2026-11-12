@@ -14,8 +14,9 @@ se fijan en el código ni en documentación pública.
 
 ## Tareas y responsabilidades
 
-- Crear una tarea requiere solo un nombre. Descripción, responsable, fecha,
-  horario y repetición son opcionales.
+- Crear una tarea requiere solo un nombre. «Más opciones» reúne descripción,
+  responsable, fecha, horario y repetición, sin perder valores al plegarse.
+  La tarea continúa pendiente hasta hacerla o descartarla.
 - Una tarea sin responsable queda disponible para que cualquier integrante la
   asuma. Puede tener uno o varios responsables.
 - Una tarea compartida se completa una vez y registra quién la marcó. Las
@@ -31,14 +32,22 @@ se fijan en el código ni en documentación pública.
 
 ## Repetición y estados
 
-Las rutinas repiten una tarea diaria o en días elegidos de la semana. Al
-configurarlas se elige si cada ocasión vence al final del día familiar o si
-permanece pendiente hasta completarse. En el segundo caso existe como máximo
-una ocasión abierta por responsabilidad; al completarla, la próxima se agenda
-para el siguiente día programado posterior a la finalización y aparece cuando
-llega ese día. Si ayer quedó pendiente, hoy continúa la misma ocasión; no se
-crea una segunda. Una ocasión completada se muestra como hecha durante el día
-familiar de Buenos Aires y después permanece en el historial.
+Las tareas simples permanecen pendientes hasta completarlas o descartarlas, sin
+necesidad de elegir días. La repetición indica cuándo vuelve una actividad después
+de hacerla. Las rutinas nuevas de la interfaz conservan como máximo un pendiente
+ordinario por responsabilidad: uno común para tareas compartidas o uno por persona
+en tareas individuales. Al completarlo, la próxima ocasión se programa para el
+siguiente día elegido posterior a la finalización familiar y se persiste cuando
+llega ese día. Las rutinas antiguas que vencen diariamente conservan ese comportamiento
+hasta cambiarlo explícitamente; clientes que omiten política mantienen compatibilidad.
+
+Convertir entre simple y rutina conserva pendientes actuales. Al quitar repetición
+se mantienen además las excepciones futuras editadas a mano, sin generar nuevas
+ocasiones ordinarias. Esas excepciones son compromisos explícitos independientes.
+Descartar una ocasión individual no descarta las de las demás personas.
+Una ocasión completada se muestra como hecha durante el día familiar y después
+permanece en el historial. Deshacer ese día se bloquea si ya existe una ocasión
+posterior persistida para la misma responsabilidad; una previsión no lo bloquea.
 
 Las tareas permiten navegar diez años hacia atrás y seis meses hacia adelante.
 Hoy sigue automáticamente el día de Buenos Aires; elegir una fecha la fija.
@@ -49,7 +58,8 @@ potenciales. Las excepciones futuras se guardan al editar solo esa ocasión;
 las acciones de completar, asumir y omitir se realizan desde Hoy.
 
 Editar permite distinguir la ocasión actual de la programación futura.
-Finalizar una rutina detiene las ocasiones futuras y conserva los pendientes.
+Finalizar una rutina detiene la generación futura y conserva los pendientes y
+las excepciones futuras editadas explícitamente.
 Archivar además oculta las tareas pendientes de las vistas activas. Restaurar
 reanuda a partir de esa fecha y no crea incumplimientos retroactivos.
 

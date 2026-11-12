@@ -1,0 +1,21 @@
+.dialog :is(button, summary, select, input:not([type="checkbox"])) {
+  min-height: 44px;
+}
+
+.dialog label:has(input[type="checkbox"]) {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.dialog summary {
+  padding: 12px;
+  cursor: pointer;
+}
+
+.dialog details[open] > summary {
+  margin-bottom: 12px;
+}
+
+.dialog [data-task-cancel] {
+  color: #56645a;
+}

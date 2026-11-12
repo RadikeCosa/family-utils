@@ -4,7 +4,9 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, families, members, occurrences, taskAssignees, tasks } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
-import { FAMILY_TIME_ZONE, familyDayInterval, getFamilyDay, isTaskDateInRange, taskLogicalKey, taskListEtag } from "@/lib/tasks/family-day";
+import { TASK_LIST_VERSION, FAMILY_TIME_ZONE, familyDayInterval, getFamilyDay, isTaskDateInRange, taskLogicalKey, taskListEtag } from "@/lib/tasks/family-day";
+import { effectiveTaskDate, compareDailyTasks } from "@/lib/tasks/daily-order";
+import { occurrencePolicyValues } from "@/lib/tasks/occurrence-policy";
 import { expectedOccurrences } from "@/lib/tasks/schedule-server";
 import { taskGenerationMode } from "@/lib/tasks/generation-mode";
 import { materializeInTransaction, materializeOccurrences } from "@/lib/tasks/materialize";
@@ -51,7 +53,7 @@ export async function GET(request: Request) {
   if (params.has("cursor")) {
     try {
       const cursor = JSON.parse(Buffer.from(params.get("cursor")!, "base64url").toString("utf8"));
-      if (cursor.date !== selectedDate || cursor.revision !== revision || cursor.section !== (params.get("section") ?? "daily")) return NextResponse.json({ error: "La lista cambió. Actualizamos las tareas.", code: "STALE_CURSOR" }, { status: 409 });
+      if (cursor.listVersion !== TASK_LIST_VERSION || cursor.date !== selectedDate || cursor.revision !== revision || cursor.section !== (params.get("section") ?? "daily")) return NextResponse.json({ error: "La lista cambió. Actualizamos las tareas.", code: "STALE_CURSOR" }, { status: 409 });
       if (!Number.isSafeInteger(cursor.offset) || cursor.offset < 0) throw new Error("cursor");
       offset = cursor.offset;
     } catch { return NextResponse.json({ error: "El cursor no es válido." }, { status: 400 }); }
@@ -75,6 +77,9 @@ export async function GET(request: Request) {
       taskScheduledDate: tasks.scheduledDate,
       taskScheduledTime: tasks.scheduledTime,
       taskAssignmentMode: tasks.assignmentMode,
+      taskCarryPolicy: tasks.carryPolicy,
+      createdAt: occurrences.createdAt,
+      explicitException: sql<boolean>`EXISTS (SELECT 1 FROM audit_events a WHERE a.family_id = ${member.familyId} AND a.entity_type = 'occurrence' AND a.entity_id = ${occurrences.id} AND a.action = 'edited' AND a.before ? 'task')`,
       repeatWeekdays: tasks.repeatWeekdays,
       carryPolicy: occurrences.carryPolicySnapshot,
       assignmentMode: occurrences.assignmentModeSnapshot,
@@ -136,6 +141,7 @@ export async function GET(request: Request) {
 
   const items = data.map(({ assigneeIdsSnapshot, ...item }) => ({
     ...item,
+    effectiveDate: effectiveTaskDate(item.dueDate, item.createdAt),
     kind: "occurrence" as const,
     key: taskLogicalKey(item.taskId, item.responsibilityMemberId, item.generationDate),
     skipped: skippedIds.has(item.id),
@@ -145,6 +151,7 @@ export async function GET(request: Request) {
   const preview = forecasts.map(({ task, responsibilityMemberId, generationDate, key }) => ({
     id: null, kind: "forecast" as const, key, taskId: task.id, taskStatus: task.status, taskVersion: task.version,
     title: task.title, description: task.description, taskTitle: task.title, taskDescription: task.description,
+    taskCarryPolicy: task.carryPolicy, effectiveDate: generationDate, createdAt: task.createdAt,
     taskScheduledDate: task.scheduledDate, taskScheduledTime: task.scheduledTime, taskAssignmentMode: task.assignmentMode,
     repeatWeekdays: task.repeatWeekdays, carryPolicy: task.carryPolicy, assignmentMode: task.assignmentMode,
     dueDate: generationDate, generationDate, scheduledTime: task.scheduledTime, responsibilityMemberId,
@@ -155,8 +162,8 @@ export async function GET(request: Request) {
   const possible = selectedDate > today ? items.filter((item) => item.status === "open" && (!item.dueDate || item.dueDate < selectedDate) && (!item.repeatWeekdays?.length || item.carryPolicy === "carry_forward")) : [];
   const possibleKeys = new Set(possible.map((item) => item.key));
   const daily = [...items.filter((item) => !possibleKeys.has(item.key) && !(selectedDate > today && item.status === "open" && item.dueDate && item.dueDate < selectedDate)), ...preview];
-  daily.sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "") || (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? "") || a.key.localeCompare(b.key));
-  possible.sort((a, b) => a.key.localeCompare(b.key));
+  daily.sort(compareDailyTasks);
+  possible.sort(compareDailyTasks);
   const section = params.get("section") ?? "daily";
   if (section !== "daily" && section !== "possible") return NextResponse.json({ error: "Sección inválida." }, { status: 400 });
   const list = section === "possible" ? possible : daily;
@@ -165,7 +172,7 @@ export async function GET(request: Request) {
     familyId: member.familyId, memberId: member.memberId, revision,
     total: daily.length, possibleTotal: possible.length,
     counts: { open: daily.filter((item) => item.status === "open").length, completed: daily.filter((item) => item.status === "completed").length },
-    nextCursor: offset + 50 < list.length ? Buffer.from(JSON.stringify({ date: selectedDate, revision, section, offset: offset + 50 })).toString("base64url") : null,
+    nextCursor: offset + 50 < list.length ? Buffer.from(JSON.stringify({ listVersion: TASK_LIST_VERSION, date: selectedDate, revision, section, offset: offset + 50 })).toString("base64url") : null,
     tasks: list.slice(offset, offset + 50),
   }, { headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
@@ -208,7 +215,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid assignees" }, { status: 400 });
   }
   const assigneeIds = [...new Set(assigneeInput as string[])];
-  if (!assignmentMode || !carryPolicy || (assignmentMode === "individual" && assigneeIds.length === 0) || (carryPolicy === "carry_forward" && weekdays.length === 0)) {
+  if (!assignmentMode || !carryPolicy || (assignmentMode === "individual" && assigneeIds.length === 0)) {
     return NextResponse.json({ error: "Invalid task settings" }, { status: 400 });
   }
 
@@ -250,8 +257,7 @@ export async function POST(request: Request) {
       scheduledTimeSnapshot: task.scheduledTime,
       assignmentModeSnapshot: validAssignmentMode,
       assigneeIdsSnapshot: assigneeIds,
-      carryPolicySnapshot: validCarryPolicy,
-      carryForward: validCarryPolicy === "carry_forward",
+      ...occurrencePolicyValues(validCarryPolicy),
       responsibilityMemberId,
     }))).returning();
 

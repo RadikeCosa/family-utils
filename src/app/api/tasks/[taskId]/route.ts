@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { auditEvents, members, occurrences, taskAssignees, tasks } from "@/db/schema";
@@ -6,6 +6,7 @@ import { getMemberContext } from "@/lib/auth/context";
 import { getFamilyDay } from "@/lib/tasks/rules";
 import { expectedOccurrences, occurrenceValues } from "@/lib/tasks/schedule-server";
 import { isTaskDateInRange } from "@/lib/tasks/family-day";
+import { reconcileTaskEdit } from "@/lib/tasks/edit-series";
 import { materializeInTransaction } from "@/lib/tasks/materialize";
 
 export const runtime = "nodejs";
@@ -68,16 +69,15 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   let weekdays: number[] = [];
-  let carryPolicy: "expires_daily" | "carry_forward" = "expires_daily";
+  let carryPolicy: "expires_daily" | "carry_forward" | undefined;
   if (scope === "future") {
     const weekdayInput = body.repeatWeekdays ?? [];
     if (!Array.isArray(weekdayInput) || weekdayInput.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
       return NextResponse.json({ error: "Los días de repetición no son válidos." }, { status: 400 });
     }
     weekdays = [...new Set(weekdayInput as number[])];
-    if (body.carryPolicy !== "expires_daily" && body.carryPolicy !== "carry_forward") return NextResponse.json({ error: "Elegí qué hacer con los pendientes." }, { status: 400 });
-    carryPolicy = body.carryPolicy;
-    if (carryPolicy === "carry_forward" && !weekdays.length) return NextResponse.json({ error: "El pendiente conservado requiere días de repetición." }, { status: 400 });
+    if (body.carryPolicy !== undefined && body.carryPolicy !== "expires_daily" && body.carryPolicy !== "carry_forward") return NextResponse.json({ error: "Elegí qué hacer con los pendientes." }, { status: 400 });
+    carryPolicy = body.carryPolicy as typeof carryPolicy;
   }
   if (scope === "occurrence" && !forecast && (!occurrenceId || !Number.isSafeInteger(expectedOccurrenceVersion))) {
     return NextResponse.json({ error: "La ocasión cambió. Actualizá y volvé a intentar." }, { status: 409 });
@@ -101,12 +101,12 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const previousAssignments = await tx.select({ memberId: taskAssignees.memberId }).from(taskAssignees)
       .where(eq(taskAssignees.taskId, taskId))
-      .orderBy(asc(taskAssignees.memberId));
+      .orderBy(taskAssignees.memberId);
+    carryPolicy ??= task.carryPolicy;
     const beforeTask = { ...task, assigneeIds: previousAssignments.map(({ memberId }) => memberId) };
     const now = new Date();
 
     if (scope === "occurrence") {
-      if (dueDateValue && dueDateValue < getFamilyDay(now)) return { kind: "past-date" as const };
       let occurrence: typeof occurrences.$inferSelect | undefined;
       if (forecast) {
         if (task.carryPolicy !== "expires_daily" || !task.repeatWeekdays?.length) return { kind: "conflict" as const };
@@ -129,7 +129,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       if (!occurrence || occurrence.status !== "open") return { kind: "conflict" as const };
       if (!forecast && occurrence.version !== expectedOccurrenceVersion) return { kind: "conflict" as const };
-      if (dueDateValue && dueDateValue < getFamilyDay(now)) return { kind: "past-date" as const };
+      if (dueDateValue && dueDateValue < getFamilyDay(now) && dueDateValue !== occurrence.dueDate) return { kind: "past-date" as const };
       if (assignmentMode === "individual" && occurrence.generationDate) {
         const [duplicate] = await tx.select({ id: occurrences.id }).from(occurrences)
           .where(and(
@@ -177,9 +177,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const today = getFamilyDay(now);
+    const [targetOccurrence] = occurrenceId ? await tx.select().from(occurrences).where(and(eq(occurrences.id, occurrenceId), eq(occurrences.taskId, taskId), eq(occurrences.familyId, member.familyId))).for("update") : [];
+    const originalDate = targetOccurrence ? targetOccurrence.dueDate : task.scheduledDate;
+    const reschedule = body.dueDate !== undefined && dueDateValue !== originalDate;
     const selectedDate = validDate(dueDateValue) ? dueDateValue : null;
     const scheduleStart = selectedDate && selectedDate > today ? selectedDate : today;
-    const scheduledDate = weekdays.length ? nextScheduledDay(scheduleStart, weekdays) : selectedDate && selectedDate >= today ? selectedDate : selectedDate ? today : null;
+    if (!task.repeatWeekdays?.length && !weekdays.length && selectedDate && selectedDate < today && selectedDate !== task.scheduledDate && selectedDate !== originalDate) return { kind: "past-date" as const };
+    const scheduledDate = weekdays.length ? nextScheduledDay(scheduleStart, weekdays) : selectedDate;
     const [updatedTask] = await tx.update(tasks)
       .set({
         title,
@@ -197,47 +201,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       .returning();
     if (!updatedTask) return { kind: "conflict" as const };
 
-    const oldFuture = await tx.update(occurrences)
-      .set({ status: "archived", archivedAt: now, version: sql`${occurrences.version} + 1` })
-      .where(and(
-        eq(occurrences.taskId, taskId),
-        eq(occurrences.status, "open"),
-        or(isNull(occurrences.dueDate), gte(occurrences.dueDate, today)),
-      ))
-      .returning();
-    for (const occurrence of oldFuture) {
-      await tx.insert(auditEvents).values({
-        familyId: member.familyId,
-        actorMemberId: member.memberId,
-        entityType: "occurrence",
-        entityId: occurrence.id,
-        action: "superseded_by_task_edit",
-        before: { status: "open", dueDate: occurrence.dueDate },
-        after: occurrence,
-      });
-    }
-
     await tx.delete(taskAssignees).where(eq(taskAssignees.taskId, taskId));
     if (assigneeIds.length) await tx.insert(taskAssignees).values(assigneeIds.map((memberId) => ({ taskId, memberId })));
-
-    let createdOccurrences: (typeof occurrences.$inferSelect)[] = [];
-    if (!weekdays.length) {
-      const responsibilities = assignmentMode === "individual" ? assigneeIds : [null];
-      createdOccurrences = await tx.insert(occurrences).values(responsibilities.map((responsibilityMemberId) => ({
-        taskId,
-        familyId: member.familyId,
-        dueDate: scheduledDate,
-        generationDate: scheduledDate,
-        titleSnapshot: updatedTask.title,
-        descriptionSnapshot: updatedTask.description,
-        scheduledTimeSnapshot: updatedTask.scheduledTime,
-        assignmentModeSnapshot: updatedTask.assignmentMode,
-        assigneeIdsSnapshot: assigneeIds,
-        carryPolicySnapshot: updatedTask.carryPolicy,
-        carryForward: false,
-        responsibilityMemberId,
-      }))).returning();
-    }
+    const createdOccurrences = await reconcileTaskEdit(tx, task, updatedTask, assigneeIds, member.memberId, today, now, reschedule);
 
     const afterTask = { ...updatedTask, assigneeIds };
     await tx.insert(auditEvents).values({
@@ -252,6 +218,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     await materializeInTransaction(tx, member.familyId, now, taskId);
     await tx.execute(sql`UPDATE families SET revision = revision + 1, updated_at = now() WHERE id = ${member.familyId}`);
     return { kind: "ok" as const, task: updatedTask, occurrences: createdOccurrences, shouldMaterialize: !!weekdays.length };
+  }).catch((error: unknown) => {
+    if (error instanceof Error && error.message === "TASK_PENDING_CONFLICT") return { kind: "conflict" as const };
+    throw error;
   });
 
   if (result.kind === "missing") return NextResponse.json({ error: "No encontramos esa tarea." }, { status: 404 });

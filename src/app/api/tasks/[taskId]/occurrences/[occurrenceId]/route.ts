@@ -53,12 +53,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (assignee) return { kind: "not-claimable" as const };
     }
     if (action === "complete" && current.status !== "open") return { kind: "conflict" as const };
-    if (action === "skip" && (current.status !== "open" || task.status !== "active")) return { kind: "conflict" as const };
+    if (action === "skip" && current.status !== "open") return { kind: "conflict" as const };
     if (action === "undo") {
       if (current.status !== "completed" || !canUndoCompletion(member.role, current.completedByMemberId, member.memberId)) {
         return { kind: "forbidden" as const };
       }
-      const generationDate = current.generationDate ?? current.dueDate;
+      const generationDate = current.generationDate ?? current.dueDate ?? getFamilyDay(current.createdAt);
       if (current.carryForward && generationDate) {
         const [laterOccurrence] = await tx.select({ id: occurrences.id }).from(occurrences)
           .where(and(

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { createAuthClient } from "better-auth/react";
 import { getFamilyDay, isTaskDateInRange, labelTaskDay, taskDateBounds } from "@/lib/tasks/family-day";
 import styles from "../page.module.css";
+import TaskDialog from "./TaskDialog";
 
 const authClient = createAuthClient();
 type Member = { id: string; name: string; role: "administrator" | "member" };
@@ -17,6 +18,7 @@ type Task = {
   kind: "occurrence" | "forecast";
   generationDate: string | null;
   skipped?: boolean;
+  explicitException?: boolean;
   taskId: string;
   title: string;
   description: string | null;
@@ -31,6 +33,8 @@ type Task = {
   repeatWeekdays: number[] | null;
   carryPolicy: "expires_daily" | "carry_forward";
   dueDate: string | null;
+  effectiveDate?: string;
+  taskCarryPolicy?: "expires_daily" | "carry_forward";
   scheduledTime: string | null;
   responsibilityMemberId: string | null;
   claimedByMemberId: string | null;
@@ -107,7 +111,16 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [syncState, setSyncState] = useState<"idle" | "loading" | "synced" | "error">("idle");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [createRepeat, setCreateRepeat] = useState("none");
+  const [createWeekdays, setCreateWeekdays] = useState<number[]>([]);
+  const createOptions = useRef<HTMLDetailsElement>(null);
+  function openCreate() { setError(""); setCreateRepeat("none"); setCreateWeekdays([]); setShowCreate(true); }
+  function revealOption(form: HTMLFormElement, name: string) {
+    if (createOptions.current) createOptions.current.open = true;
+    requestAnimationFrame(() => form.querySelector<HTMLElement>(`[name="${name}"]`)?.focus());
+  }
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editScope, setEditScope] = useState<"occurrence" | "future">("future");
   const [editAssignmentMode, setEditAssignmentMode] = useState<"shared" | "individual">("shared");
@@ -130,7 +143,6 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyFilterValue, setHistoryFilter] = useURLState("estado", "all", "replace", ["all", "completed", "archived"]);
   const historyFilter = historyFilterValue as "all" | "completed" | "archived";
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const etagRef = useRef<string | null>(null);
   const lastActivityAt = useRef(0);
@@ -377,10 +389,14 @@ export default function Home() {
   }
 
   async function createTask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
-    const formData = new FormData(event.currentTarget);
-    const repeat = formData.getAll("weekday").map(Number);
+    event.preventDefault(); setError("");
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const repeat = createRepeat === "daily" ? [0,1,2,3,4,5,6] : createRepeat === "custom" ? createWeekdays : [];
     const assigneeIds = formData.getAll("assignee").map(String);
+    if (createRepeat === "custom" && !repeat.length) { setError("Elegí al menos un día para repetir."); revealOption(form, "weekday"); return; }
+    if (formData.get("assignmentMode") === "individual" && !assigneeIds.length) { setError("Elegí al menos una persona responsable."); revealOption(form, "assignee"); return; }
+    setBusy(true);
     const body = {
       title: String(formData.get("title") ?? ""),
       description: String(formData.get("description") ?? ""),
@@ -389,10 +405,14 @@ export default function Home() {
       repeatWeekdays: repeat,
       assignmentMode: String(formData.get("assignmentMode") ?? "shared"),
       assigneeIds,
-      carryPolicy: String(formData.get("carryPolicy") ?? "expires_daily"),
+      carryPolicy: "carry_forward",
     };
-    try { await requestJson("/api/tasks", { method: "POST", body: JSON.stringify(body) }); setShowCreate(false); await refresh(true); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo guardar la tarea."); }
+    try { await requestJson("/api/tasks", { method: "POST", body: JSON.stringify(body) }); setShowCreate(false); setNotice("Tarea creada. Sigue pendiente hasta que la marques hecha."); await refresh(true); }
+    catch (caught) {
+      const message = caught instanceof Error ? caught.message : "No se pudo guardar la tarea.";
+      setError(message);
+      if (caught instanceof Error && "status" in caught && caught.status === 400) revealOption(form, /date|fecha/i.test(message) ? "dueDate" : /time|horario/i.test(message) ? "scheduledTime" : /assignee|responsable|settings/i.test(message) ? "assignee" : "description");
+    }
     finally { setBusy(false); }
   }
 
@@ -400,7 +420,7 @@ export default function Home() {
     event.preventDefault();
     if (!editingTask) return;
     setBusy(true); setError("");
-    const scope = editingTask.repeatWeekdays?.length ? editScope : "future";
+    const scope = editingTask.repeatWeekdays?.length || editingTask.explicitException ? editScope : "future";
     const assigneeIds = editAssigneeIds;
     const body = {
       scope,
@@ -415,7 +435,7 @@ export default function Home() {
       assignmentMode: editAssignmentMode,
       assigneeIds,
       repeatWeekdays: editWeekdays,
-      carryPolicy: editCarryPolicy,
+      carryPolicy: !editingTask.repeatWeekdays?.length || !editWeekdays.length ? "carry_forward" : editCarryPolicy,
     };
     try {
       await requestJson(`/api/tasks/${editingTask.taskId}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -464,7 +484,7 @@ export default function Home() {
 
   function openTaskEditor(task: Task) {
     setError("");
-    const scope = task.repeatWeekdays?.length && !(task.kind === "forecast" && task.carryPolicy === "carry_forward") ? "occurrence" : "future";
+    const scope = (task.repeatWeekdays?.length || task.explicitException) && !(task.kind === "forecast" && task.carryPolicy === "carry_forward") ? "occurrence" : "future";
     setEditScope(scope);
     setEditAssignmentMode(scope === "occurrence" ? task.assignmentMode : task.taskAssignmentMode);
     setEditAssigneeIds(scope === "occurrence"
@@ -472,10 +492,10 @@ export default function Home() {
       : task.taskAssignees.map(({ memberId }) => memberId));
     setEditTitle(scope === "occurrence" ? task.title : task.taskTitle);
     setEditDescription((scope === "occurrence" ? task.description : task.taskDescription) ?? "");
-    setEditDueDate((scope === "occurrence" ? task.dueDate : task.taskScheduledDate) ?? "");
-    setEditScheduledTime((scope === "occurrence" ? task.scheduledTime : task.taskScheduledTime) ?? "");
+    setEditDueDate((scope === "occurrence" || !task.repeatWeekdays?.length ? task.dueDate : task.taskScheduledDate) ?? "");
+    setEditScheduledTime(((scope === "occurrence" ? task.scheduledTime : task.taskScheduledTime) ?? "").slice(0, 5));
     setEditWeekdays(task.repeatWeekdays ?? []);
-    setEditCarryPolicy(task.carryPolicy);
+    setEditCarryPolicy(task.taskCarryPolicy ?? task.carryPolicy);
     setEditingTask(task);
   }
 
@@ -488,10 +508,10 @@ export default function Home() {
       : editingTask.taskAssignees.map(({ memberId }) => memberId));
     setEditTitle(value === "occurrence" ? editingTask.title : editingTask.taskTitle);
     setEditDescription((value === "occurrence" ? editingTask.description : editingTask.taskDescription) ?? "");
-    setEditDueDate((value === "occurrence" ? editingTask.dueDate : editingTask.taskScheduledDate) ?? "");
-    setEditScheduledTime((value === "occurrence" ? editingTask.scheduledTime : editingTask.taskScheduledTime) ?? "");
+    setEditDueDate((value === "occurrence" || !editingTask.repeatWeekdays?.length ? editingTask.dueDate : editingTask.taskScheduledDate) ?? "");
+    setEditScheduledTime(((value === "occurrence" ? editingTask.scheduledTime : editingTask.taskScheduledTime) ?? "").slice(0, 5));
     setEditWeekdays(editingTask.repeatWeekdays ?? []);
-    setEditCarryPolicy(editingTask.carryPolicy);
+    setEditCarryPolicy(editingTask.taskCarryPolicy ?? editingTask.carryPolicy);
   }
 
   function toggleEditAssignee(memberId: string) {
@@ -552,11 +572,11 @@ export default function Home() {
         </header>
 
         <div data-task-body className={styles.pageBody}>
-          {error && <p className={styles.errorMessage} role="alert">{error}</p>}
+          {error && !showCreate && !editingTask && <p className={styles.errorMessage} role="alert">{error}</p>}
 
           <div data-page-heading className={styles.greetingRow}>
             <div><p className={styles.dateLabel}>{dateLabel}</p><h1>Un día a la vez<span>.</span></h1><p className={styles.subtitle}>{isToday ? "Esto es lo que tenemos para hoy." : past ? "Consultá las tareas y la actividad de esta fecha." : "Un vistazo a lo que viene."}</p></div>
-            <div className={styles.createActions}>{!past && <button className={styles.addButton} onClick={() => setShowCreate(true)}><span aria-hidden="true">＋</span> Nueva tarea</button>}</div>
+            <div className={styles.createActions}>{!past && <button className={styles.addButton} onClick={openCreate}><span aria-hidden="true">＋</span> Nueva tarea</button>}</div>
           </div>
 
           <DateNavigation className={styles.dateNav} date={selectedDate} today={familyDay} min={bounds.earliest} max={bounds.latest} onSelect={navigateDate} />
@@ -589,7 +609,10 @@ export default function Home() {
               const people = task.assignmentMode === "individual"
                 ? individualOwner ?? "Responsable archivado"
                 : task.assignees.map((person) => person.name).join(", ") || (task.claimedByMemberId ? members.find((person) => person.id === task.claimedByMemberId)?.name ?? "Asumida" : isToday ? "Disponible para asumir" : "Sin responsables asignados");
-              const meta = task.dueDate ? `${task.dueDate === familyDay ? "Hoy" : task.dueDate}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}` : task.scheduledTime ? `Hoy · ${task.scheduledTime}` : "Sin fecha";
+              const effective = task.effectiveDate ?? task.dueDate;
+              const meta = effective && effective < familyDay && task.status === "open"
+                ? `Pendiente desde ${labelTaskDay(effective)}${task.scheduledTime ? ` · Horario original: ${task.scheduledTime}` : ""}`
+                : task.dueDate ? `${task.dueDate > familyDay ? "Programada para " : ""}${task.dueDate === familyDay ? "Hoy" : labelTaskDay(task.dueDate)}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}` : task.scheduledTime ? `Sin fecha · ${task.scheduledTime}` : "Sin fecha";
               const tone = ["lavender", "mint", "peach"][index % 3];
               return <article className={`${styles.taskCard} ${isComplete ? styles.taskDone : ""}`} key={task.key ?? task.id} data-task-key={task.key ?? task.id}>
                 {!isToday || task.kind === "forecast" || task.status === "missed" || task.status === "archived" ? <span className={styles.doneBadge} aria-disabled={task.kind === "forecast" && isToday ? true : undefined}>{task.status === "completed" ? "Hecha" : task.status === "missed" ? "Vencida" : task.status === "archived" ? task.skipped ? "Omitida" : "Archivada" : task.kind === "forecast" && isToday ? "Pendiente de actualizar" : "Programada"}</span> : isComplete ? canUndo
@@ -630,38 +653,41 @@ export default function Home() {
         </div>
       </section>
 
-      {showCreate && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowCreate(false); }}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="create-title"><button className={styles.modalClose} onClick={() => setShowCreate(false)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>TAREAS Y RUTINAS</p><h2 id="create-title">Una cosa a la vez</h2><p className={styles.modalIntro}>Empezá con el nombre. Lo demás es opcional.</p><form className={styles.taskForm} onSubmit={createTask}>
+      {showCreate && <TaskDialog labelledBy="create-title" onClose={() => setShowCreate(false)}><button className={styles.modalClose} onClick={() => setShowCreate(false)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>TAREAS Y RUTINAS</p><h2 id="create-title">Nueva tarea</h2><p className={styles.modalIntro}>Sigue pendiente hasta que la marques hecha.</p>{selectedDate > familyDay && <p className={styles.modalIntro}>Programada para {labelTaskDay(selectedDate)}.</p>}<form className={styles.taskForm} onSubmit={createTask} onInvalidCapture={(event) => { const field = event.target as HTMLInputElement; const details = field.closest("details"); if (details) { details.open = true; requestAnimationFrame(() => field.focus()); } }}>
         <label>Nombre<input name="title" required maxLength={160} placeholder="Por ejemplo, poner la mesa" /></label>
+        <details ref={createOptions}><summary className={styles.filterButton}>Más opciones</summary><div className={styles.taskForm}>
         <label>Nota <span>(opcional)</span><textarea name="description" rows={2} maxLength={3000} placeholder="Un detalle útil para quien la haga" /></label>
         <div className={styles.formRow}><label>Fecha <span>(opcional)</span><input name="dueDate" type="date" defaultValue={selectedDate > familyDay ? selectedDate : ""} min={familyDay} max={bounds.latest} /></label><label>Horario <span>(opcional)</span><input name="scheduledTime" type="time" /></label></div>
         <label>Responsables <span>(opcional)</span><select name="assignmentMode" defaultValue="shared"><option value="shared">Tarea compartida o disponible</option><option value="individual">Una tarea por persona elegida</option></select></label>
         <div className={styles.assigneeChoices}>{members.map((person) => <label key={person.id}><input type="checkbox" name="assignee" value={person.id} /> {person.name}</label>)}</div>
-        <fieldset><legend>Repetición <span>(opcional)</span></legend><div className={styles.weekdayChoices}>{weekdayOptions.map(([day,label]) => <label key={day}><input type="checkbox" name="weekday" value={day} />{label}</label>)}</div></fieldset>
-        <label>Si queda pendiente<select name="carryPolicy" defaultValue="expires_daily"><option value="expires_daily">Vence al terminar el día</option><option value="carry_forward">Sigue pendiente hasta completarse</option></select></label>
-        {error && <p className={styles.errorMessage} role="alert">{error}</p>}<div className={styles.modalActions}><button type="button" className={styles.cancelButton} onClick={() => setShowCreate(false)}>Cancelar</button><button className={styles.submitButton} disabled={busy}>{busy ? "Guardando…" : "Crear tarea"}</button></div>
-      </form></section></div>}
+        <label>Repetición<select aria-label="Repetición" value={createRepeat} onChange={(event) => setCreateRepeat(event.target.value)}><option value="none">No se repite</option><option value="daily">Todos los días</option><option value="custom">Elegir días</option></select></label>
+        {createRepeat === "custom" && <fieldset><legend>Días de repetición</legend><div className={styles.weekdayChoices}>{weekdayOptions.map(([day,label]) => <label key={day}><input type="checkbox" name="weekday" aria-label={["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"][day]} checked={createWeekdays.includes(day)} onChange={() => setCreateWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day])} />{label}</label>)}</div></fieldset>}
+        {createRepeat !== "none" && <p className={styles.modalIntro}>Queda un solo pendiente. Después de hacerla, vuelve el próximo día elegido.</p>}
+        </div></details>
+        {error && <p className={styles.errorMessage} role="alert">{error}</p>}<div className={styles.modalActions}><button type="button" data-task-cancel className={styles.cancelButton} onClick={() => setShowCreate(false)}>Cancelar</button><button className={styles.submitButton} disabled={busy}>{busy ? "Guardando…" : "Crear tarea"}</button></div>
+      </form></TaskDialog>}
 
-      {editingTask && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingTask(null); }}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="edit-title"><button className={styles.modalClose} onClick={() => setEditingTask(null)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>EDITAR TAREA O RUTINA</p><h2 id="edit-title">{editingTask.title}</h2><p className={styles.modalIntro}>Los cambios quedan registrados con quién los hizo y cuándo.</p><form className={styles.taskForm} onSubmit={saveTaskEdit}>
-        {editingTask.repeatWeekdays?.length && !(editingTask.kind === "forecast" && editingTask.carryPolicy === "carry_forward") ? <label>Aplicar cambios<select value={editScope} onChange={(event) => changeEditScope(event.target.value as "occurrence" | "future")}><option value="occurrence">Solo esta ocasión</option><option value="future">Programación desde hoy</option></select></label> : <p className={styles.modalIntro}>Se actualizará la programación desde hoy.</p>}
-        {editScope === "future" && <p className={styles.modalIntro}>Los cambios aplican desde hoy, {labelTaskDay(familyDay)}{selectedDate > familyDay ? `, no desde ${labelTaskDay(selectedDate)}` : ""}.</p>}
+      {editingTask && <TaskDialog labelledBy="edit-title" onClose={() => setEditingTask(null)}><button className={styles.modalClose} onClick={() => setEditingTask(null)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>{editingTask.repeatWeekdays?.length ? "EDITAR RUTINA" : "EDITAR TAREA"}</p><h2 id="edit-title">{editingTask.title}</h2><p className={styles.modalIntro}>Los cambios quedan registrados con quién los hizo y cuándo.</p><form className={styles.taskForm} onSubmit={saveTaskEdit}>
+        {editingTask.repeatWeekdays?.length && !(editingTask.kind === "forecast" && editingTask.carryPolicy === "carry_forward") ? <label>Aplicar cambios<select value={editScope} onChange={(event) => changeEditScope(event.target.value as "occurrence" | "future")}><option value="occurrence">Solo esta ocasión</option><option value="future">Programación desde hoy</option></select></label> : <p className={styles.modalIntro}>{editingTask.repeatWeekdays?.length ? "Se actualizará la programación desde hoy." : "Los cambios se aplican a esta tarea pendiente."}</p>}
+        {editScope === "future" && !!editingTask.repeatWeekdays?.length && <p className={styles.modalIntro}>Los cambios aplican desde hoy, {labelTaskDay(familyDay)}{selectedDate > familyDay ? `, no desde ${labelTaskDay(selectedDate)}` : ""}.</p>}
         <label>Nombre<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} required maxLength={160} /></label>
         <label>Nota <span>(opcional)</span><textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} rows={2} maxLength={3000} /></label>
         <div className={styles.formRow}><label>Fecha <span>(opcional)</span><input value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} type="date" max={bounds.latest} /></label><label>Horario <span>(opcional)</span><input value={editScheduledTime} onChange={(event) => setEditScheduledTime(event.target.value)} type="time" /></label></div>
         <label>Responsables<select value={editAssignmentMode} onChange={(event) => { const value = event.target.value as "shared" | "individual"; setEditAssignmentMode(value); if (value === "individual" && editScope === "occurrence" && editAssigneeIds.length > 1) setEditAssigneeIds((current) => current.slice(0, 1)); }}><option value="shared">Compartida o disponible</option><option value="individual">Una ocasión por persona</option></select></label>
         <div className={styles.assigneeChoices}>{members.map((person) => <label key={person.id}><input type="checkbox" checked={editAssigneeIds.includes(person.id)} onChange={() => toggleEditAssignee(person.id)} /> {person.name}</label>)}</div>
         {editAssignmentMode === "individual" && editScope === "occurrence" && <p className={styles.modalIntro}>Para esta ocasión elegí una sola persona.</p>}
-        {editScope === "future" && <><fieldset><legend>Repetición <span>(opcional)</span></legend><div className={styles.weekdayChoices}>{weekdayOptions.map(([day,label]) => <label key={day}><input type="checkbox" checked={editWeekdays.includes(day)} onChange={() => setEditWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day])} />{label}</label>)}</div></fieldset><label>Si queda pendiente<select value={editCarryPolicy} onChange={(event) => setEditCarryPolicy(event.target.value as "expires_daily" | "carry_forward")}><option value="expires_daily">Vence al terminar el día</option><option value="carry_forward">Sigue pendiente hasta completarse</option></select></label></>}
-        {error && <p className={styles.errorMessage} role="alert">{error}</p>}<div className={styles.modalActions}><button type="button" className={styles.cancelButton} onClick={() => setEditingTask(null)}>Cancelar</button><button className={styles.submitButton} disabled={busy}>{busy ? "Guardando…" : "Guardar cambios"}</button></div>
-      </form></section></div>}
+        {editScope === "future" && <><label>Repetición<select aria-label="Repetición" value={!editWeekdays.length ? "none" : editWeekdays.length === 7 ? "daily" : "custom"} onChange={(event) => setEditWeekdays(event.target.value === "none" ? [] : event.target.value === "daily" ? [0,1,2,3,4,5,6] : [new Date(`${familyDay}T12:00:00Z`).getUTCDay()])}><option value="none">No se repite</option><option value="daily">Todos los días</option><option value="custom">Elegir días</option></select></label>{!!editWeekdays.length && <fieldset><legend>Días de repetición</legend><div className={styles.weekdayChoices}>{weekdayOptions.map(([day,label]) => <label key={day}><input type="checkbox" checked={editWeekdays.includes(day)} onChange={() => setEditWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day])} />{label}</label>)}</div></fieldset>}{!!editingTask.repeatWeekdays?.length && !!editWeekdays.length && (editingTask.taskCarryPolicy ?? editingTask.carryPolicy) === "expires_daily" && <label>Si queda pendiente<select value={editCarryPolicy} onChange={(event) => setEditCarryPolicy(event.target.value as "expires_daily" | "carry_forward")}><option value="expires_daily">Vence al terminar el día</option><option value="carry_forward">Sigue pendiente hasta completarse</option></select></label>}{!!editingTask.repeatWeekdays?.length && !editWeekdays.length && <p className={styles.modalIntro}>Los pendientes actuales y las ocasiones futuras editadas se conservan. No se generan nuevas repeticiones.</p>}</>}
+        {error && <p className={styles.errorMessage} role="alert">{error}</p>}<div className={styles.modalActions}><button type="button" data-task-cancel className={styles.cancelButton} onClick={() => setEditingTask(null)}>Cancelar</button><button className={styles.submitButton} disabled={busy}>{busy ? "Guardando…" : "Guardar cambios"}</button></div>
+      </form></TaskDialog>}
 
-      {taskOptions && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTaskOptions(null); }}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="options-title"><button className={styles.modalClose} onClick={() => setTaskOptions(null)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>OPCIONES DE TAREA</p><h2 id="options-title">{taskOptions.title}</h2><p className={styles.modalIntro}>{taskOptions.taskStatus === "finalized" ? "La tarea está finalizada. Al restaurarla, la programación se reanuda desde hoy." : "El historial de ocasiones completadas se conserva."}</p><div className={styles.modalActions}>
-        {taskOptions.status === "open" && taskOptions.taskStatus === "active" && <button className={styles.smallAction} disabled={busy} onClick={() => { const selected = taskOptions; setTaskOptions(null); void performOccurrence(selected, "skip"); }}>Omitir esta ocasión</button>}
+      {taskOptions && <TaskDialog labelledBy="options-title" onClose={() => setTaskOptions(null)}><button className={styles.modalClose} onClick={() => setTaskOptions(null)} aria-label="Cerrar">×</button><p className={styles.modalEyebrow}>OPCIONES DE TAREA</p><h2 id="options-title">{taskOptions.title}</h2><p className={styles.modalIntro}>{taskOptions.taskStatus === "finalized" ? "La tarea está finalizada. Al restaurarla, la programación se reanuda desde hoy." : "El historial de ocasiones completadas se conserva."}</p><div className={styles.modalActions}>
+        {taskOptions.status === "open" && taskOptions.taskStatus !== "archived" && <button className={styles.smallAction} disabled={busy} onClick={() => { const selected = taskOptions; setTaskOptions(null); void performOccurrence(selected, "skip"); }}>{taskOptions.assignmentMode === "individual" ? taskOptions.responsibilityMemberId === currentMemberId ? "Descartar mi pendiente" : `Descartar pendiente de ${members.find((person) => person.id === taskOptions.responsibilityMemberId)?.name ?? "este integrante"}` : taskOptions.repeatWeekdays?.length ? "Omitir esta ocasión" : "Descartar tarea"}</button>}
         {taskOptions.status === "open" && taskOptions.taskStatus === "active" && <button className={styles.smallAction} onClick={() => { setTaskOptions(null); openTaskEditor(taskOptions); }}>Editar</button>}
-        {currentRole === "administrator" && taskOptions.taskStatus === "active" && <button className={styles.smallAction} disabled={busy} onClick={() => void updateTaskStatus(taskOptions, "finalize")}>Finalizar</button>}
+        {currentRole === "administrator" && taskOptions.taskStatus === "active" && !!taskOptions.repeatWeekdays?.length && <button className={styles.smallAction} disabled={busy} onClick={() => void updateTaskStatus(taskOptions, "finalize")}>Dejar de repetir</button>}
         {currentRole === "administrator" && taskOptions.taskStatus === "finalized" && <button className={styles.smallAction} disabled={busy} onClick={() => void updateTaskStatus(taskOptions, "restore")}>Reanudar</button>}
         {currentRole === "administrator" && taskOptions.taskStatus !== "archived" && <button className={styles.smallAction} disabled={busy} onClick={() => void updateTaskStatus(taskOptions, "archive")}>Archivar</button>}
-        <button type="button" className={styles.cancelButton} onClick={() => setTaskOptions(null)}>Cerrar</button>
-      </div></section></div>}
+        <button type="button" data-task-cancel className={styles.cancelButton} onClick={() => setTaskOptions(null)}>Cerrar</button>
+      </div></TaskDialog>}
 
 
 
