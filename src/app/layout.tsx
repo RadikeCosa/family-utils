@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: "Family Utils — aplicaciones para tu familia",
   description: "Aplicaciones útiles para organizar la vida familiar.",
   applicationName: "Family Utils",
-  manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg", apple: "/icon-180.png" },
+  manifest: "/manifest.webmanifest?v=flower-1",
+  icons: { icon: "/icon.svg?v=flower-1", apple: "/icon-180.png?v=flower-1" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
