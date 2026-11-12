@@ -53,7 +53,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (action === "finalize") {
       const archived = await tx.update(occurrences)
         .set({ status: "archived", archivedAt: now, version: sql`${occurrences.version} + 1` })
-        .where(and(eq(occurrences.taskId, taskId), eq(occurrences.status, "open"), gt(occurrences.dueDate, familyDay)))
+        .where(and(eq(occurrences.taskId, taskId), eq(occurrences.status, "open"), gt(occurrences.dueDate, familyDay), sql`NOT EXISTS (SELECT 1 FROM audit_events a WHERE a.family_id = ${member.familyId} AND a.entity_type = 'occurrence' AND a.entity_id = ${occurrences.id} AND a.action = 'edited' AND a.before ? 'task')`))
         .returning();
       for (const occurrence of archived) {
         await tx.insert(auditEvents).values({

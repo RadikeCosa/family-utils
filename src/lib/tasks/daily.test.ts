@@ -54,3 +54,26 @@ test("historical daylight saving transitions do not move the start into the prio
     assert.equal(getFamilyDay(new Date(endsAt.getTime() - 1)), day);
   }
 });
+
+import { effectiveTaskDate, compareDailyTasks } from "./daily-order.ts";
+import { occurrencePolicyValues } from "./occurrence-policy.ts";
+
+test("completion calendar follows Buenos Aires midnight, not UTC midnight", () => {
+  const schedule = { repeatWeekdays: [0,1,2,3,4,5,6], scheduledDate: "2026-10-01", carryPolicy: "carry_forward" as const };
+  for (const [instant, next] of [["2026-10-13T00:00:00Z", "2026-10-13"], ["2026-10-13T02:59:00Z", "2026-10-13"], ["2026-10-13T03:01:00Z", "2026-10-14"]]) {
+    assert.equal(expectedOccurrenceDay(schedule, "2026-10-13", next, { ...emptyHistory, latestCompletion: new Date(instant) }), next);
+  }
+});
+
+test("undated starts use occasion creation and deterministic open-first ordering", () => {
+  assert.equal(effectiveTaskDate(null, new Date("2026-10-13T00:00:00Z")), "2026-10-12");
+  assert.equal(effectiveTaskDate("2026-10-15", new Date("2026-10-13T00:00:00Z")), "2026-10-15");
+  const open = { status: "open", effectiveDate: "2026-10-12", scheduledTime: null, completedAt: null, key: "b" };
+  const done = { ...open, status: "completed", completedAt: new Date(), key: "a" };
+  assert.ok(compareDailyTasks(open, done) < 0);
+  assert.ok(compareDailyTasks(open, { ...open, key: "c" }) < 0);
+  for (const policy of ["expires_daily", "carry_forward"] as const) {
+    const values = occurrencePolicyValues(policy);
+    assert.equal(values.carryForward, values.carryPolicySnapshot === "carry_forward");
+  }
+});

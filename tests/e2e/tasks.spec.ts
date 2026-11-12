@@ -1,7 +1,8 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { expect, request as playwrightRequest, test, type APIRequestContext } from "@playwright/test";
 import pg from "pg";
-import { addTaskDays, getFamilyDay, taskListEtag } from "../../src/lib/tasks/family-day";
+import AxeBuilder from "@axe-core/playwright";
+import { addTaskDays, getFamilyDay, labelTaskDay, taskListEtag } from "../../src/lib/tasks/family-day";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
 if (process.env.CI && !connectionString) {
@@ -50,7 +51,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterAll(async () => {
-  if (familyId) await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
+  if (familyId) {
+    await pool.query("DELETE FROM task_assignees WHERE task_id IN (SELECT id FROM tasks WHERE family_id=$1)", [familyId]);
+    await pool.query("DELETE FROM families WHERE id=$1", [familyId]);
+  }
   if (authUserId) await pool.query('DELETE FROM "user" WHERE id=$1', [authUserId]);
   await pool?.end();
 });
@@ -140,7 +144,8 @@ async function mockDaily(page: import("@playwright/test").Page, sync: "fast" | "
       generated = true;
       return route.fulfill({ json: { changed: true } });
     }
-    if (url.pathname === "/api/tasks/revision") return route.fulfill({ status: 304 });
+    // WebKit cannot fulfill an intercepted 304; real conditional responses are tested through the API.
+    if (url.pathname === "/api/tasks/revision") return route.fulfill({ json: { revision: generated ? 2 : 1, familyDay: "2026-10-12", generationMode: "explicit_sync" } });
     if (url.pathname !== "/api/tasks") return route.fallback();
     const selectedDate = url.searchParams.get("date") ?? "2026-10-12";
     const taskId = "calendar-task";
@@ -214,14 +219,20 @@ test("future creation and single-occasion editing persist an exception without d
   await page.goto(`/tareas?fecha=${date}`);
   await page.getByRole("button", { name: "Nueva tarea" }).click();
   const create = page.getByRole("dialog");
+  await expect(create).toContainText("Programada para");
+  await create.getByText("Más opciones", { exact: true }).click();
   await expect(create.getByLabel("Fecha", { exact: false })).toHaveValue(date);
   await create.getByLabel("Nombre", { exact: true }).fill(title);
-  for (const input of await create.locator('input[name="weekday"]').all()) await input.check();
+  await create.getByLabel("Repetición", { exact: true }).selectOption("daily");
   await create.getByRole("button", { name: "Crear tarea" }).click();
   await expect(create).toHaveCount(0);
   await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-  const { rows: [task] } = await pool.query("SELECT id,title FROM tasks WHERE family_id=$1 AND title=$2", [familyId, title]);
+  const { rows: [task] } = await pool.query("SELECT id,title,version FROM tasks WHERE family_id=$1 AND title=$2", [familyId, title]);
   expect((await pool.query("SELECT count(*) FROM task_occurrences WHERE task_id=$1", [task.id])).rows[0].count).toBe("0");
+  // Exercise legacy daily-expiry exception editing explicitly; new UI routines carry pending.
+  const legacy = await page.request.patch(`/api/tasks/${task.id}`, { headers: { Origin: baseURL }, data: { scope: "future", expectedTaskVersion: task.version, title, dueDate: date, assignmentMode: "shared", assigneeIds: [], repeatWeekdays: [0,1,2,3,4,5,6], carryPolicy: "expires_daily" } });
+  expect(legacy.status(), await legacy.text()).toBe(200);
+  await page.reload();
   await page.screenshot({ path: testInfo.outputPath("future-tasks.png"), fullPage: true });
   await page.getByRole("button", { name: `Editar: ${title}`, exact: true }).click();
   const edit = page.getByRole("dialog");
@@ -309,12 +320,12 @@ test("a delayed response from the previous date cannot replace the selected day"
   await page.getByLabel("Ir a una fecha").fill("2026-10-13");
   await requested;
   await page.getByLabel("Ir a una fecha").fill("2026-10-14");
-  await expect(page.locator("[data-task-key] p")).toContainText("2026-10-14");
+  await expect(page.locator("[data-task-key] p")).toContainText(labelTaskDay("2026-10-14"));
   const oldResponse = page.waitForResponse((response) => response.url().endsWith("date=2026-10-13"));
   release();
   await oldResponse;
   await expect(page.getByLabel("Ir a una fecha")).toHaveValue("2026-10-14");
-  await expect(page.locator("[data-task-key] p")).toContainText("2026-10-14");
+  await expect(page.locator("[data-task-key] p")).toContainText(labelTaskDay("2026-10-14"));
 });
 
 test("choosing today explicitly generates a missing daily occasion through the shared loader", async ({ page }) => {
@@ -362,4 +373,69 @@ test("potential pending pages refresh atomically and recover an obsolete cursor"
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(cards.first().getByRole("heading")).toContainText("actualizado");
   await expect(cards).toHaveCount(100);
+  await pool.query("DELETE FROM tasks WHERE family_id=$1 AND title LIKE 'Potential %'", [familyId]);
+});
+
+
+test("simple creation sends explicit carry policy with only a name and supports undo", async ({ page }) => {
+  const title = `Simple persistent ${randomUUID().slice(0,6)}`;
+  await page.goto("/tareas");
+  const createButton = page.getByRole("button", { name: "Nueva tarea", exact: true });
+  await createButton.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("Nombre", { exact: true })).toBeFocused();
+  await expect(dialog.getByLabel("Fecha", { exact: false })).toBeHidden();
+  await dialog.getByLabel("Nombre", { exact: true }).fill(title);
+  const request = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/tasks" && request.method() === "POST");
+  await dialog.getByRole("button", { name: "Crear tarea", exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ title, carryPolicy: "carry_forward", repeatWeekdays: [], dueDate: null });
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: `Marcar ${title} como hecha`, exact: true }).click();
+  await page.getByRole("button", { name: `Deshacer finalización de ${title}`, exact: true }).click();
+  await expect(page.getByRole("button", { name: `Marcar ${title} como hecha`, exact: true })).toBeVisible();
+});
+
+test("collapsed options retain values and validation opens and focuses the invalid option", async ({ page }) => {
+  const title = `Options persistent ${randomUUID().slice(0,6)}`;
+  await page.goto("/tareas");
+  await page.getByRole("button", { name: "Nueva tarea", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Nombre", { exact: true }).fill(title);
+  const summary = dialog.getByText("Más opciones", { exact: true });
+  await summary.click();
+  await dialog.getByLabel("Nota", { exact: false }).fill("Fictional note preserved");
+  await dialog.getByLabel("Horario", { exact: false }).fill("18:00");
+  await dialog.getByLabel("Responsables", { exact: false }).selectOption("individual");
+  await summary.click();
+  await dialog.getByRole("button", { name: "Crear tarea", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Elegí al menos una persona");
+  await expect(dialog.locator('input[name="assignee"]').first()).toBeFocused();
+  await expect(dialog.getByLabel("Nota", { exact: false })).toHaveValue("Fictional note preserved");
+  await dialog.locator('input[name="assignee"]').first().check();
+  const request = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/tasks" && request.method() === "POST");
+  await dialog.getByRole("button", { name: "Crear tarea", exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ description: "Fictional note preserved", scheduledTime: "18:00", assignmentMode: "individual", carryPolicy: "carry_forward" });
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: `Editar: ${title}`, exact: true }).click();
+  await dialog.getByLabel("Nombre", { exact: true }).fill(`${title} editada`);
+  await dialog.getByRole("button", { name: "Guardar cambios", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const saved = (await pool.query("SELECT o.scheduled_time_snapshot FROM task_occurrences o JOIN tasks t ON t.id=o.task_id WHERE t.family_id=$1 AND t.title=$2 AND o.status='open'", [familyId, `${title} editada`])).rows;
+  expect(saved).toEqual([{ scheduled_time_snapshot: "18:00:00" }]);
+});
+
+test("new daily routine keeps pending behavior and dialog supports Escape and focus return", async ({ page }) => {
+  await page.goto("/tareas");
+  const button = page.getByRole("button", { name: "Nueva tarea", exact: true });
+  await button.click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("Más opciones", { exact: true }).click();
+  await dialog.getByLabel("Repetición", { exact: true }).selectOption("daily");
+  await expect(dialog).toContainText("Queda un solo pendiente");
+  await expect(dialog.getByLabel("Si queda pendiente")).toHaveCount(0);
+  const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  expect(accessibility.violations.map((violation) => ({ id: violation.id, nodes: violation.nodes.map((node) => node.target) }))).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(button).toBeFocused();
 });
