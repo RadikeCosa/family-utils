@@ -9,7 +9,7 @@ import BlockFields from "./BlockFields";
 import { BlockSummary, trainingRequest } from "./TrainingEditor";
 import styles from "./training.module.css";
 export type DiaryEditorTarget = { mode: "create" | "edit" | "result" | "copy" | "reschedule"; date: string; kind?: DiaryKind; destination?: "plan" | "result"; entry?: DiaryEntry; template?: TrainingRoutine; restored?: DiaryInput; initialContent?: DiaryContent; operationKey?: string };
-export default function DiaryEditor({ target, today, activityFormEnabled = false, onClose, onSaved }: { target: DiaryEditorTarget; today: string; activityFormEnabled?: boolean; onClose: () => void; onSaved: (entry: DiaryEntry) => void }) {
+export default function DiaryEditor({ target, today, activityFormEnabled = false, onClose, onSaved, onUncertainChange }: { target: DiaryEditorTarget; today: string; activityFormEnabled?: boolean; onClose: () => void; onSaved: (entry: DiaryEntry) => void; onUncertainChange?: (uncertain: boolean) => void }) {
   const [entry, setEntry] = useState(target.entry);
   const kind = entry?.kind ?? target.kind ?? "training";
   const [copySource, setCopySource] = useState<"plan" | "result">(entry?.result != null ? "result" : "plan");
@@ -26,7 +26,8 @@ export default function DiaryEditor({ target, today, activityFormEnabled = false
   const heading = useRef<HTMLHeadingElement>(null), errorRef = useRef<HTMLDivElement>(null), submitted = useRef<{ path: string; method: string; payload: string } | null>(null), mounted = useRef(true);
   const operationKey = useRef<string | null>(target.operationKey ?? null), dirty = useRef(false);
   useEffect(() => { operationKey.current ??= crypto.randomUUID(); heading.current?.focus(); }, []);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { onUncertainChange?.(uncertain); return () => onUncertainChange?.(false); }, [uncertain, onUncertainChange]);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => {
     const protect = (e: BeforeUnloadEvent) => { if (dirty.current || uncertain) e.preventDefault(); };
