@@ -13,6 +13,7 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await expect(page.getByRole("heading", { name: "Temporizador HIIT" })).toBeVisible();
   await page.getByRole("button", { name: "20/10 × 8" }).click();
   await expect(page.getByText("Duración prevista: 3:50 de entrenamiento + 0:10 de preparación.")).toBeVisible();
+  await page.getByLabel("Preparación (segundos)").fill("0");
   await page.getByLabel("Trabajo (segundos)").fill("1");
   await page.getByLabel("Descanso (segundos)").fill("0");
   await page.getByLabel("Rondas").fill("1");
