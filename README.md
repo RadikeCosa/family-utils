@@ -44,13 +44,16 @@ nombres de variables necesarios.
 
 ## Calidad
 
-La [guía de verificación](sources/verification.md) contiene la preparación de
-PostgreSQL 18 aislado, navegadores y la matriz de comprobaciones por cambio.
-El conjunto completo se ejecuta con `bash scripts/verificar-todo.sh` y una
-`FAMILY_UTILS_TEST_DATABASE_URL` explícita que apunte a `champions_test` local.
-Los comandos siguientes son comprobaciones individuales, no la suite completa:
+La [guía de verificación](sources/verification.md) explica la selección por
+impacto y el entorno aislado PostgreSQL 18. En local, el verificador selecciona
+por impacto por defecto; `--full` fuerza todas las suites. Ambas formas requieren
+`FAMILY_UTILS_TEST_DATABASE_URL` explícita con `champions_test` local. El
+[procedimiento de publicación](sources/deployment.md) define la evidencia
+completa previa a producción.
 
 ```sh
+bash scripts/verificar-todo.sh
+bash scripts/verificar-todo.sh --full
 npm run lint
 npm run typecheck
 npm run test
@@ -58,6 +61,8 @@ npm run build
 npm run test:routes
 npm run test:e2e
 ```
+
+Los comandos sueltos son controles individuales y no acreditan la suite completa.
 
 Las pruebas de invariantes PostgreSQL usan `FAMILY_UTILS_TEST_DATABASE_URL`,
 una base aislada PostgreSQL 18. CI prepara un servicio temporal para ellas;

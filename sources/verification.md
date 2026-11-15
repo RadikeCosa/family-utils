@@ -43,65 +43,71 @@ detener solo este servicio, conservando todos los volúmenes:
 docker compose --profile verification stop postgres-test
 ```
 
-## Matriz por tipo de cambio
+## Selección por impacto
 
-Durante el desarrollo ejecutar los controles pertinentes. Antes de integrar,
-ejecutar el conjunto completo; no sustituirlo por una selección de esta tabla.
+El catálogo único está en `scripts/verification-catalog.json`. Cada dominio
+enumera rutas, suites de reglas e integración, handlers y recorridos de navegador.
+Las dependencias declaradas amplían la selección a consumidores transitivos.
+`scripts/verification-impact.mjs --check` compara imports, reexports e imports
+dinámicos literales internos con esas relaciones y compara todos los archivos de
+prueba descubiertos con el catálogo. Import no literal en `src/` fuerza selección
+completa; dependencia cruzada sin registrar o prueba sin grupo falla CI.
 
-| Cambio | Comprobaciones pertinentes |
-| --- | --- |
-| Documentación e instrucciones | Enlaces y rutas locales; coherencia con scripts; `git diff --check`; comprobar carga de `AGENTS.md` en un chat nuevo |
-| Skills y su instalador | Instalación en directorio vacío, `check`, preservación de colisiones; `node --test tests/agent-tooling.test.mjs` |
-| Lógica y contratos | `npm run lint`, `npm run typecheck`, pruebas del dominio y `npm test` con PostgreSQL aislado |
-| Navegación compartida | `npm run test:navigation`, build y `npm run test:unified` |
-| Interfaz | Lint, tipos, build, suite del dominio, `npm run test:a11y` y recorridos móviles correspondientes |
-| Handlers y autorización | Pruebas del dominio, build y `npm run test:routes` |
-| Esquema y migraciones | `npm run db:check`, `npx drizzle-kit check`, migrar base aislada, `npm run db:verify` e integración del dominio |
-| Herramientas de verificación | `bash -n scripts/verificar-todo.sh`, pruebas de herramientas, Compose válido y ejecución completa aislada |
+Las rutas compartidas incluyen autenticación, navegación, calendario, componentes,
+base de datos, migraciones, dependencias y configuración. Una ruta desconocida
+también fuerza suite completa y se muestra como alerta. El modo documental se
+limita a `README.md`, `AGENTS.md`, `agent-skills.md` y Markdown bajo `sources/`;
+un PR con cualquier archivo adicional sigue las reglas de código.
 
-`npm test` contiene reglas e integración: puede omitir pruebas sin la URL.
-Un resultado con omisiones no acredita integración completa. Los handlers y
-Playwright requieren un build previo y usan las bases/servidores de sus fixtures.
-No apuntar ninguna de estas pruebas a producción.
+CI siempre inicia en PR y `main`; no usa filtros de rutas a nivel del workflow.
+Los PR seleccionan por impacto usando el ancestro común y checkout de historial
+completo. Si no se puede resolver, se alerta y se elige todo. `main` y `workflow_dispatch`
+con referencia explícita ejecutan la suite completa. Solo PR cancela una ejecución
+anterior del mismo número; eventos de `main` y manuales no se cancelan.
 
-## Conjunto completo
+En local:
 
-`scripts/verificar-todo.sh` ejecuta secuencialmente:
+```sh
+bash scripts/verificar-todo.sh
+bash scripts/verificar-todo.sh --full
+```
 
-1. Versión del servidor, dependencias, consistencia de migraciones y preparación
-   de `champions_test`; aborta si no puede preparar la base.
-2. Tipos, lint, build, historial aplicado, reglas e integración general,
-   navegación, herramientas de agentes y rutas.
-3. Navegador de Recetas, general, Deportes, Champions y accesibilidad.
-4. Creación y migración de una base local auxiliar de nombre único terminado en
-   `_test`, para interfaz unificada y diario. Ejecuta la interfaz, integración
-   del diario con rendimiento y navegador del diario, igual que las suites de CI.
-5. Permisos SQL de `public`, resumen y retirada de la base auxiliar propia.
+El modo predeterminado compara el árbol de trabajo y archivos nuevos contra
+`origin/main`. Sin esa base, con catálogo inválido o sin cambios detectados, la
+selección completa se elige con una alerta. `--full` ejecuta todo explícitamente.
+El verificador valida la URL de PostgreSQL antes de cualquier preparación, luego
+ejecuta dependencias, migraciones, tipos, lint y build, y finalmente las suites
+seleccionadas. La suite unificada usa una base `_test` auxiliar única, migrada y
+retirada por la misma ejecución; ante interrupción se identifica por su nombre
+antes de considerar retirarla. Ejecutar verificadores secuencialmente: comparten
+base, puertos, build y artefactos.
 
-La base auxiliar evita mezclar los fixtures de interfaz y diario con las suites
-generales. Los fixtures del diario crean y retiran además sus propias bases.
-El rol local de pruebas requiere permiso para crear bases, como el rol de CI.
-No ejecutar dos verificadores en paralelo: comparten build, puertos y artefactos.
-No iniciar suites aisladas mientras el verificador completo esté activo.
+El runner y CI consumen el mismo catálogo. Node TAP sin resumen coherente o sin
+casos, Playwright vacío, omisiones, fallos y errores globales producen estado no
+aprobado. Un grupo fuera del alcance es una selección documentada; una prueba
+omitida dentro de un grupo seleccionado es un fallo de verificación. El resumen
+JSON registra base, candidato, archivos, razones, grupos, resultados y duración.
+La carpeta local `verification-results/` está excluida de Git.
 
-Cada suite informa aprobados, fallidos y omitidos. TAP sin resumen coherente,
-Playwright vacío, pruebas inestables y errores globales producen fallo. Los
-errores de infraestructura también se contabilizan; no siempre corresponden a
-un caso de prueba individual. La salida es no exitosa si hay fallos u omisiones
-o si no se puede retirar la base auxiliar. Conservar la salida en una ubicación
-privada cuando se necesite evidencia; revisar datos sensibles antes de publicarla.
-Los fallos de navegador incluyen proyecto, nombre del caso y mensajes de error
-en la salida, antes de retirar los reportes JSON temporales.
+## Reglas para preparar producción
 
-Si WebKit falla al iniciar con un mensaje de biblioteca compartida ausente
-(por ejemplo, `libxml2.so.2`), el recorrido no llegó a ejecutarse. Preparar las
-dependencias de navegador en un sistema compatible o ejecutar la suite en CI;
-no cambiar la aplicación ni omitir WebKit para obtener un resultado aprobado.
+La suite completa debe aprobar sobre el SHA candidato antes de pedir autorización.
+El candidato incorpora `main` vigente; cualquier movimiento de `main` o del
+candidato invalida la evidencia. Si el merge publica automáticamente, la
+autorización se pide antes del merge. La suite completa posterior de `main` es
+adicional, nunca reemplaza la aprobación previa. Ver el procedimiento, la plantilla
+de evidencia, los modos del preflight y la recuperación en [Preparar y autorizar
+una publicación](deployment.md).
 
-Si se interrumpe de forma no recuperable el proceso o quedan conexiones abiertas,
-puede quedar una base auxiliar. Identificar el nombre exacto generado por esa
-ejecución y comprobar que no se use antes de retirarla; no terminar conexiones
-ni borrar otras bases automáticamente.
+Un fallo reproducible de `main`, atribuible a un PR e incluido en una suite que el
+selector omitió, suspende la selección por impacto inmediatamente. Durante los
+primeros 20 PR integrados se registra cada pareja PR/SHA de selección y de suite
+completa en `sources/verification-impact-window.md`. La selección vuelve cuando
+el catálogo/selector está corregido y el caso tiene regresión.
+
+No apuntar pruebas a producción. Las bases de integración y los fixtures del diario
+deben ser locales y sintéticos. Los reportes con salida de herramientas se revisan
+antes de publicarse para evitar contenido sensible.
 
 ## Instrucciones nuevas y límites de la evidencia
 
@@ -111,6 +117,5 @@ identificar `AGENTS.md`, permitir implementación/verificación acordada y exigi
 autorización para producción. Comprobar también las rutas de skills seleccionadas.
 Una revisión estática no demuestra por sí sola esa carga en un chat nuevo.
 
-CI conserva sus comprobaciones existentes y agrega las pruebas de herramientas.
-Su PostgreSQL temporal usa otra base inicial; la restricción `champions_test`
-pertenece al verificador local, no cambia los contratos de las suites en CI.
+CI usa PostgreSQL 18 temporal. La restricción de base exacta `champions_test`
+pertenece al verificador local, no altera los contratos de integración de CI.

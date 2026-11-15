@@ -4,6 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git reference to verify completely
+        required: true
+        type: string
+        default: main
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}-{1}', github.ref, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -32,125 +46,95 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - name: Select verification scope
-        id: scope
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          python3 - <<'PYTHON'
-          import fnmatch, os, subprocess
-          base = os.environ.get("BASE_SHA", "")
-          training_only = False
-          if base and set(base) != {"0"}:
-              files = subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines()
-              allowed = ["src/app/entrenamiento/*", "src/lib/training/*", "src/app/api/training/*", "tests/*training*", "tests/e2e/training*", "sources/training*", "drizzle/0068_training_activity_timing.sql", "drizzle/meta/0068_snapshot.json", "drizzle/meta/_journal.json", "src/db/schema.ts", ".env.example", "package.json", "playwright.config.ts", "playwright.training-diary.config.ts", ".github/workflows/ci.yml"]
-              training_only = bool(files) and all(any(fnmatch.fnmatch(path, pattern) for pattern in allowed) for path in files)
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"training_only={str(training_only).lower()}\n")
-          print("Verification scope:", "training" if training_only else "all apps")
-          PYTHON
       - uses: actions/setup-node@v4
         with:
           node-version: 24.13.1
           cache: npm
       - run: npm ci
-      - run: npm ls --depth=0
-      - run: npm run db:check
-      - run: npx drizzle-kit check
-      - run: npm run db:migrate
-      - run: npm run db:verify
-      - if: steps.scope.outputs.training_only != 'true'
-        run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
-      - run: npm run lint
-      - run: npm run typecheck
-      - name: Verify agent tooling safety and result summaries
-        run: node --test tests/agent-tooling.test.mjs
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm test
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:navigation
-      - name: Verify existing training rules and database compatibility
-        if: steps.scope.outputs.training_only == 'true'
-        run: node --experimental-strip-types --test src/lib/training/rules.test.ts tests/postgres-training.integration.test.mjs
-      - run: npm run build
-      - name: Verify existing training routes
-        if: steps.scope.outputs.training_only == 'true'
-        run: node --experimental-strip-types --test tests/training-routes.integration.mjs
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:routes
-      - name: Use the Ubuntu archive for browser dependencies
+      - name: Verify catalogue and select impact
+        id: scope
+        continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.event.pull_request.head.sha || github.sha }}
         run: |
-          sudo python3 - <<'PYTHON'
-          from pathlib import Path
-          for path in Path("/etc/apt").rglob("*"):
-              if path.is_file() and path.suffix in {".list", ".sources", ".txt"}:
-                  current = path.read_text()
-                  updated = current.replace("http://azure.archive.ubuntu.com", "https://archive.ubuntu.com").replace("https://azure.archive.ubuntu.com", "https://archive.ubuntu.com")
-                  if updated != current:
-                      path.write_text(updated)
-                      print(f"Ubuntu archive configured in {path}")
-          PYTHON
+          set -euo pipefail
+          mkdir -p verification-results
+          HEAD_SHA="$(git rev-parse HEAD)"
+          MAIN_SHA="$(git rev-parse origin/main)"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if node scripts/verification-impact.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
+          else
+            if node scripts/verification-impact.mjs --full --base "$MAIN_SHA" --head "$HEAD_SHA" --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
+          fi
+          test -s verification-results/selection.json
+          cp verification-results/selection.json "$RUNNER_TEMP/selection.json"
+          node -e 'const s=require(process.argv[1]);require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY,`## Alcance de CI\n\n- Modo: ${s.mode}\n- Base: ${s.base}\n- Candidato: ${s.head}\n- Grupos: ${s.groups.join(", ")||"documentación"}\n- Motivos: ${s.reasons.join("; ")}\n`)' "$RUNNER_TEMP/selection.json"
+          if [ "$SELECTOR_STATUS" -ne 0 ]; then exit "$SELECTOR_STATUS"; fi
+      - name: Check documentation links
+        if: steps.scope.outputs.mode == 'documentation'
+        run: |
+          git diff --check "${{ github.event.pull_request.base.sha || github.event.before }}" --
+          node scripts/check-documentation.mjs verification-results/selection.json
+      - name: Check dependency and migration metadata
+        if: steps.scope.outputs.mode != 'documentation'
+        run: |
+          npm ls --depth=0
+          npm run db:check
+          npx drizzle-kit check
+          npm run db:migrate
+          npm run db:verify
+      - name: Check SQL permissions
+        if: steps.scope.outputs.mode == 'full'
+        run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
+      - name: Lint, types and production build
+        if: steps.scope.outputs.mode != 'documentation'
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run build
       - name: Install browser dependencies
+        if: steps.scope.outputs.browser == 'true'
         timeout-minutes: 10
         run: npx playwright install --with-deps chromium webkit
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:recipes:e2e
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:e2e
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:sports-next
-      - name: Upload River and UFC UI screenshots
-        if: always() && steps.scope.outputs.training_only != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: sports-next-ui-screenshots
-          path: test-results/*.png
-          if-no-files-found: warn
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:champions
-      - name: Upload Champions UI screenshots
-        if: always() && steps.scope.outputs.training_only != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: champions-ui-screenshots
-          path: test-results/*.png
-          if-no-files-found: warn
-      - if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:a11y
-      - name: Prepare isolated unified UI database
+      - name: Create isolated UI database
+        if: steps.scope.outputs.shared_ui == 'true'
         run: psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE family_unified_test'
-      - name: Migrate isolated unified UI database
+      - name: Migrate isolated UI database
+        if: steps.scope.outputs.shared_ui == 'true'
         run: npm run db:migrate
         env:
           DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
           DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/family_unified_test
-      - name: Verify unified UI, accessibility and performance
-        if: steps.scope.outputs.training_only != 'true'
-        run: npm run test:unified
+      - name: Run selected suites sequentially
+        if: steps.scope.outputs.mode != 'documentation'
         env:
-          FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
-      - name: Upload unified UI screenshots and performance samples
-        if: always() && steps.scope.outputs.training_only != 'true'
+          FAMILY_UTILS_UNIFIED_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
+        run: node scripts/run-verification-suites.mjs --selection "$RUNNER_TEMP/selection.json"
+      - name: Upload browser evidence
+        if: always() && steps.scope.outputs.browser == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: unified-ui-acceptance
-          path: test-results-unified/
+          name: browser-verification-${{ github.run_id }}
+          path: |
+            test-results/**/*.png
+            test-results-a11y/**/*.png
+            test-results-unified/**/*.png
+            test-results-unified/performance.json
+            test-results-training-diary/**/*.png
           if-no-files-found: warn
-
-      - name: Verify training diary migration, API and performance
-        run: npm run test:training:diary
-        env:
-          FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
-          TRAINING_DIARY_PERFORMANCE: "1"
-      - name: Verify training diary mobile, desktop and WebKit
-        run: npm run test:training:diary:e2e
-        env:
-          FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
-      - name: Upload training diary acceptance evidence
+      - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: training-diary-acceptance
-          path: test-results-training-diary/
+          name: verification-evidence-${{ github.run_id }}
+          path: verification-results/
           if-no-files-found: warn
+      - name: Require a valid verification catalogue
+        if: always() && steps.scope.outcome == 'failure'
+        run: |
+          echo "::error::El catálogo/selector falló; la suite completa se ejecutó, pero CI no puede aprobar hasta corregirlo."
+          exit 1

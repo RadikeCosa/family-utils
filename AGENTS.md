@@ -84,8 +84,11 @@
 ## Verificación y entrega
 
 - Seguir la [matriz de verificación](sources/verification.md) según el cambio.
-- Ejecutar comprobaciones pertinentes durante el desarrollo y la suite completa antes de integrar.
-- La verificación completa usa `bash scripts/verificar-todo.sh` con URL explícita.
+- Ejecutar comprobaciones locales por impacto durante el desarrollo; usar CI y la [guía de publicación](sources/deployment.md) para la evidencia completa previa a producción.
+- `bash scripts/verificar-todo.sh` selecciona por impacto; agregar `--full` para todas las suites.
+- Todo PR ejecuta CI. `main` y la ejecución manual solicitada ejecutan el inventario completo del catálogo.
+- Antes de autorizar producción, la suite completa debe aprobar sobre el SHA candidato que incluye el `main` vigente.
+- Si una suite completa de `main` descubre un fallo reproducible que el PR por impacto no ejecutó, suspender selección por impacto y volver a suite completa hasta corregir y cubrir el selector.
 - Esa herramienta acepta solo PostgreSQL local en la base descartable `champions_test`.
 - Preparar PostgreSQL 18 y navegadores según la guía; no reutilizar el volumen de PostgreSQL 17.
 - Ejecutar secuencialmente suites que compartan base, puertos, build o artefactos.
