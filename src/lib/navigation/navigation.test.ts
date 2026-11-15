@@ -200,6 +200,14 @@ test("URL normalization retains supported state, rejects invalid parameters and 
     ),
     "seccion=historial&detalle=abc",
   );
+  assert.equal(
+    normalizeNavigationSearch(
+      "/entrenamiento",
+      new URLSearchParams("seccion=temporizador"),
+      apps,
+    ),
+    "seccion=temporizador",
+  );
   const sports = apps.find((app) => app.id === "sports")!;
   assert.equal(
     activeSection(sports, "/deportes/champions/tabla", new URLSearchParams()),
