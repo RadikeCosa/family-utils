@@ -1,0 +1,28 @@
+import { expect, test } from "@playwright/test";
+import { diaryDatabase, diaryServer, diaryProfile } from "../training-diary-fixture.mjs";
+let db: Awaited<ReturnType<typeof diaryDatabase>>, server: Awaited<ReturnType<typeof diaryServer>>;
+test.skip(!process.env.FAMILY_UTILS_TEST_DATABASE_URL, "requires explicit isolated PostgreSQL");
+test.beforeAll(async () => { db = await diaryDatabase(); server = await diaryServer(db.url, true, true, false, true); });
+test.afterAll(async () => { await server?.close(); await db?.close(); });
+test("HIIT timer previews a preset, records a completed short session and protects operation data", async ({ page, context }) => {
+  await db.pool.query("SELECT public.training_diary_transition()");
+  const profile = await diaryProfile(server, "Alex", db.pool);
+  const cookies = profile.cookie.split("; ").map(item => { const [name, ...rest] = item.split("="); return { name, value: rest.join("="), url: server.origin }; });
+  await context.addCookies(cookies);
+  await page.goto(`${server.origin}/entrenamiento?seccion=temporizador`);
+  await expect(page.getByRole("heading", { name: "Temporizador HIIT" })).toBeVisible();
+  await page.getByRole("button", { name: "20/10 × 8" }).click();
+  await expect(page.getByText("Duración prevista: 4:00 de entrenamiento + 0:10 de preparación.")).toBeVisible();
+  await page.getByLabel("Trabajo (segundos)").fill("1");
+  await page.getByLabel("Descanso (segundos)").fill("0");
+  await page.getByLabel("Rondas").fill("1");
+  await page.getByRole("button", { name: "Iniciar temporizador" }).click();
+  await expect(page.getByRole("heading", { name: "Entrenamiento completo" })).toBeVisible({ timeout: 5000 });
+  await page.getByRole("button", { name: "Registrar en mi diario" }).click();
+  await expect(page.getByLabel("Duración (minutos, opcional)")).toHaveValue("1");
+  await expect(page.getByLabel("¿Qué hiciste?")).toHaveValue(/HIIT/);
+  await page.getByRole("button", { name: "Guardar anotación" }).click();
+  await expect(page.getByText("Sesión registrada en el diario.")).toBeVisible();
+  const rows = await db.pool.query("SELECT count(*)::int AS n FROM training_entries WHERE owner_member_id=$1", [profile.id]);
+  expect(rows.rows[0].n).toBe(1);
+});

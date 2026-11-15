@@ -8,31 +8,32 @@ import { formatActivityDuration as formatDuration } from "@/lib/training/timing"
 import BlockFields from "./BlockFields";
 import { BlockSummary, trainingRequest } from "./TrainingEditor";
 import styles from "./training.module.css";
-export type DiaryEditorTarget = { mode: "create" | "edit" | "result" | "copy" | "reschedule"; date: string; kind?: DiaryKind; destination?: "plan" | "result"; entry?: DiaryEntry; template?: TrainingRoutine; restored?: DiaryInput };
+export type DiaryEditorTarget = { mode: "create" | "edit" | "result" | "copy" | "reschedule"; date: string; kind?: DiaryKind; destination?: "plan" | "result"; entry?: DiaryEntry; template?: TrainingRoutine; restored?: DiaryInput; initialContent?: DiaryContent; operationKey?: string };
 export default function DiaryEditor({ target, today, activityFormEnabled = false, onClose, onSaved }: { target: DiaryEditorTarget; today: string; activityFormEnabled?: boolean; onClose: () => void; onSaved: (entry: DiaryEntry) => void }) {
   const [entry, setEntry] = useState(target.entry);
   const kind = entry?.kind ?? target.kind ?? "training";
   const [copySource, setCopySource] = useState<"plan" | "result">(entry?.result != null ? "result" : "plan");
   const [destination, setDestination] = useState<"plan" | "result">(target.destination ?? (target.mode === "result" || entry?.result != null ? "result" : "plan"));
   const restored = target.restored;
-  const initial = restored ? restored.result ?? restored.plan : target.template ? { title: target.template.name, blocks: target.template.blocks } : target.mode === "result" ? entry?.result ?? (entry?.plan ? { title: entry.plan.title, text: entry.plan.text, blocks: entry.plan.blocks } : null) : entry?.result ?? entry?.plan;
+  const initial = target.initialContent ?? (restored ? restored.result ?? restored.plan : target.template ? { title: target.template.name, blocks: target.template.blocks } : target.mode === "result" ? entry?.result ?? (entry?.plan ? { title: entry.plan.title, text: entry.plan.text, blocks: entry.plan.blocks } : null) : entry?.result ?? entry?.plan);
   const [content, setContent] = useState<DiaryContent>(initial ?? {}), [date, setDate] = useState(restored?.date ?? target.date);
-  const [minutes, setMinutes] = useState(initial?.durationSeconds == null ? "" : String(Math.round(initial.durationSeconds / 60)));
+  const [minutes, setMinutes] = useState(initial?.durationSeconds == null ? "" : String(target.initialContent ? Math.max(1, Math.ceil(initial.durationSeconds / 60)) : Math.round(initial.durationSeconds / 60)));
   const [durationTouched, setDurationTouched] = useState(false);
   const [sourceRoutineId, setSourceRoutineId] = useState(restored?.sourceRoutineId ?? entry?.sourceRoutineId ?? target.template?.id ?? null);
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [conflict, setConflict] = useState(false);
   const [latest, setLatest] = useState<DiaryEntry | null>(null), [expectedVersion, setExpectedVersion] = useState(entry?.version);
   const [templates, setTemplates] = useState<TrainingRoutine[]>([]), [templateCursor, setTemplateCursor] = useState<string | null>(null), [templateLoading, setTemplateLoading] = useState(false);
-  const heading = useRef<HTMLHeadingElement>(null), errorRef = useRef<HTMLDivElement>(null), submitted = useRef<{ path: string; method: string; payload: string } | null>(null);
-  const operationKey = useRef<string | null>(null), dirty = useRef(false);
-  useEffect(() => { operationKey.current = crypto.randomUUID(); heading.current?.focus(); }, []);
+  const heading = useRef<HTMLHeadingElement>(null), errorRef = useRef<HTMLDivElement>(null), submitted = useRef<{ path: string; method: string; payload: string } | null>(null), mounted = useRef(true);
+  const operationKey = useRef<string | null>(target.operationKey ?? null), dirty = useRef(false);
+  useEffect(() => { operationKey.current ??= crypto.randomUUID(); heading.current?.focus(); }, []);
+  useEffect(() => () => { mounted.current = false; }, []);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => {
     const protect = (e: BeforeUnloadEvent) => { if (dirty.current || uncertain) e.preventDefault(); };
     window.addEventListener("beforeunload", protect); return () => window.removeEventListener("beforeunload", protect);
   }, [uncertain]);
   function change(patch: Partial<DiaryContent>) { dirty.current = true; setContent(current => ({ ...current, ...patch })); }
-  function close() { if ((dirty.current || uncertain) && !window.confirm("¿Descartar los cambios de este formulario?")) return; clearTrainingHandoffs(); onClose(); }
+  function close() { if (uncertain) { setError("No se puede confirmar el guardado. Reintentá esta misma operación antes de cerrar el formulario."); return; } if (dirty.current && !window.confirm("¿Descartar los cambios de este formulario?")) return; clearTrainingHandoffs(); onClose(); }
   async function loadTemplates(after?: string) {
     setTemplateLoading(true); setError("");
     try { const data = await trainingRequest(`routines?archived=false${after ? `&cursor=${encodeURIComponent(after)}` : ""}`); setTemplates(current => after ? [...current, ...data.items] : data.items); setTemplateCursor(data.nextCursor); }
@@ -70,12 +71,14 @@ export default function DiaryEditor({ target, today, activityFormEnabled = false
       const attempt = submitted.current!;
       sent = true;
       const data = await diaryRequest<EntryResponse>(attempt.path, { method: attempt.method, body: attempt.payload });
+      if (!mounted.current) return;
       dirty.current = false; clearTrainingHandoffs(); onSaved(data.item);
     } catch (error) {
+      if (!mounted.current) return;
       const failure = error as Error & { status?: number; code?: string };
       setUncertain(sent && (!failure.status || failure.status >= 500 && failure.code !== "DIARY_READ_ONLY"));
       setConflict(failure.code === "VERSION_CONFLICT"); setError(failure.message);
-    } finally { setBusy(false); }
+    } finally { if (mounted.current) setBusy(false); }
   }
   async function reviewConflict() {
     setBusy(true);

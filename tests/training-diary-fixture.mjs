@@ -44,10 +44,10 @@ export async function diaryDatabase(options = {}) {
     } finally { await admin.end(); }
   } };
 }
-export async function diaryServer(databaseURL, writable, unified = true, activityForm = false) {
+export async function diaryServer(databaseURL, writable, unified = true, activityForm = false, hiit = false) {
   const listener = createServer(); await new Promise(resolve => listener.listen(0, "127.0.0.1", resolve)); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
   const origin = `http://localhost:${port}`, logs = [];
-  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: databaseURL, TRAINING_ENABLED: "true", TRAINING_DIARY_ENABLED: String(writable), TRAINING_ACTIVITY_FORM_ENABLED: String(activityForm), TRAINING_OPTIONAL_METRICS_ENABLED: "true", TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true", UNIFIED_UI_ENABLED: String(unified), BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "diary-test-only-secret-not-production", CODE_PEPPER: "diary-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: ["ignore", "pipe", "pipe"] });
+  const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { env: { ...process.env, NODE_ENV: "production", DATABASE_URL: databaseURL, TRAINING_ENABLED: "true", TRAINING_DIARY_ENABLED: String(writable), TRAINING_ACTIVITY_FORM_ENABLED: String(activityForm), TRAINING_HIIT_ENABLED: String(hiit), TRAINING_OPTIONAL_METRICS_ENABLED: "true", TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true", UNIFIED_UI_ENABLED: String(unified), BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: "diary-test-only-secret-not-production", CODE_PEPPER: "diary-test-only-pepper-not-production", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" }, stdio: ["ignore", "pipe", "pipe"] });
   server.stdout.on("data", value => logs.push(value.toString())); server.stderr.on("data", value => logs.push(value.toString()));
   for (let i = 0; i < 200; i++) {
     if (server.exitCode !== null) throw new Error(`Diary test server exited: ${logs.join("")}`);

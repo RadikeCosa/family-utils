@@ -24,6 +24,7 @@ export type Capabilities = {
   champions: boolean;
   training: boolean;
   trainingDiary?: boolean;
+  trainingHiit?: boolean;
 };
 export function appCatalog(c: Capabilities): AppDefinition[] {
   const apps: AppDefinition[] = [
@@ -113,6 +114,7 @@ export function appCatalog(c: Capabilities): AppDefinition[] {
             sections: [
               { label: c.trainingDiary ? "Diario" : "Mis rutinas", href: "/entrenamiento" },
               { label: c.trainingDiary ? "Plantillas" : "Historial", href: c.trainingDiary ? "/entrenamiento?seccion=plantillas" : "/entrenamiento?seccion=historial" },
+              ...(c.trainingHiit ? [{ label: "Temporizador", href: "/entrenamiento?seccion=temporizador" }] : []),
             ],
           },
         ]

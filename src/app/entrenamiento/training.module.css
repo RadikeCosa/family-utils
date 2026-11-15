@@ -62,3 +62,17 @@
 @media(max-width:600px) { .week { gap:3px; } .week button { padding:10px 2px; font-size:.8rem; } .week small { display:none; } .searchBar { grid-template-columns:1fr; } }
 
 .weekMarker { font-size:1rem; line-height:1; min-height:16px; }
+.hiit { display:grid; gap:16px; margin:20px 0; }
+.hiit[hidden] { display:none; }
+.hiit button { min-height:48px; }
+.hiit input { min-height:48px; }
+.hiitGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; max-width:640px; }
+.hiitRun { min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:clamp(20px,6vw,56px) 16px calc(24px + env(safe-area-inset-bottom)); border:1px solid #d9ded6; border-radius:24px; background:#fbfbf8; gap:12px; }
+.hiitClock { font-family:Manrope,sans-serif; font-size:clamp(5rem,24vw,12rem); font-weight:800; line-height:1; letter-spacing:-.06em; font-variant-numeric:tabular-nums; margin:8px 0; }
+.hiitRound { font-size:1.25rem; font-weight:700; }
+.hiitRun progress { width:min(100%,560px); height:16px; accent-color:#415b49; }
+.hiit-preparation { border-color:#bfcdbf; }
+.hiit-work { background:#edf1e9; border-color:#769078; }
+.hiit-rest { background:#f7f1e8; border-color:#c8a779; }
+.hiit-complete { background:#eaf0e4; }
+@media(max-width:600px) { .hiitGrid { grid-template-columns:1fr; } .hiitRun { min-height:55vh; padding:20px 12px; } }

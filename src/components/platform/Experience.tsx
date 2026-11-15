@@ -4,7 +4,7 @@ import { getMemberContext } from "@/lib/auth/context";
 import { recipesEnabled } from "@/lib/recipes/config";
 import { libraryEnabled } from "@/lib/library/config";
 import { diaryTransitioned } from "@/lib/training/diary-state";
-import { trainingEnabled } from "@/lib/training/config";
+import { trainingEnabled, trainingHiitEnabled } from "@/lib/training/config";
 import { sportsEnabled, championsEnabled } from "@/lib/sports/config";
 import { unifiedUIEnabled } from "@/lib/navigation/config";
 import { navigationKey } from "@/lib/navigation/storage";
@@ -43,6 +43,7 @@ export default async function Experience({
     champions: championsEnabled(),
     training: trainingEnabled(),
     trainingDiary: !!actor && trainingEnabled() && await diaryTransitioned(),
+    trainingHiit: !!actor && trainingEnabled() && trainingHiitEnabled() && await diaryTransitioned(),
   });
   if (!actor || publicOnly)
     return (
