@@ -67,7 +67,7 @@ export default function WorkForm({ scope, work, busy, duplicates, issue, onIdent
     { label: "Sinopsis", draft: normalizeSynopsis(draft.synopsis), current: work.synopsis ?? "" },
   ].filter(row => JSON.stringify(row.draft) !== JSON.stringify(row.current)) : [];
   return <form ref={form} noValidate className={styles.workForm} onSubmit={async event => { event.preventDefault(); await saveWork(); }}>
-    <header data-legacy-chrome className={styles.dialogHeader}><h2 id="work-dialog-title" tabIndex={-1} autoFocus>{work ? "Editar datos" : "Agregar película"}</h2><p>Solo el título es obligatorio.</p></header>
+    <header className={styles.dialogHeader}><h2 id="work-dialog-title" tabIndex={-1} autoFocus>{work ? "Editar datos" : "Agregar película"}</h2><p>Solo el título es obligatorio.</p></header>
     {storageError && <p className={styles.notice} role="status">No podemos conservar tu borrador al cerrar o recargar. Podés seguir completando y guardar desde acá.</p>}
     {blocked && <div className={styles.error} role="alert" id={errorId}>{unavailable ? "Este contenido ya no está disponible. Conservamos tu borrador." : "Este contenido está archivado. Restauralo desde el detalle para poder editarlo."}</div>}
     {!blocked && relevantIssue?.code !== "CONFLICT" && relevantIssue?.code !== "DUPLICATE" && <FormIssue disabled={busy} issue={relevantIssue} onRetry={() => form.current?.requestSubmit()} />}
