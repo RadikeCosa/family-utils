@@ -28,7 +28,7 @@ jobs:
         env:
           POSTGRES_USER: family
           POSTGRES_PASSWORD: family
-          POSTGRES_DB: family_utils
+          POSTGRES_DB: champions_test
         ports:
           - 5432:5432
         options: >-
@@ -37,9 +37,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgres://family:family@localhost:5432/family_utils
-      DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/family_utils
-      FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/family_utils
+      DATABASE_URL: postgres://family:family@localhost:5432/champions_test
+      DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/champions_test
+      FAMILY_UTILS_TEST_DATABASE_URL: postgres://family:family@localhost:5432/champions_test
       BETTER_AUTH_SECRET: ci-only-secret-not-used-outside-ci
       BETTER_AUTH_URL: http://localhost:3000
       CODE_PEPPER: ci-only-pepper-not-used-outside-ci

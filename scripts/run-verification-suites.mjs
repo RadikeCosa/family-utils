@@ -32,13 +32,33 @@ function addSuite(name, result, counts = {}) {
   if ((counts.failures?.length ?? 0) > 15) console.error(`  … y ${counts.failures.length - 15} fallos más (ver JSON).`);
   if (result.status !== 0 && result.stderr) process.stderr.write(result.stderr);
 }
-function parseTap(output) {
+export function parseTap(output) {
   const tests = output.match(/^# tests (\d+)$/m);
   const pass = output.match(/^# pass (\d+)$/m);
   const fail = output.match(/^# fail (\d+)$/m);
+  const cancelled = output.match(/^# cancelled (\d+)$/m);
   const skipped = output.match(/^# skipped (\d+)$/m);
+  const todo = output.match(/^# todo (\d+)$/m);
   if (!tests || Number(tests[1]) === 0) return null;
-  return { executed: Number(tests[1]), passed: Number(pass?.[1] ?? 0), failed: Number(fail?.[1] ?? 0), skipped: Number(skipped?.[1] ?? 0) };
+  const failures = [];
+  const lines = output.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const failedTest = lines[i].match(/^not ok \d+ - (.+)$/);
+    if (!failedTest) continue;
+    const detail = [];
+    for (let j = i + 1; j < lines.length && !/^(?:not ok \d+ - |ok \d+ - |1\.\.)/.test(lines[j]); j++) {
+      const match = lines[j].match(/^\s+(?:error|message):\s*(.+)$/);
+      if (match) detail.push(match[1].replace(/^['"]|['"]$/g, ""));
+    }
+    failures.push({ title: failedTest[1], message: detail[0]?.slice(0, 300) ?? "Prueba TAP fallida." });
+  }
+  return {
+    executed: Number(tests[1]),
+    passed: Number(pass?.[1] ?? 0),
+    failed: Number(fail?.[1] ?? 0) + Number(cancelled?.[1] ?? 0),
+    skipped: Number(skipped?.[1] ?? 0) + Number(todo?.[1] ?? 0),
+    failures,
+  };
 }
 export function parsePlaywright(output) {
   let data;
