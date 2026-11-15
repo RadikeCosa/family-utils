@@ -62,6 +62,14 @@ function legacyFingerprint(id: string | undefined, version: number | undefined, 
 function requireTimingForMove(previous: Row | null, date: unknown, content: unknown) {
   if (previous && date !== previous.date && (previous.result ?? previous.plan)?.timing && (!content || !object(content).timing)) fail(409, "TIMING_REQUIRED_FOR_DATE_CHANGE", "Para cambiar la fecha, reenviá los horarios completos. Tu anotación se conserva.");
 }
+function withoutTiming(value: unknown) {
+  if (value === null || value === undefined) return value;
+  const content = { ...object(value) }; delete content.timing; return content;
+}
+function mergeContent(value: unknown, previous: DiaryInput["plan"] | undefined, unlinkTiming = false) {
+  const merged = mergeDiaryContent(value, previous);
+  return unlinkTiming ? withoutTiming(merged) : merged;
+}
 
 async function owned(tx: PoolClient, actor: MemberContext, id: string): Promise<Row> {
   identifier(id);
@@ -160,17 +168,22 @@ export async function diaryWrite(request: Request, id?: string) {
     const previous = id ? await owned(tx, actor, id) : null;
     const version = id ? integer(body.version, "Versión", 2147483646) : undefined;
     if (!id && action === "create" || id && action === "edit") {
-      onlyKeys(body, ["action", "operationKey", ...(id ? ["version"] : []), "input"]);
-      normalized = { input: object(body.input) };
+      onlyKeys(body, ["action", "operationKey", ...(id ? ["version"] : []), "input", "durationMode", "durationTarget", "durationChanged"]);
+      if (body.durationMode !== undefined && (body.durationMode !== "manual" || body.durationTarget !== "plan" && body.durationTarget !== "result" || typeof body.durationChanged !== "boolean")) throw new TrainingValidationError("Modo de duración inválido.");
+      normalized = { input: object(body.input), ...(body.durationMode ? { durationMode: body.durationMode, durationTarget: body.durationTarget, durationChanged: body.durationChanged } : {}) };
     } else if (!id && action === "copy") {
-      onlyKeys(body, ["action", "operationKey", "sourceId", "content", "date", "timing"]);
+      onlyKeys(body, ["action", "operationKey", "sourceId", "content", "date", "timing", "durationMode", "durationTarget", "durationChanged"]);
+      if (body.durationMode !== undefined && (body.durationMode !== "manual" || body.durationTarget !== body.content || typeof body.durationChanged !== "boolean")) throw new TrainingValidationError("Modo de duración inválido.");
       if (body.content !== "plan" && body.content !== "result") throw new TrainingValidationError("Elegí qué contenido copiar.");
-      normalized = { sourceId: identifier(body.sourceId), content: body.content, date: diaryDate(body.date), ...("timing" in body ? { timing: body.timing } : {}) };
+      normalized = { sourceId: identifier(body.sourceId), content: body.content, date: diaryDate(body.date), ...("timing" in body ? { timing: body.timing } : {}), ...(body.durationMode ? { durationMode: body.durationMode, durationTarget: body.durationTarget, durationChanged: body.durationChanged } : {}) };
     } else if (id && action === "result") {
-      onlyKeys(body, ["action", "operationKey", "version", "content", "date"]); normalized = { content: object(body.content), ...(body.date !== undefined ? { date: diaryDate(body.date) } : {}) };
+      onlyKeys(body, ["action", "operationKey", "version", "content", "date", "durationMode", "durationTarget", "durationChanged"]);
+      if (body.durationMode !== undefined && (body.durationMode !== "manual" || body.durationTarget !== "result" || typeof body.durationChanged !== "boolean")) throw new TrainingValidationError("Modo de duración inválido.");
+      normalized = { content: object(body.content), ...(body.date !== undefined ? { date: diaryDate(body.date) } : {}), ...(body.durationMode ? { durationMode: body.durationMode, durationTarget: body.durationTarget, durationChanged: body.durationChanged } : {}) };
     } else if (id && ["skip", "reschedule", "archive", "restore"].includes(action)) {
-      onlyKeys(body, ["action", "operationKey", "version", ...(action === "reschedule" ? ["date", "timing"] : [])]);
-      normalized = action === "reschedule" ? { date: diaryDate(body.date), ...("timing" in body ? { timing: body.timing } : {}) } : {};
+      onlyKeys(body, ["action", "operationKey", "version", ...(action === "reschedule" ? ["date", "timing", "durationMode", "durationTarget", "durationChanged"] : [])]);
+      if (action === "reschedule" && body.durationMode !== undefined && (body.durationMode !== "manual" || body.durationTarget !== "plan" || typeof body.durationChanged !== "boolean")) throw new TrainingValidationError("Modo de duración inválido.");
+      normalized = action === "reschedule" ? { date: diaryDate(body.date), ...("timing" in body ? { timing: body.timing } : {}), ...(body.durationMode ? { durationMode: body.durationMode, durationTarget: body.durationTarget, durationChanged: body.durationChanged } : {}) } : {};
     } else throw new TrainingValidationError("Operación inválida.");
     const hash = digest({ id: id ?? null, version: version ?? null, action, ...fingerprint(normalized) });
     const previousOp = (await tx.query("SELECT entry_id,hash,confirmed_version FROM training_diary_operations WHERE owner_member_id=$1 AND family_id=$2 AND operation_key=$3", [actor.memberId, actor.familyId, operationKey])).rows[0];
@@ -182,9 +195,13 @@ export async function diaryWrite(request: Request, id?: string) {
     if (previous && previous.version !== version) fail(409, "VERSION_CONFLICT", "La anotación cambió en otro dispositivo. Tu plan y resultado sin guardar se conservan para revisar los cambios.");
     let input: DiaryInput, archivedAt: Date | null = previous?.archived_at ?? null;
     if (action === "create" || action === "edit") {
-      const raw = object(normalized.input);
-      requireTimingForMove(previous, raw.date, raw.result ?? raw.plan);
-      input = validateDiary({ ...raw, plan: mergeDiaryContent(raw.plan, previous?.plan), result: mergeDiaryContent(raw.result, previous?.result) }, ctx.today);
+      const raw = object(normalized.input), target = normalized.durationTarget as "plan" | "result" | undefined;
+      const content: Record<string, unknown> = { plan: raw.plan, result: raw.result };
+      const moved = !!previous && raw.date !== previous.date;
+      const unlinkTiming = normalized.durationMode === "manual" && !!target && (moved || normalized.durationChanged === true);
+      if (unlinkTiming && target) content[target] = withoutTiming(raw[target]);
+      if (normalized.durationMode !== "manual") requireTimingForMove(previous, raw.date, raw.result ?? raw.plan);
+      input = validateDiary({ ...raw, ...content, plan: mergeContent(content.plan, previous?.plan, !!unlinkTiming && target === "plan"), result: mergeContent(content.result, previous?.result, !!unlinkTiming && target === "result") }, ctx.today);
       if (previous) {
         if (previous.archived_at) fail(409, "ENTRY_ARCHIVED", "Restaurá la anotación antes de editarla.");
         if (input.kind !== previous.kind || input.sourceRoutineId !== previous.source_routine_id) throw new TrainingValidationError("El tipo y origen de una anotación no se cambian.");
@@ -197,23 +214,26 @@ export async function diaryWrite(request: Request, id?: string) {
     } else if (action === "copy") {
       const source = await owned(tx, actor, normalized.sourceId as string), content = source[normalized.content as "plan" | "result"];
       if (content === null) throw new TrainingValidationError("Ese contenido no existe.");
-      requireTimingForMove({ ...source, result: content, plan: null }, normalized.date, normalized);
-      input = validateDiary({ date: normalized.date, kind: source.kind, plan: "timing" in normalized ? diaryContent({ ...content, timing: normalized.timing }, source.kind) : content, result: null, disposition: "open", sourceRoutineId: source.source_routine_id }, ctx.today);
+      if (normalized.durationMode !== "manual") requireTimingForMove({ ...source, result: content, plan: null }, normalized.date, normalized);
+      const copied = normalized.durationMode === "manual" ? withoutTiming(content) : "timing" in normalized ? diaryContent({ ...content, timing: normalized.timing }, source.kind) : content;
+      input = validateDiary({ date: normalized.date, kind: source.kind, plan: copied, result: null, disposition: "open", sourceRoutineId: source.source_routine_id }, ctx.today);
     } else {
       input = inputOf(previous!);
       if (previous!.archived_at && action !== "restore") fail(409, "ENTRY_ARCHIVED", "Restaurá la anotación primero.");
       if (action === "result") {
         if (normalized.date !== undefined) input.date = normalized.date as string;
-        requireTimingForMove(previous, input.date, normalized.content);
-        input.result = diaryContent(mergeDiaryContent(normalized.content, previous?.result), input.kind); input.disposition = "open";
+        if (normalized.durationMode !== "manual") requireTimingForMove(previous, input.date, normalized.content);
+        const unlinkTiming = normalized.durationMode === "manual" && (normalized.date !== undefined && normalized.date !== previous?.date || normalized.durationChanged === true);
+        input.result = diaryContent(mergeContent(normalized.content, previous?.result, !!unlinkTiming), input.kind); input.disposition = "open";
       } else if (action === "skip") {
         if (input.result !== null) throw new TrainingValidationError("Una anotación realizada no se puede omitir.");
         input.disposition = "skipped";
       } else if (action === "reschedule") {
         if (input.result !== null || (normalized.date as string) < ctx.today) throw new TrainingValidationError("Solo se reprograman planes sin resultado hacia hoy o el futuro.");
-        requireTimingForMove(previous, normalized.date, normalized);
+        if (normalized.durationMode !== "manual") requireTimingForMove(previous, normalized.date, normalized);
         input.date = normalized.date as string; input.disposition = "open";
-        if ("timing" in normalized && input.plan) input.plan = diaryContent({ ...input.plan, timing: normalized.timing }, input.kind);
+        if (normalized.durationMode === "manual" && input.plan) input.plan = diaryContent(withoutTiming(input.plan), input.kind);
+        else if ("timing" in normalized && input.plan) input.plan = diaryContent({ ...input.plan, timing: normalized.timing }, input.kind);
       } else if (action === "archive") archivedAt = new Date();
       else if (action === "restore") archivedAt = null;
       input = validateDiary(input, ctx.today);

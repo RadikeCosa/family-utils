@@ -11,7 +11,7 @@ test.beforeEach(async ({ context, page }) => {
   await context.addCookies(profile.cookie.split("; ").map((item: string) => { const [name, ...rest] = item.split("="); return { name, value: rest.join("="), url: server.origin }; }));
   page.on("dialog", dialog => dialog.accept());
 });
-test("register freely with real duration, multiple sessions, keyboard and day navigation", async ({ page }, testInfo) => {
+test("register freely in manual minutes, multiple sessions, keyboard and day navigation", async ({ page }, testInfo) => {
   await page.goto(`${server.origin}/entrenamiento`);
   await expect(page.getByRole("heading", { name: /^Hoy ·/ })).toBeVisible();
   await page.getByRole("button", { name: "Registrar actividad", exact: true }).click();
@@ -19,20 +19,28 @@ test("register freely with real duration, multiple sessions, keyboard and day na
   await expect(page.getByLabel("Esta anotación es")).toHaveCount(0);
   await page.getByLabel("Fecha", { exact: true }).fill("2020-01-02");
   await page.getByLabel("¿Qué hiciste?").fill("Caminata libre sin rutina");
-  await page.getByLabel("Hora de inicio").fill("09:00");
+  await page.getByLabel("Duración (minutos, opcional)").fill("0");
   await page.getByRole("button", { name: "Guardar actividad", exact: true }).click();
   await expect(page.locator("section[aria-labelledby=diary-editor-title]").getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("¿Qué hiciste?")).toHaveValue("Caminata libre sin rutina");
-  await page.getByLabel("Hora de fin").fill("10:45");
+  await page.getByLabel("Duración (minutos, opcional)").fill("-1");
+  await page.getByRole("button", { name: "Guardar actividad", exact: true }).click();
+  await expect(page.locator("section[aria-labelledby=diary-editor-title]").getByRole("alert")).toBeVisible();
+  await page.getByLabel("Duración (minutos, opcional)").fill("1.5");
+  await page.getByRole("button", { name: "Guardar actividad", exact: true }).click();
+  await expect(page.locator("section[aria-labelledby=diary-editor-title]").getByRole("alert")).toBeVisible();
+  await page.getByLabel("Duración (minutos, opcional)").fill("105");
   await page.getByLabel("Intensidad percibida (opcional)").selectOption("5");
-  await expect(page.getByRole("status").filter({ hasText: "Duración:" })).toContainText("1 h 45 min");
+  await expect(page.getByLabel("Duración (minutos, opcional)")).toHaveValue("105");
+  await expect(page.getByLabel("Hora de inicio")).toHaveCount(0);
   const accessibility = await new AxeBuilder({ page }).include("section[aria-labelledby=diary-editor-title]").analyze();
   expect(accessibility.violations.filter(item => item.impact === "critical" || item.impact === "serious")).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results-training-diary/activity-${testInfo.project.name}.png`, fullPage: true });
   await page.getByRole("button", { name: "Guardar actividad", exact: true }).click();
   await expect(page.locator("#entry-detail-title")).toHaveText("Caminata libre sin rutina");
-  await expect(page.locator("section[aria-labelledby=entry-detail-title]")).toContainText("45");
+  await expect(page.locator("section[aria-labelledby=entry-detail-title]")).toContainText("1 h 45 min");
+  await expect(page.locator("section[aria-labelledby=entry-detail-title]")).not.toContainText("Horario:");
   await page.getByRole("button", { name: "Cerrar detalle", exact: true }).click();
   await page.getByRole("button", { name: "Registrar actividad", exact: true }).click();
   await page.getByLabel("¿Qué hiciste?").fill("Movilidad sin horarios");
@@ -49,19 +57,19 @@ test("planning cannot become a result; future days offer planning", async ({ pag
   await page.getByRole("button", { name: "Planificar entrenamiento", exact: true }).click();
   await expect(page.getByLabel("Esta anotación es")).toHaveCount(0);
   await expect(page.getByLabel("Intensidad percibida (opcional)")).toHaveCount(0);
-  await page.getByLabel("¿Qué tenés previsto?").fill("Plan con horarios futuros");
-  await page.getByLabel("Hora de inicio").fill("10:00"); await page.getByLabel("Hora de fin").fill("11:00");
+  await page.getByLabel("¿Qué tenés previsto?").fill("Plan con duración futura");
+  await page.getByLabel("Duración (minutos, opcional)").fill("1440");
   await page.getByRole("button", { name: "Guardar plan", exact: true }).click();
-  await expect(page.locator("#entry-detail-title")).toHaveText("Plan con horarios futuros");
+  await expect(page.locator("#entry-detail-title")).toHaveText("Plan con duración futura");
+  await expect(page.locator("section[aria-labelledby=entry-detail-title]")).toContainText("24 h");
   await page.locator("section[aria-labelledby=entry-detail-title]").getByRole("button", { name: "Mover a hoy y registrar actividad", exact: true }).click();
   await page.getByLabel("Fecha", { exact: true }).fill("2020-01-03");
-  await expect(page.getByLabel("Hora de inicio")).toHaveValue("");
   await page.getByLabel("¿Qué hiciste?").fill("Realizado otro día");
-  await page.getByLabel("Hora de inicio").fill("10:00"); await page.getByLabel("Hora de fin").fill("10:30");
+  await page.getByLabel("Duración (minutos, opcional)").fill("35");
   await page.getByRole("button", { name: "Guardar actividad", exact: true }).click();
   await expect(page.locator("#entry-detail-title")).toHaveText("Realizado otro día");
   await page.getByText("Lo planificado", { exact: true }).click();
-  await expect(page.getByText("Plan con horarios futuros", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Plan con duración futura", { exact: true }).first()).toBeVisible();
 });
 test("routine selection remains optional and snapshots are editable", async ({ page }) => {
   const routine = await diaryCall(server, profile, "routines", "POST", { name: "Circuito guardado", blocks: [{ name: "", rounds: 1, exercises: [{ name: "Plancha", mode: "time", seconds: 30 }] }], operationKey: randomUUID() }, "2"); expect(routine.status).toBe(201);
@@ -83,7 +91,7 @@ test("compatibility interface edits timed entries with the new form switched off
     expect(response.status).toBe(201);
     await page.goto(`${compatible.origin}/entrenamiento?fecha=2020-01-02&detalle=${response.body.item.id}`);
     await page.getByRole("button", { name: "Corregir lo realizado", exact: true }).click();
-    await expect(page.getByText(/Horarios guardados/)).toBeVisible();
+    await expect(page.getByLabel("Duración (minutos, opcional)")).toHaveValue("60");
     await expect(page.getByLabel("Hora de inicio")).toHaveCount(0);
     await page.getByLabel("¿Qué hiciste?").fill("Edited with compatible interface");
     await page.getByRole("button", { name: "Guardar anotación", exact: true }).click();
