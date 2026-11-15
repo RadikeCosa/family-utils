@@ -119,7 +119,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
       {!writable && <p className={styles.notice}>Modo de consulta: no se puede registrar en el diario.</p>}
       {display.workMs < 1000 && <p className={styles.muted}>Completá al menos un segundo de trabajo para registrar la sesión.</p>}
       {registered && <p role="status">Sesión registrada en el diario. <button onClick={() => { setView("setup"); setRegistered(null); }}>Cerrar</button></p>}
-      {!registered && <div className={styles.actions}><button className={styles.primary} disabled={!writable || display.workMs < 1000} onClick={openDiary}>Registrar en mi diario</button><button onClick={start}>Repetir</button><button onClick={() => { setView("setup"); setDisplay(null); run.current = null; }}>Cerrar</button></div>}
+      {!registered && <div className={styles.actions}><button className={styles.primary} disabled={!writable || display.workMs < 1000} onClick={openDiary}>Registrar en mi diario</button><button onClick={start}>Repetir</button><button onClick={() => { if (!window.confirm("¿Cerrar el resumen? La sesión sin registrar se descartará.")) return; setView("setup"); setDisplay(null); setEditor(null); run.current = null; summaryKey.current = null; sessionDate.current = null; }}>Cerrar</button></div>}
     </div> : null}
   </section>;
 }
