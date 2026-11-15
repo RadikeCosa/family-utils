@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EntryResponse } from "@/lib/training/diary-client";
-import { createHiitRun, finishHiit, HIIT_PRESETS, hiitCanRegister, hiitCivilDate, hiitTotalMs, pauseHiit, resumeHiit, tickHiit, validateHiitConfig, type HiitConfig, type HiitRun, type HiitSnapshot } from "@/lib/training/hiit";
+import { createHiitRun, finishHiit, HIIT_PRESETS, hiitCanRegister, hiitCivilDate, hiitTotalMs, hiitTrainingMs, pauseHiit, resumeHiit, tickHiit, validateHiitConfig, type HiitConfig, type HiitRun, type HiitSnapshot } from "@/lib/training/hiit";
 import { formatActivityDuration } from "@/lib/training/timing";
 import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import styles from "./training.module.css";
@@ -20,7 +20,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
   const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<string | null>(null);
   const run = useRef<HiitRun | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), timer = useRef<number | null>(null), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), editorOpener = useRef<HTMLElement | null>(null), titleRef = useRef<HTMLHeadingElement>(null), pauseRef = useRef<() => void>(() => {}), activeHref = useRef(""), soundRef = useRef(sound), uncertainRef = useRef(false);
   const inProgress = view === "run", unsavedSummary = view === "summary" && !registered;
-  const configError = validateHiitConfig(config), duration = hiitTotalMs(config);
+  const configError = validateHiitConfig(config), duration = hiitTotalMs(config), trainingDuration = hiitTrainingMs(config);
   useEffect(() => { if (view === "summary") titleRef.current?.focus(); }, [view]);
   useEffect(() => { soundRef.current = sound; }, [sound]);
   useEffect(() => { if (!active && run.current && !registered) { stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setView("setup"); summaryKey.current = null; } }, [active, registered]);
@@ -98,7 +98,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
     {editor ? <DiaryEditor key={`hiit-${editor.operationKey ?? "new"}`} target={editor} today={today} activityFormEnabled={activityFormEnabled} onClose={() => { setEditor(null); requestAnimationFrame(() => editorOpener.current?.focus()); }} onSaved={saved} onUncertainChange={handleUncertainChange} /> : view === "setup" ? <>
       <div className={styles.actions}>{HIIT_PRESETS.map(preset => <button type="button" key={preset.name} onClick={() => setConfig({ ...preset.config })}>{preset.name}</button>)}</div>
       <div className={styles.hiitGrid}>{([ ["Preparación (segundos)", "preparationSeconds", 0, 3600], ["Trabajo (segundos)", "workSeconds", 1, 3600], ["Descanso (segundos)", "restSeconds", 0, 3600], ["Rondas", "rounds", 1, 100] ] as const).map(([label, key, min, max]) => <label key={key}>{label}<input type="number" min={min} max={max} step="1" value={config[key]} onChange={event => setConfig(value => ({ ...value, [key]: event.target.value === "" ? min : Number(event.target.value) }))} /></label>)}</div>
-      <p className={styles.notice}>Duración prevista: {formatClock(duration)} de entrenamiento + {formatClock(config.preparationSeconds * 1000)} de preparación.</p>
+      <p className={styles.notice}>Duración prevista: {formatClock(trainingDuration)} de entrenamiento + {formatClock(config.preparationSeconds * 1000)} de preparación.</p>
       {configError && <p role="alert" className={styles.error}>{configError}</p>}
       <label className={styles.nextDay}><input type="checkbox" checked={sound} onChange={event => setSound(event.target.checked)} /> Avisos sonoros</label>
       {sound && <button type="button" onClick={() => { const Audio = window.AudioContext; if (Audio) { audio.current ??= new Audio(); void audio.current.resume().then(() => tone(audio.current, "start")); } }}>Probar sonido</button>}

@@ -10,7 +10,8 @@ export const HIIT_PRESETS: { name: string; config: HiitConfig }[] = [
   { name: "20/10 × 8", config: { preparationSeconds: 10, workSeconds: 20, restSeconds: 10, rounds: 8 } },
   { name: "40/20 × 8", config: { preparationSeconds: 10, workSeconds: 40, restSeconds: 20, rounds: 8 } },
 ];
-export function hiitTotalMs(config: HiitConfig) { return (config.preparationSeconds + config.workSeconds * config.rounds + config.restSeconds * Math.max(0, config.rounds - 1)) * 1000; }
+export function hiitTrainingMs(config: HiitConfig) { return (config.workSeconds * config.rounds + config.restSeconds * Math.max(0, config.rounds - 1)) * 1000; }
+export function hiitTotalMs(config: HiitConfig) { return config.preparationSeconds * 1000 + hiitTrainingMs(config); }
 export function validateHiitConfig(config: HiitConfig): string | null {
   if (![config.preparationSeconds, config.workSeconds, config.restSeconds, config.rounds].every(Number.isInteger) || config.preparationSeconds < 0 || config.preparationSeconds > 3600 || config.workSeconds < 1 || config.workSeconds > 3600 || config.restSeconds < 0 || config.restSeconds > 3600 || config.rounds < 1 || config.rounds > 100) return "Revisá los tiempos y las rondas permitidos.";
   return hiitTotalMs(config) > HIIT_MAX_TOTAL_MS ? "El temporizador no puede superar 4 horas. Reducí los tiempos o las rondas" : null;

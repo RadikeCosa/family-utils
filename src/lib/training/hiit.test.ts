@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHiitRun, finishHiit, hiitCanRegister, hiitCivilDate, hiitTotalMs, HIIT_PRESETS, pauseHiit, resumeHiit, tickHiit, validateHiitConfig } from "./hiit.ts";
+import { createHiitRun, finishHiit, hiitCanRegister, hiitCivilDate, hiitTotalMs, hiitTrainingMs, HIIT_PRESETS, pauseHiit, resumeHiit, tickHiit, validateHiitConfig } from "./hiit.ts";
 
 test("preset durations exclude final rest and include preparation separately", () => {
   assert.equal(hiitTotalMs(HIIT_PRESETS[0].config), 240_000);
   assert.equal(hiitTotalMs(HIIT_PRESETS[1].config), 470_000);
+  assert.equal(hiitTrainingMs(HIIT_PRESETS[0].config), 230_000);
+  assert.equal(hiitTrainingMs(HIIT_PRESETS[1].config), 460_000);
 });
 test("total limit is applied even when individual fields are valid", () => {
   assert.match(validateHiitConfig({ preparationSeconds: 0, workSeconds: 3600, restSeconds: 0, rounds: 5 })!, /4 horas/);
