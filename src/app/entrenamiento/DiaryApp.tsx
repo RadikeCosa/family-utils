@@ -3,11 +3,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import DateNavigation from "@/components/calendar/DateNavigation";
 import { updateNavigation, updateNavigationHash, useDetailTitle, useNavigationHash, useNavigationQuery } from "@/components/platform/navigation";
-import { civilLabel, civilWeekStart, dayInZone } from "@/lib/calendar/civil";
+import { civilLabel, civilWeekStart } from "@/lib/calendar/civil";
 import { countsLabel, dayIndicator, diaryDate, DIARY_MAX, DIARY_MIN, entryTitle, statusLabel, weekDates, emptyCounts, type DayCounts, type DiaryContext, type DiaryEntry } from "@/lib/training/diary";
 import { diaryRequest, type EntryPage, type EntryResponse } from "@/lib/training/diary-client";
 import { clearTrainingHandoffs, readTrainingHandoff, type TrainingHandoff } from "@/lib/training/drafts";
-import { localClock } from "@/lib/training/timing";
 import { formatActivityDuration as formatDuration } from "@/lib/training/timing";
 import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import TrainingApp from "./TrainingApp";
@@ -97,7 +96,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
     <div data-page-heading className={styles.hero}><p className={styles.eyebrow}>UN DÍA A LA VEZ</p><h1 tabIndex={-1} ref={heading}>Entrenamiento</h1><p>{memberName}, anotá lo que hiciste y lo que tenés previsto.</p></div>
     {!editor && nav}
     {!ctx.writable && <p className={styles.notice}>Modo de consulta. Tus anotaciones se conservan y se pueden consultar.</p>}
-    {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} timeZone={ctx.timeZone} serverNow={ctx.serverNow} activityFormEnabled={ctx.activityFormEnabled} onClose={closeEditor} onSaved={saved} /> : <>
+    {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} activityFormEnabled={ctx.activityFormEnabled} onClose={closeEditor} onSaved={saved} /> : <>
       {handoff && <section className={styles.confirm}><p>Hay un formulario conservado al actualizar. Se elimina a los 30 minutos.</p><button disabled={busy || !ctx.writable} onClick={() => void restoreHandoff()}>Recuperar formulario</button><button onClick={() => { clearTrainingHandoffs(); setHandoff(null); }}>Descartar formulario</button></section>}
       <DateNavigation date={date} today={ctx.today} min={DIARY_MIN} max={DIARY_MAX} step={7} className={styles.dateNavigation} onSelect={selectDate} />
       <ol className={styles.week} aria-label="Semana de entrenamiento">{weekDates(week).map(day => {
@@ -133,5 +132,5 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
 }
 function Content({ content }: { content: DiaryEntry["plan"] }) {
   if (content === null) return null;
-  return <div><p className={styles.note}>{content.text}</p>{content.timing && <p>Horario: {localClock(content.timing.startAt, content.timing.timeZone)}–{localClock(content.timing.endAt, content.timing.timeZone)}{dayInZone(new Date(content.timing.startAt), content.timing.timeZone) !== dayInZone(new Date(content.timing.endAt), content.timing.timeZone) ? " (día siguiente)" : ""} · {content.timing.timeZone}</p>}{content.durationSeconds != null && <p>Duración: {formatDuration(content.durationSeconds)}</p>}{content.effort != null && <p>Intensidad percibida: {content.effort}/10</p>}{content.blocks?.length ? <BlockSummary blocks={content.blocks} /> : null}</div>;
+  return <div><p className={styles.note}>{content.text}</p>{content.durationSeconds != null && <p>Duración: {formatDuration(content.durationSeconds)}</p>}{content.effort != null && <p>Intensidad percibida: {content.effort}/10</p>}{content.blocks?.length ? <BlockSummary blocks={content.blocks} /> : null}</div>;
 }

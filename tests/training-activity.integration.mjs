@@ -57,6 +57,21 @@ test("activity migration, old bundle compatibility and timing contract", { skip:
       entry = (await edit(entry, make({ result: { text: "Preserved" } }))).body.item; assert.equal(entry.result.durationSeconds, 99);
       entry = (await edit(entry, make({ result: { text: "Cleared", durationSeconds: null } }))).body.item; assert.equal(entry.result.durationSeconds, null);
     });
+    await t.test("manual minutes preserve untouched history and unlink intervals only for changed contents", async () => {
+      const dated = { ...timingFromClocks("2020-01-02", "12:00", "13:01", false, "UTC"), endAt: "2020-01-02T13:01:23.000Z" };
+      let current = (await create(make({ result: { text: "Historic run", timing: dated } }))).body.item;
+      const unchanged = await call(`entries/${current.id}`, "PATCH", { action: "edit", input: make({ result: { text: "Text corrected", timing: dated } }), durationMode: "manual", durationTarget: "result", durationChanged: false, version: current.version, operationKey: randomUUID() });
+      assert.equal(unchanged.status, 200, JSON.stringify(unchanged)); current = unchanged.body.item;
+      assert.deepEqual(current.result.timing, dated); assert.equal(current.result.durationSeconds, 3683);
+      const corrected = await call(`entries/${current.id}`, "PATCH", { action: "edit", input: make({ result: { text: "Duration corrected", durationSeconds: 75 * 60 } }), durationMode: "manual", durationTarget: "result", durationChanged: true, version: current.version, operationKey: randomUUID() });
+      assert.equal(corrected.status, 200, JSON.stringify(corrected)); current = corrected.body.item;
+      assert.equal(current.result.timing, undefined); assert.equal(current.result.durationSeconds, 4500);
+      const copied = await call("entries", "POST", { action: "copy", sourceId: (await create(make({ result: { text: "Copy source", timing: dated } }))).body.item.id, content: "result", date: "2020-01-04", durationMode: "manual", durationTarget: "result", durationChanged: false, operationKey: randomUUID() });
+      assert.equal(copied.status, 201, JSON.stringify(copied)); assert.equal(copied.body.item.plan.timing, undefined); assert.equal(copied.body.item.plan.durationSeconds, 3683);
+      const planned = (await create(make({ plan: { text: "Move plan", timing: dated }, result: null }))).body.item;
+      const moved = await call(`entries/${planned.id}`, "PATCH", { action: "reschedule", date: "2199-01-02", durationMode: "manual", durationTarget: "plan", durationChanged: false, version: planned.version, operationKey: randomUUID() });
+      assert.equal(moved.status, 200, JSON.stringify(moved)); assert.equal(moved.body.item.plan.timing, undefined); assert.equal(moved.body.item.plan.durationSeconds, 3683);
+    });
     await t.test("move and result are atomic, retaining the original planned interval", async () => {
       const plan = (await create(make({ plan: { text: "Planned", timing }, result: null }))).body.item;
       const real = timingFromClocks("2020-01-03", "10:00", "10:30", false, "UTC");

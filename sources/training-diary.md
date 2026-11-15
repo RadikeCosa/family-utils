@@ -190,9 +190,20 @@ por consulta con 100000 entradas sintéticas; p95 <=500 ms. Evidencia en
 
 `TRAINING_ACTIVITY_FORM_ENABLED=false` incorpora la API y el editor compatibles
 sin habilitar el formulario nuevo. Con la bandera en `true` y el diario habilitado,
-«Registrar actividad» admite una frase o una rutina opcional, horarios e intensidad
-percibida. «Planificar entrenamiento» guarda exclusivamente planes. La intensidad
-es 1–3 suave, 4–7 moderada, 8–10 muy intensa. No se bloquean superposiciones.
+«Registrar actividad» admite una frase o una rutina opcional, duración manual en
+minutos e intensidad percibida. «Planificar entrenamiento» guarda exclusivamente
+planes y también admite duración en minutos. El campo acepta minutos enteros de 1
+a 1440 y puede quedar vacío. La intensidad es 1–3 suave, 4–7 moderada, 8–10 muy
+intensa. No se bloquean superposiciones.
+
+La API mantiene `durationSeconds` y el formato histórico de intervalos. El cliente
+nuevo envía `durationMode:"manual"` y el contenido afectado; los minutos se
+convierten a segundos. Sin cambios en duración, editar texto conserva segundos y
+horarios históricos. Si el valor tiene segundos sobrantes, el campo muestra el
+minuto redondeado y aclara la duración exacta, que no se redondea al guardar.
+Corregir duración, cambiar la fecha, copiar o reprogramar elimina los horarios del
+contenido afectado y conserva su duración cuando no se cambió. El plan histórico
+no se altera al registrar o corregir un resultado.
 
 Cada contenido admite `timing: {startAt,endAt,timeZone}`: instantes UTC ISO
 normalizados y zona IANA. La duración se calcula en el servidor y se guarda en
@@ -238,7 +249,8 @@ ensayos aislados; habilitar variable y redesplegar. Reversión funcional: apagar
 TRAINING_ACTIVITY_FORM_ENABLED y redesplegar la versión compatible, sin revertir
 0068 ni la transición del diario. No revertir a código previo a esta compatibilidad.
 Los ensayos incluyen datos históricos sin horarios, cliente sin cabecera nueva,
-cambios de fecha, DST, movimiento/resultado atómico y cupo 100 con reintentos.
+cambios de fecha, DST, movimiento/resultado atómico, duración manual, preservación
+de segundos históricos y cupo 100 con reintentos.
 
 ### Verificación del registro de actividad
 
