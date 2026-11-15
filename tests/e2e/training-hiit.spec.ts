@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { diaryDatabase, diaryServer, diaryProfile } from "../training-diary-fixture.mjs";
 let db: Awaited<ReturnType<typeof diaryDatabase>>, server: Awaited<ReturnType<typeof diaryServer>>;
 test.skip(!process.env.FAMILY_UTILS_TEST_DATABASE_URL, "requires explicit isolated PostgreSQL");
-test.beforeAll(async () => { db = await diaryDatabase(); server = await diaryServer(db.url, true, true, false, true); });
+test.beforeAll(async () => { db = await diaryDatabase(); server = await diaryServer(db.url, true, true, true, true); });
 test.afterAll(async () => { await server?.close(); await db?.close(); });
 test("HIIT timer previews a preset, records a completed short session and protects operation data", async ({ page, context }) => {
   await db.pool.query("SELECT public.training_diary_transition()");
