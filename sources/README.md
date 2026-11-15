@@ -28,6 +28,10 @@ contradicen, explicitar la diferencia y acordar cualquier cambio de producto.
 - [Guía de agentes](../AGENTS.md): acuerdos permanentes de trabajo.
 - [Skills del proyecto](../agent-skills.md): instalación, comprobación y actualización.
 - [Verificación local y matriz de controles](verification.md): PostgreSQL aislado y suites.
+- [Preparar y autorizar una publicación](deployment.md): selección de suites,
+  evidencia completa previa, preflight de solo lectura y recuperación.
+- [Ventana inicial de observación del selector](verification-impact-window.md):
+  registro de los primeros 20 PR y disparador de suspensión.
 - [Runbook Champions](champions/publicacion-runbook.md): procedimiento especializado;
   su existencia no autoriza ejecutarlo contra producción.
 - [Compras](shopping-lists.md), [Recetas](recipes.md), [Cinemateca](cinemateca-familiar.md)
