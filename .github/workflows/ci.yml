@@ -64,6 +64,8 @@ jobs:
         run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
       - run: npm run lint
       - run: npm run typecheck
+      - name: Verify agent tooling safety and result summaries
+        run: node --test tests/agent-tooling.test.mjs
       - if: steps.scope.outputs.training_only != 'true'
         run: npm test
       - if: steps.scope.outputs.training_only != 'true'

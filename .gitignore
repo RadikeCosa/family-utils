@@ -14,7 +14,17 @@ coverage/
 playwright-report/
 test-results/
 
-.agents/
+# Skills externas instaladas; las futuras skills propias quedan versionables.
+/.agents/skills/neon/
+/.agents/skills/neon-postgres/
+/.agents/skills/vercel-react-best-practices/
+/.agents/skills/web-design-guidelines/
+/.agents/skills/sleek-design-mobile-apps/
+/.agents/skills/ui-ux-pro-max/
+/.agents/tmp/
+/.agents/cache/
+/.agents/**/*.pyc
+/.agents/**/__pycache__/
 
 /test-results-a11y/
 /.release-private/
