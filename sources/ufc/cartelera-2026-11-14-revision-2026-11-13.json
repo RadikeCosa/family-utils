@@ -1,0 +1,110 @@
+{
+  "kind": "ufc_card",
+  "sourceProvider": "ufc_official",
+  "externalReference": "ufc-334",
+  "title": "UFC 334: Gane vs Hokit",
+  "eventDate": "2026-11-14",
+  "venue": "Madison Square Garden",
+  "city": "Nueva York",
+  "country": "Estados Unidos",
+  "eventType": "numerado",
+  "mainCardDate": "2026-11-14",
+  "mainCardTime": "23:00",
+  "preliminaryDate": "2026-11-14",
+  "preliminaryTime": "21:00",
+  "earlyPreliminariesDate": "2026-11-14",
+  "earlyPreliminariesTime": "19:00",
+  "fights": [
+    {
+      "boutBlock": "main",
+      "isMainEvent": true,
+      "firstFighter": "Ciryl Gane",
+      "secondFighter": "Josh Hokit"
+    },
+    {
+      "boutBlock": "main",
+      "isMainEvent": false,
+      "firstFighter": "Kayla Harrison",
+      "secondFighter": "Amanda Nunes"
+    },
+    {
+      "boutBlock": "main",
+      "isMainEvent": false,
+      "firstFighter": "Caio Borralho",
+      "secondFighter": "Yousri Belgaroui"
+    },
+    {
+      "boutBlock": "main",
+      "isMainEvent": false,
+      "firstFighter": "Uroš Medić",
+      "secondFighter": "Kevin Holland"
+    },
+    {
+      "boutBlock": "main",
+      "isMainEvent": false,
+      "firstFighter": "Bilal Hasan",
+      "secondFighter": "Luis Gurule"
+    },
+    {
+      "boutBlock": "preliminaries",
+      "isMainEvent": false,
+      "firstFighter": "Stephen Thompson",
+      "secondFighter": "Charles Radtke"
+    },
+    {
+      "boutBlock": "preliminaries",
+      "isMainEvent": false,
+      "firstFighter": "Drew Dober",
+      "secondFighter": "Chris Duncan"
+    },
+    {
+      "boutBlock": "preliminaries",
+      "isMainEvent": false,
+      "firstFighter": "Jim Miller",
+      "secondFighter": "Terrance McKinney"
+    },
+    {
+      "boutBlock": "preliminaries",
+      "isMainEvent": false,
+      "firstFighter": "Donte Johnson",
+      "secondFighter": "Cesar Almeida"
+    },
+    {
+      "firstFighter": "Jared Gordon",
+      "secondFighter": "Melquizael Costa",
+      "boutBlock": "early_preliminaries",
+      "isMainEvent": false
+    },
+    {
+      "firstFighter": "Macy Chiasson",
+      "secondFighter": "Bia Mesquita",
+      "boutBlock": "early_preliminaries",
+      "isMainEvent": false
+    },
+    {
+      "firstFighter": "Alatengheili",
+      "secondFighter": "Juan Diaz",
+      "boutBlock": "early_preliminaries",
+      "isMainEvent": false
+    },
+    {
+      "firstFighter": "Evan Elder",
+      "secondFighter": "Samuel Sanches",
+      "boutBlock": "early_preliminaries",
+      "isMainEvent": false
+    }
+  ],
+  "source": {
+    "primary": "https://www.ufc.com/event/ufc-334",
+    "checkedAt": "2026-11-13T23:14:44.196Z",
+    "updates": "https://www.ufc.com/news/updates-polymarket-ufc-334-gane-vs-hokit",
+    "crossCheck": "https://www.paramountplus.com/sneak-peak/how-to-watch-ufc-334-gane-hokit",
+    "validation": {
+      "officialCardComplete": true,
+      "officialFightCount": 13,
+      "independentCrossCheck": "pending"
+    },
+    "notes": "Ficha oficial vigente y aviso de cambios del 10/11: Alatengheili reemplaza a Adrian Yanez; Sadykhov–Nascimento cancelada. Se incorporan Gordon–Costa y Elder–Sanches a tempranas. Horarios argentinos 19:00/21:00/23:00. La cantidad coincide con Paramount+; cotejo independiente pelea por pelea pendiente."
+  },
+  "_historicalNotice": "REGISTRO HISTÓRICO. Revisión fechada el 13/11/2026; no representa el estado actual de producción."
+}
