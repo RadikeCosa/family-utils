@@ -16,5 +16,24 @@ services:
     volumes:
       - family_utils_postgres:/var/lib/postgresql/data
 
+  # Servicio independiente: no recrea postgres ni reutiliza sus datos de la versión 17.
+  postgres-test:
+    image: postgres:18
+    profiles: [verification]
+    environment:
+      POSTGRES_USER: family
+      POSTGRES_PASSWORD: family
+      POSTGRES_DB: champions_test
+    ports:
+      - "127.0.0.1:${FAMILY_UTILS_TEST_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U family -d champions_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - family_utils_postgres18_test:/var/lib/postgresql
+
 volumes:
   family_utils_postgres:
+  family_utils_postgres18_test:

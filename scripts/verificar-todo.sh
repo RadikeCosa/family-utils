@@ -15,13 +15,17 @@ fi
 if ! FAMILY_UTILS_VALIDATION_URL="$DATABASE_URL_VALUE" node <<'NODE'
 const raw = process.env.FAMILY_UTILS_VALIDATION_URL;
 let url;
-try { url = new URL(raw); } catch {
+try {
+  url = new URL(raw);
+  decodeURIComponent(url.pathname);
+} catch {
   console.error("ERROR: FAMILY_UTILS_TEST_DATABASE_URL no es una URL PostgreSQL válida; no se ejecutó nada.");
   process.exit(2);
 }
 const host = url.hostname.toLowerCase();
 const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
-if (!['127.0.0.1', 'localhost'].includes(host) || database !== 'champions_test') {
+if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.search || url.hash
+  || !['127.0.0.1', 'localhost'].includes(host) || database !== 'champions_test') {
   console.error(`ERROR: se requiere host 127.0.0.1/localhost y base champions_test (host=${host || '(vacío)'}, base=${database || '(vacía)'}); no se ejecutó nada.`);
   process.exit(2);
 }
@@ -34,10 +38,52 @@ fi
 # usa un puerto predeterminado ni una URL alternativa del entorno.
 export DATABASE_URL="$DATABASE_URL_VALUE"
 export DATABASE_URL_UNPOOLED="$DATABASE_URL_VALUE"
+# El build y los servidores locales no deben heredar credenciales de autenticación reales.
+export BETTER_AUTH_SECRET="verification-local-only-secret-at-least-32-characters"
+export CODE_PEPPER="verification-local-only-pepper-at-least-32-characters"
+export BETTER_AUTH_URL="http://localhost:3000"
+export GOOGLE_CLIENT_ID=""
+export GOOGLE_CLIENT_SECRET=""
 
 cd "$ROOT_DIR" || exit 2
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+auxiliary_database() {
+  node --input-type=module - "$1" "$TMP_DIR/unified-url" <<'NODE'
+import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+const [action, file] = process.argv.slice(2);
+const base = new URL(process.env.FAMILY_UTILS_TEST_DATABASE_URL);
+const pool = new pg.Pool({ connectionString: base.toString(), connectionTimeoutMillis: 5000 });
+try {
+  if (action === 'create') {
+    const name = `family_unified_${randomUUID().replaceAll('-', '')}_test`;
+    await pool.query(`CREATE DATABASE "${name}"`);
+    base.pathname = `/${name}`;
+    try { await writeFile(file, base.toString(), { mode: 0o600 }); }
+    catch (error) { await pool.query(`DROP DATABASE "${name}"`); throw error; }
+  } else {
+    const url = new URL(await readFile(file, 'utf8'));
+    const name = url.pathname.slice(1);
+    if (!/^family_unified_[a-f0-9]{32}_test$/.test(name)
+      || url.host !== base.host || url.username !== base.username) throw new Error('Invalid auxiliary test database');
+    await pool.query(`DROP DATABASE "${name}"`);
+  }
+} finally { await pool.end(); }
+NODE
+}
+cleanup() {
+  local status=$?
+  if [[ -f "$TMP_DIR/unified-url" ]]; then
+    if ! auxiliary_database drop; then
+      echo "ERROR: no se pudo retirar la base auxiliar creada por esta ejecución." >&2
+      status=1
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+  exit "$status"
+}
+trap cleanup EXIT
 
 declare -a SUITE_NAMES=()
 declare -a SUITE_EXECUTED=()
@@ -73,17 +119,7 @@ run_check() {
 
 parse_tap() {
   local file="$1"
-  node - "$file" <<'NODE'
-const fs = require('node:fs');
-const text = fs.readFileSync(process.argv[2], 'utf8');
-const last = (name) => [...text.matchAll(new RegExp(`^(?:#|ℹ) ${name}\\s+(\\d+)\\s*$`, 'gm'))].at(-1)?.[1];
-const tests = Number(last('tests'));
-const passed = Number(last('pass') ?? 0);
-const failed = Number(last('fail') ?? 0) + Number(last('cancelled') ?? 0);
-const skipped = Number(last('skipped') ?? 0) + Number(last('todo') ?? 0);
-if (!Number.isFinite(tests) || tests <= 0) process.exit(2);
-console.log([tests, passed, failed, skipped].join('|'));
-NODE
+  node scripts/verification-results.mjs tap "$file"
 }
 
 run_tap_suite() {
@@ -116,26 +152,7 @@ run_tap_suite() {
 
 parse_playwright_json() {
   local file="$1"
-  node - "$file" <<'NODE'
-const fs = require('node:fs');
-let report;
-try { report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); }
-catch { process.exit(2); }
-let executed = 0, passed = 0, failed = 0, skipped = 0;
-function visit(suite) {
-  for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) {
-    const status = test.status ?? test.results?.at(-1)?.status ?? 'unknown';
-    if (status === 'skipped') { skipped++; continue; }
-    executed++;
-    if (status === 'expected' || (status === 'passed' && test.expectedStatus === 'passed')) passed++;
-    else failed++;
-  }
-  for (const child of suite.suites ?? []) visit(child);
-}
-for (const suite of report.suites ?? []) visit(suite);
-if (executed + skipped === 0) process.exit(2);
-console.log([executed + skipped, passed, failed, skipped].join('|'));
-NODE
+  node scripts/verification-results.mjs playwright "$file"
 }
 
 run_playwright_suite() {
@@ -162,25 +179,80 @@ run_playwright_suite() {
     ANY_PROBLEM=1
     echo "FAIL: $name (exit $status; ejecutados=$executed aprobados=$passed fallidos=$failed omitidos=$skipped)"
     cat "$stderr"
+    node scripts/verification-results.mjs playwright-failures "$report"
   else
     echo "PASS: $name (ejecutados=$executed aprobados=$passed)"
   fi
 }
 
+# Verificar el servidor antes de aplicar migraciones o ejecutar suites.
+if ! node --input-type=module <<'NODE'
+import pg from 'pg';
+const pool = new pg.Pool({ connectionString: process.env.FAMILY_UTILS_TEST_DATABASE_URL, connectionTimeoutMillis: 5000 });
+try {
+  const { rows } = await pool.query("SELECT current_setting('server_version_num')::int AS version");
+  if (Math.floor(rows[0].version / 10000) !== 18) throw new Error('La verificación requiere PostgreSQL 18');
+} finally { await pool.end(); }
+NODE
+then
+  echo "ERROR: PostgreSQL 18 local no está disponible; no se ejecutaron suites." >&2
+  exit 2
+fi
+
+run_check "Dependencias instaladas" npm ls --depth=0
+run_check "Migraciones ordenadas y hashes de SQL" npm run db:check
+run_check "Consistencia de snapshots Drizzle" ./node_modules/.bin/drizzle-kit check
+# Migrar solo la base local validada; detenerse si no puede prepararse.
+if ! npm run db:migrate; then
+  echo "ERROR: no se pudo preparar champions_test; no se ejecutaron suites." >&2
+  exit 1
+fi
 run_check "Typecheck" npm run typecheck
 run_check "Lint" npm run lint
 run_check "Build" npm run build
 
-run_check "Migraciones ordenadas y hashes de SQL" npm run db:check
-run_check "Consistencia de snapshots Drizzle" ./node_modules/.bin/drizzle-kit check
 run_check "Historial aplicado y hashes en champions_test" npm run db:verify
 
 run_tap_suite "Reglas/base" npm test
+run_tap_suite "Navegación" npm run test:navigation
+run_tap_suite "Herramientas de agentes" node --test tests/agent-tooling.test.mjs
 run_tap_suite "Rutas" npm run test:routes
+run_playwright_suite "Recetas" --config playwright.recipes.config.ts
 run_playwright_suite "Navegador general"
 run_playwright_suite "Deportes" --config playwright.sports-next.config.ts
 run_playwright_suite "Champions" --config playwright.champions.config.ts
 run_playwright_suite "Accesibilidad" --config playwright.a11y.config.ts
+
+# Igual que CI, aislar interfaz unificada y diario de las suites generales.
+run_check "Crear base auxiliar de interfaz" auxiliary_database create
+if [[ -f "$TMP_DIR/unified-url" ]]; then
+  AUXILIARY_URL="$(cat "$TMP_DIR/unified-url")"
+  (
+    export FAMILY_UTILS_TEST_DATABASE_URL="$AUXILIARY_URL"
+    export DATABASE_URL="$AUXILIARY_URL"
+    export DATABASE_URL_UNPOOLED="$AUXILIARY_URL"
+    npm run db:migrate
+  ) >"$TMP_DIR/unified-migrate.log" 2>&1
+  auxiliary_migration_status=$?
+  if (( auxiliary_migration_status == 0 )); then
+    add_result "Migrar base auxiliar" 1 1 0 0
+    # Asignaciones temporales: conservar el resumen en este shell y restaurar las URLs.
+    FAMILY_UTILS_TEST_DATABASE_URL="$AUXILIARY_URL" DATABASE_URL="$AUXILIARY_URL" DATABASE_URL_UNPOOLED="$AUXILIARY_URL" \
+      run_playwright_suite "Interfaz unificada" --config playwright.unified.config.ts
+    FAMILY_UTILS_TEST_DATABASE_URL="$AUXILIARY_URL" DATABASE_URL="$AUXILIARY_URL" DATABASE_URL_UNPOOLED="$AUXILIARY_URL" TRAINING_DIARY_PERFORMANCE=1 \
+      run_tap_suite "Diario: migración/API/rendimiento" npm run test:training:diary
+    FAMILY_UTILS_TEST_DATABASE_URL="$AUXILIARY_URL" DATABASE_URL="$AUXILIARY_URL" DATABASE_URL_UNPOOLED="$AUXILIARY_URL" \
+      run_playwright_suite "Diario: navegador" --config playwright.training-diary.config.ts
+  else
+    add_result "Migrar base auxiliar" 1 0 1 0
+    cat "$TMP_DIR/unified-migrate.log"
+  fi
+fi
+if [[ ! -f "$TMP_DIR/unified-url" ]] || (( ${auxiliary_migration_status:-1} != 0 )); then
+  add_result "Interfaz unificada" 0 0 0 1
+  add_result "Diario: migración/API/rendimiento" 0 0 0 1
+  add_result "Diario: navegador" 0 0 0 1
+fi
 
 printf '==> Permisos SQL public (solo lectura)\n'
 permission_count=0

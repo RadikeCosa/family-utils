@@ -1,29 +1,37 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
     "neon": {
       "source": "neondatabase/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/neon/SKILL.md",
-      "computedHash": "07ebeb0077c3a10fd82a87ee45a75f0c071bf118b95ea61da90907c8fc05a2f4"
+      "revision": "5bc1845c9bd436dba9d9c2d389bd6b14bf465354",
+      "gitTree": "ca5c10d59481cb3b0f40599969caf05069414086",
+      "directorySha256": "c2dc0c785a525df2fab712447b60f234e2ef8d4c3b4f277e0522b3e8eebe8a3e"
     },
     "neon-postgres": {
       "source": "neondatabase/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/neon-postgres/SKILL.md",
-      "computedHash": "b9763d379a3c5039e5555540a1333b1c529e2365d4f0b8fe2998ba41509814c5"
+      "revision": "5bc1845c9bd436dba9d9c2d389bd6b14bf465354",
+      "gitTree": "42d6ed80925af49856c1ce763c5cec0294620beb",
+      "directorySha256": "1972072c2abc29986313b76a530f2de484cdabcd0ace1a9388c76f0815322183"
     },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/react-best-practices/SKILL.md",
-      "computedHash": "3219a1944e404ffc14d1d9d6aef6dd2e3855b81387ee0a044ccbfe14d34c2357"
+      "revision": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "gitTree": "343db72180d05814949fef7d46be96b5c6ee86b3",
+      "directorySha256": "680a7db523877967f214ce98fbb6ab380c91efa19d5c09c8cf0b940bcedeedfe"
     },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
-      "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
+      "revision": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "gitTree": "3116f3e62dbd02b44a598b1aa690d2a8938e8f89",
+      "directorySha256": "3759484ee014cc054ea5187696f04f55365516fa7dbd31cd6f0fa1c57edc2979"
     }
   }
 }

@@ -186,20 +186,6 @@ por consulta con 100000 entradas sintéticas; p95 <=500 ms. Evidencia en
   efectivos y auditoría de registros/telemetría del proveedor, según el cierre
   operativo anterior. Las confirmaciones del script no sustituyen esas pruebas.
 
-## Preparación de producción — 10/11/2026
-
-La publicación se prepara sobre la versión de producción `169736f`, conservando
-las mejoras de navegación, Recetas y Cinemateca ya publicadas. Las 57 migraciones
-anteriores coinciden con los hashes locales; solo está pendiente `0067`.
-
-Ensayo Neon en una rama aislada de producción: migración aditiva, correspondencia
-de fechas/contenido/versiones, transición, rechazo P3001 de escrituras antiguas y
-SELECT del rol de respaldo en las cuatro tablas verificados. PUBLIC sin acceso.
-El proyecto no tiene drenajes externos de observabilidad configurados.
-
-Respaldo previo con cifrado y restauración PostgreSQL 18 completos:
-[ejecución 42878274215](https://github.com/RadikeCosa/family-utils-backups/actions/runs/42878274215).
-
 ## Registro de actividad y horarios (0068)
 
 `TRAINING_ACTIVITY_FORM_ENABLED=false` incorpora la API y el editor compatibles
