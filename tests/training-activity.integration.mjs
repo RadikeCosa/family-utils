@@ -68,9 +68,9 @@ test("activity migration, old bundle compatibility and timing contract", { skip:
       assert.equal(current.result.timing, undefined); assert.equal(current.result.durationSeconds, 4500);
       const copied = await call("entries", "POST", { action: "copy", sourceId: (await create(make({ result: { text: "Copy source", timing: dated } }))).body.item.id, content: "result", date: "2020-01-04", durationMode: "manual", durationTarget: "result", durationChanged: false, operationKey: randomUUID() });
       assert.equal(copied.status, 201, JSON.stringify(copied)); assert.equal(copied.body.item.plan.timing, undefined); assert.equal(copied.body.item.plan.durationSeconds, 3683);
-      const planned = (await create(make({ plan: { text: "Move plan", timing: dated, durationSeconds: 3660 }, result: null }))).body.item;
+      const planned = (await create(make({ plan: { text: "Move plan", timing: dated }, result: null }))).body.item;
       const moved = await call(`entries/${planned.id}`, "PATCH", { action: "reschedule", date: "2199-01-02", durationMode: "manual", durationTarget: "plan", durationChanged: false, version: planned.version, operationKey: randomUUID() });
-      assert.equal(moved.status, 200, JSON.stringify(moved)); assert.equal(moved.body.item.plan.timing, undefined); assert.equal(moved.body.item.plan.durationSeconds, 3660);
+      assert.equal(moved.status, 200, JSON.stringify(moved)); assert.equal(moved.body.item.plan.timing, undefined); assert.equal(moved.body.item.plan.durationSeconds, 3683);
     });
     await t.test("move and result are atomic, retaining the original planned interval", async () => {
       const plan = (await create(make({ plan: { text: "Planned", timing }, result: null }))).body.item;
