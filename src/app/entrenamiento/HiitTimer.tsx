@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EntryResponse } from "@/lib/training/diary-client";
-import { createHiitRun, finishHiit, HIIT_PRESETS, hiitCanRegister, hiitCivilDate, hiitTotalMs, hiitTrainingMs, pauseHiit, resumeHiit, tickHiit, validateHiitConfig, type HiitConfig, type HiitRun, type HiitSnapshot } from "@/lib/training/hiit";
+import { createHiitRun, finishHiit, HIIT_PRESETS, hiitCanRegister, hiitCivilDate, hiitTotalMs, pauseHiit, resumeHiit, tickHiit, validateHiitConfig, type HiitConfig, type HiitRun, type HiitSnapshot } from "@/lib/training/hiit";
 import { formatActivityDuration } from "@/lib/training/timing";
 import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import styles from "./training.module.css";
@@ -17,11 +17,13 @@ function tone(context: AudioContext | null, kind: string) {
 }
 export default function HiitTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange }: Props) {
   const [config, setConfig] = useState<HiitConfig>(INITIAL), [view, setView] = useState<"setup" | "run" | "summary">("setup");
-  const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null);
-  const run = useRef<HiitRun | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), timer = useRef<number | null>(null), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), editorOpener = useRef<HTMLElement | null>(null), titleRef = useRef<HTMLHeadingElement>(null), pauseRef = useRef<() => void>(() => {}), activeHref = useRef(""), soundRef = useRef(sound), uncertainRef = useRef(false);
+  const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null), [focusMode, setFocusMode] = useState(true);
+  const run = useRef<HiitRun | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), timer = useRef<number | null>(null), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), editorOpener = useRef<HTMLElement | null>(null), titleRef = useRef<HTMLHeadingElement>(null), startRef = useRef<HTMLButtonElement>(null), pauseControl = useRef<HTMLButtonElement>(null), focusControl = useRef<HTMLButtonElement>(null), pauseRef = useRef<() => void>(() => {}), activeHref = useRef(""), soundRef = useRef(sound), uncertainRef = useRef(false);
   const inProgress = view === "run", unsavedSummary = view === "summary" && !registered;
-  const configError = validateHiitConfig(config), duration = hiitTotalMs(config), trainingDuration = hiitTrainingMs(config);
+  const configError = validateHiitConfig(config), duration = hiitTotalMs(config);
+  const timerPaused = display?.paused ?? null;
   useEffect(() => { if (view === "summary") titleRef.current?.focus(); }, [view]);
+  useEffect(() => { if (view === "run" && timerPaused !== null) requestAnimationFrame(() => pauseControl.current?.focus()); }, [view, timerPaused]);
   useEffect(() => { soundRef.current = sound; }, [sound]);
   useEffect(() => { if (!active && run.current && !registered) { stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setView("setup"); summaryKey.current = null; } }, [active, registered]);
   useEffect(() => { if (active) activeHref.current = location.href; }, [active]);
@@ -32,11 +34,12 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
   function releaseWake() { void wake.current?.release().catch(() => {}); wake.current = null; }
   function play(kind: string) { if (soundRef.current) tone(audio.current, kind); }
   function stopTicker() { if (timer.current !== null) window.clearInterval(timer.current); timer.current = null; }
-  function finishSummary() { stopTicker(); releaseWake(); setDisplay(run.current ? { ...tickHiit(run.current, run.current.lastTick) } : null); setView("summary"); summaryKey.current = crypto.randomUUID(); }
+  function finishSummary() { stopTicker(); releaseWake(); setDisplay(run.current ? { ...tickHiit(run.current, run.current.lastTick) } : null); setFocusMode(false); setView("summary"); summaryKey.current = crypto.randomUUID(); }
   function start() {
     const now = Date.now();
     try { run.current = createHiitRun(config, now); } catch (failure) { setError((failure as Error).message); return; }
-    setError(""); setRegistered(null); sessionDate.current = null; summaryKey.current = null; setView("run");
+    setError(""); setRegistered(null); sessionDate.current = null; summaryKey.current = null; setDisplay(null); setFocusMode(true); setView("run");
+    requestAnimationFrame(() => pauseControl.current?.focus());
     const Audio = window.AudioContext;
     if (Audio) { audio.current ??= new Audio(); void audio.current.resume().then(() => play("start")).catch(() => setCapability("El sonido no está disponible; podés seguir con la pantalla.")); }
     else setCapability("Este navegador no ofrece avisos sonoros.");
@@ -57,8 +60,10 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
     resumeHiit(run.current, Date.now()); setDisplay(tickHiit(run.current, Date.now())); void acquireWake();
     timer.current = window.setInterval(() => { if (!run.current || run.current.paused) return; const next = tickHiit(run.current, Date.now()); setDisplay(next); next.sounds.forEach(play); if (next.complete) finishSummary(); }, 100);
   }
-  function discard() { if (!window.confirm("¿Descartar esta sesión? No se guardará en el diario.")) return; stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setRegistered(null); setView("setup"); }
-  function finishPartial() { if (!run.current) return; setDisplay(finishHiit(run.current, Date.now())); setView("summary"); summaryKey.current = crypto.randomUUID(); stopTicker(); releaseWake(); }
+  function discard() { if (!window.confirm("¿Descartar esta sesión? No se guardará en el diario.")) return; stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setRegistered(null); setFocusMode(false); setView("setup"); requestAnimationFrame(() => startRef.current?.focus()); }
+  function finishPartial() { if (!run.current) return; setDisplay(finishHiit(run.current, Date.now())); setFocusMode(false); setView("summary"); summaryKey.current = crypto.randomUUID(); stopTicker(); releaseWake(); }
+  function leaveFocusMode() { setFocusMode(false); requestAnimationFrame(() => focusControl.current?.focus()); }
+  function enterFocusMode() { setFocusMode(true); requestAnimationFrame(() => pauseControl.current?.focus()); }
   function openDiary() {
     const current = run.current, shown = display;
     if (!current || !shown || !hiitCanRegister(current) || !sessionDate.current || !summaryKey.current) return;
@@ -92,23 +97,45 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
   }, [active, inProgress, unsavedSummary, registered, onUncertainChange]);
   const stage = display?.stage === "work" ? "Trabajo" : display?.stage === "rest" ? "Descanso" : display?.stage === "preparation" ? "Preparación" : "Finalizado";
   const nextLabel = display?.nextStage === "work" ? "Trabajo" : display?.nextStage === "rest" ? "Descanso" : display?.nextStage === "preparation" ? "Preparación" : "Final";
-  return <section className={styles.hiit} hidden={!active} aria-labelledby="hiit-title">
-    <h2 id="hiit-title" ref={titleRef} tabIndex={view === "summary" ? -1 : undefined}>Temporizador HIIT</h2>
+  const currentPreset = HIIT_PRESETS.find(preset => Object.keys(preset.config).every(key => preset.config[key as keyof HiitConfig] === config[key as keyof HiitConfig]));
+  const focusActive = inProgress && focusMode;
+  return <section className={styles.hiit} hidden={!active} aria-labelledby="hiit-title" data-focus-mode={focusActive ? "true" : undefined}>
+    <h2 id="hiit-title" ref={titleRef} tabIndex={view === "summary" ? -1 : undefined}>Temporizador</h2>
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {editor ? <DiaryEditor key={`hiit-${editor.operationKey ?? "new"}`} target={editor} today={today} activityFormEnabled={activityFormEnabled} onClose={() => { setEditor(null); requestAnimationFrame(() => editorOpener.current?.focus()); }} onSaved={saved} onUncertainChange={handleUncertainChange} /> : view === "setup" ? <>
-      <div className={styles.actions}>{HIIT_PRESETS.map(preset => <button type="button" key={preset.name} onClick={() => setConfig({ ...preset.config })}>{preset.name}</button>)}</div>
-      <div className={styles.hiitGrid}>{([ ["Preparación (segundos)", "preparationSeconds", 0, 3600], ["Trabajo (segundos)", "workSeconds", 1, 3600], ["Descanso (segundos)", "restSeconds", 0, 3600], ["Rondas", "rounds", 1, 100] ] as const).map(([label, key, min, max]) => <label key={key}>{label}<input type="number" min={min} max={max} step="1" value={config[key]} onChange={event => setConfig(value => ({ ...value, [key]: event.target.value === "" ? min : Number(event.target.value) }))} /></label>)}</div>
-      <p className={styles.notice}>Duración prevista: {formatClock(trainingDuration)} de entrenamiento + {formatClock(config.preparationSeconds * 1000)} de preparación.</p>
-      {configError && <p role="alert" className={styles.error}>{configError}</p>}
-      <label className={styles.nextDay}><input type="checkbox" checked={sound} onChange={event => setSound(event.target.checked)} /> Avisos sonoros</label>
-      {sound && <button type="button" onClick={() => { const Audio = window.AudioContext; if (Audio) { audio.current ??= new Audio(); void audio.current.resume().then(() => tone(audio.current, "start")); } }}>Probar sonido</button>}
-      <button type="button" className={styles.primary} disabled={!!configError} onClick={start}>Iniciar temporizador</button>
+      <div className={styles.hiitSetup}>
+        <section className={styles.hiitPrograms} aria-label="Programas de intervalos">
+          {HIIT_PRESETS.map((preset, index) => <button type="button" key={preset.name} aria-pressed={!!currentPreset && currentPreset.name === preset.name} className={`${styles.hiitPreset} ${currentPreset?.name === preset.name ? styles.hiitPresetSelected : ""}`} onClick={() => setConfig({ ...preset.config })}>
+            <strong>{index === 0 ? "Intervalos 20/10" : "Intervalos 40/20"}</strong>
+            <span>{preset.config.workSeconds} s de trabajo · {preset.config.restSeconds} s de descanso</span>
+            <span>8 rondas · {formatClock(hiitTotalMs(preset.config))} en total</span>
+          </button>)}
+        </section>
+        <button ref={startRef} type="button" className={styles.primary} disabled={!!configError} onClick={start}>Iniciar entrenamiento</button>
+        <div className={styles.hiitPreview} aria-label={`Duración prevista ${formatClock(duration)}`}>
+          <span>{currentPreset ? "Programa seleccionado" : "Programa personalizado"}</span>
+          <strong aria-hidden="true">{formatClock(duration)}</strong>
+          <span>duración total</span>
+        </div>
+        <p className={styles.hiitHelp}>{config.preparationSeconds ? `Incluye ${formatClock(config.preparationSeconds * 1000)} de preparación.` : "Sin preparación."} Sin descanso al terminar.</p>
+        <details className={styles.hiitCustomize} open={!currentPreset}>
+          <summary>Personalizar tiempos</summary>
+          <div className={styles.hiitGrid}>{([ ["Preparación (segundos)", "preparationSeconds", 0, 3600], ["Trabajo (segundos)", "workSeconds", 1, 3600], ["Descanso (segundos)", "restSeconds", 0, 3600], ["Rondas", "rounds", 1, 100] ] as const).map(([label, key, min, max]) => <label key={key}>{label}<input type="number" inputMode="numeric" min={min} max={max} step="1" value={config[key]} aria-invalid={!!configError} aria-describedby={configError ? "hiit-config-error" : undefined} onChange={event => setConfig(value => ({ ...value, [key]: event.target.value === "" ? min : Number(event.target.value) }))} /></label>)}</div>
+          {configError && <p id="hiit-config-error" role="alert" className={styles.error}>{configError}</p>}
+        </details>
+        <details className={styles.hiitCustomize}>
+          <summary>Avisos sonoros</summary>
+          <label className={styles.hiitSound}><input type="checkbox" checked={sound} onChange={event => setSound(event.target.checked)} /> Activar avisos sonoros</label>
+          {sound && <button type="button" onClick={() => { const Audio = window.AudioContext; if (Audio) { audio.current ??= new Audio(); void audio.current.resume().then(() => tone(audio.current, "start")); } }}>Probar sonido</button>}
+        </details>
+      </div>
     </> : view === "run" && display ? <div className={`${styles.hiitRun} ${styles[`hiit-${display.stage}`]}`}>
-      <p className={styles.eyebrow}>{stage}</p><p className={styles.hiitClock} aria-live="off">{formatClock(display.remainingMs)}</p><p className={styles.hiitRound}>{display.stage === "preparation" ? "Preparáte" : `Ronda ${display.round} de ${config.rounds}`}</p>
-      <p role="status" aria-live="polite">{stage}{display.stage !== "preparation" ? ` · ronda ${display.round} de ${config.rounds}` : ""}{display.nextStage ? ` · después: ${nextLabel}` : " · última etapa"}</p>
+      {!focusMode && <div className={styles.hiitSessionBar}><span role="status">{display.paused ? "Sesión pausada" : "Sesión en curso"} · {stage}{display.stage !== "preparation" ? ` · ronda ${display.round} de ${config.rounds}` : ""}</span><button ref={focusControl} type="button" onClick={enterFocusMode}>Volver al modo foco</button></div>}
+      <p className={styles.hiitStage}>{stage}</p><p className={styles.hiitClock} aria-live="off">{formatClock(display.remainingMs)}</p><p className={styles.hiitRound}>{display.stage === "preparation" ? "Preparáte" : `Ronda ${display.round} de ${config.rounds}`}</p>
+      <p className={styles.hiitAnnouncement} role="status" aria-live="polite" aria-atomic="true">{display.paused ? "Pausado · " : ""}{stage}{display.stage !== "preparation" ? ` · ronda ${display.round} de ${config.rounds}` : ""}{display.nextStage ? ` · después: ${nextLabel}` : " · última etapa"}</p>
       <progress max={duration} value={display.elapsedMs} aria-label="Progreso del entrenamiento" />
       {capability && <p className={styles.muted}>{capability}</p>}
-      <div className={styles.actions}>{display.paused ? <><button className={styles.primary} onClick={() => void resume()}>Reanudar</button><button onClick={finishPartial}>Terminar y revisar</button></> : <button className={styles.primary} onClick={pause}>Pausar</button>}<button aria-pressed={sound} onClick={() => setSound(value => !value)}>{sound ? "Silenciar avisos" : "Activar avisos"}</button><button onClick={discard}>Descartar</button></div>
+      <div className={styles.hiitControls}>{display.paused ? <><button ref={pauseControl} className={styles.primary} onClick={() => void resume()}>Reanudar</button><button onClick={finishPartial}>Terminar y revisar</button></> : <button ref={pauseControl} className={styles.primary} onClick={pause}>Pausar</button>}<button aria-pressed={sound} onClick={() => setSound(value => !value)}>{sound ? "Silenciar avisos" : "Activar avisos"}</button><button onClick={leaveFocusMode}>Salir del modo foco</button><button onClick={discard}>Descartar sesión</button></div>
     </div> : display ? <div className={styles.card}>
       <h3 tabIndex={-1} ref={titleRef}>{display.completedRounds === config.rounds ? "Entrenamiento completo" : "Entrenamiento parcial"}</h3>
       <p>{display.completedRounds} de {config.rounds} rondas completadas.</p>

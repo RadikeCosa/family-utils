@@ -53,6 +53,13 @@ Recientes guarda hasta cuatro apps, sin duplicados, en `localStorage`. Cada regi
 
 Fondo cálido, superficies claras, texto oscuro y verde oscuro de acción. DM Sans para interfaz y Manrope para títulos y marca. Las superficies lavanda, durazno y menta son decorativas; el contenido informativo conserva texto e iconos oscuros. Errores y éxitos usan significados comunes.
 
+El temporizador HIIT adopta una superficie oscura local durante su sección. Al
+iniciar, su marcador de modo foco oculta mediante `display: none` el sidebar,
+header, encabezado de página y navegación de sección, quitándolos también del
+orden de teclado y accesibilidad. Al salir del foco la sesión sigue visible y
+la navegación se restaura. La adaptación del shell usa `:has()`, soportado en
+Safari/WebKit desde 15.4.
+
 Controles táctiles de al menos 44 px, foco visible, zonas seguras de teléfonos y movimiento reducido. Los breadcrumbs y el header reservan espacio estable mientras se obtiene el nombre del detalle. Recientes usa una altura estable para evitar desplazar el catálogo al leer el almacenamiento del dispositivo.
 
 ## Inventario verificable
