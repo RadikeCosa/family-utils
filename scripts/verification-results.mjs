@@ -64,7 +64,7 @@ function git(...args) {
 
 function sha256(content) { return createHash("sha256").update(content).digest("hex"); }
 
-export async function createVerificationEvidence({ selectionPath, suitePath, jobStatus = "unknown", trustedToolsDirectory = path.join(root, ".trusted-workflow/scripts") }) {
+export async function createVerificationEvidence({ selectionPath, suitePath, jobStatus = "unknown", trustedToolsDirectory = path.join(root, ".trusted-workflow") }) {
   const selection = JSON.parse(await readFile(path.resolve(root, selectionPath), "utf8"));
   let suites = null;
   try { suites = JSON.parse(await readFile(path.resolve(root, suitePath), "utf8")); } catch { /* no suite report means incomplete evidence */ }
