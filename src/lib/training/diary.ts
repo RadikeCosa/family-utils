@@ -9,7 +9,7 @@ export interface DiaryContent { title?: string; text?: string; blocks?: Training
 export interface DiaryInput { date: string; kind: DiaryKind; plan: DiaryContent | null; result: DiaryContent | null; disposition: "open" | "skipped"; sourceRoutineId: string | null }
 export interface DiaryEntry extends DiaryInput { id: string; version: number; archivedAt: string | null; createdAt: string; updatedAt: string; status: DiaryStatus }
 export type DiaryStatus = "planned" | "completed" | "missed" | "archived";
-export interface DiaryContext { today: string; timeZone: string; serverNow: string; nextDayAt: string; writable: boolean; activityFormEnabled?: boolean }
+export interface DiaryContext { today: string; timeZone: string; serverNow: string; nextDayAt: string; writable: boolean; activityFormEnabled?: boolean; hiitEnabled?: boolean }
 export type DayCounts = Record<"training_planned" | "training_completed" | "training_missed" | "rest_planned" | "rest_completed" | "rest_missed", number>;
 export const emptyCounts = (): DayCounts => ({ training_planned: 0, training_completed: 0, training_missed: 0, rest_planned: 0, rest_completed: 0, rest_missed: 0 });
 export function diaryDate(value: unknown): string {

@@ -12,10 +12,11 @@ import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import TrainingApp from "./TrainingApp";
 import { BlockSummary } from "./TrainingEditor";
 import styles from "./training.module.css";
+import HiitTimer from "./HiitTimer";
 type Summary = DiaryContext & { days: { date: string; counts: DayCounts }[] };
 export default function DiaryApp({ initialContext, memberName, scope }: { initialContext: DiaryContext; memberName: string; scope: string }) {
   const params = useNavigationQuery(), hash = useNavigationHash();
-  const requested = params.get("fecha"), detailId = params.get("detalle"), templates = params.get("seccion") === "plantillas", archived = params.get("archived") === "true";
+  const requested = params.get("fecha"), detailId = params.get("detalle"), templates = params.get("seccion") === "plantillas", hiit = params.get("seccion") === "temporizador" && !!initialContext.hiitEnabled, archived = params.get("archived") === "true";
   const [ctx, setContext] = useState(initialContext), [dateNotice, setDateNotice] = useState("");
   let date = ctx.today, invalid = false;
   if (requested) { try { date = diaryDate(requested); } catch { invalid = true; } }
@@ -24,7 +25,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
   const [searchInput, setSearchInput] = useState(query), [search, setSearch] = useState(query);
   const [page, setPage] = useState<EntryPage | null>(null), [summary, setSummary] = useState<Summary | null>(null), [detail, setDetail] = useState<DiaryEntry | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [refreshToken, setRefreshToken] = useState(0);
-  const [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [handoff, setHandoff] = useState<TrainingHandoff | null>(null);
+  const [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [handoff, setHandoff] = useState<TrainingHandoff | null>(null), [hiitSaveUncertain, setHiitSaveUncertain] = useState(false);
   const [pending, setPending] = useState<{ id: string; body: string } | null>(null);
   const opener = useRef<HTMLElement | null>(null), heading = useRef<HTMLHeadingElement>(null), detailHeading = useRef<HTMLHeadingElement>(null), generation = useRef(0);
   const week = civilWeekStart(date), searching = search.length >= 3;
@@ -70,7 +71,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
   }
   function openEditor(target: DiaryEditorTarget) { opener.current = document.activeElement as HTMLElement; setEditor(target); }
   function closeEditor() { setEditor(null); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); else heading.current?.focus(); }); }
-  function saved(entry: DiaryEntry) { closeEditor(); updateNavigation({ fecha: entry.date, detalle: entry.id, seccion: null }, "push"); setNotice("Anotación guardada."); setHandoff(null); setRefreshToken(value => value + 1); }
+  function saved(entry: DiaryEntry) { closeEditor(); updateNavigation(hiit ? { fecha: entry.date, detalle: null, seccion: "temporizador" } : { fecha: entry.date, detalle: entry.id, seccion: null }, "push"); setNotice("Anotación guardada."); setHandoff(null); setRefreshToken(value => value + 1); }
   async function action(entry: DiaryEntry, action: string, retry?: string) {
     if (busy) return;
     if (!retry && !window.confirm(action === "archive" ? "¿Archivar esta anotación? Podés recuperarla después." : action === "restore" ? "¿Restaurar esta anotación?" : "¿Marcar este plan como no realizado?")) return;
@@ -89,14 +90,16 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
       openEditor({ mode: entry ? "edit" : "create", date: current.input.date, kind: current.input.kind, destination: current.input.result !== null ? "result" : "plan", restored: current.input, entry }); setHandoff(null);
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
-  const nav = <nav className={styles.tabs} aria-label="Entrenamiento"><button aria-current={!templates ? "page" : undefined} onClick={() => updateNavigation({ seccion: null, detalle: null }, "push")}>Diario</button><button aria-current={templates ? "page" : undefined} onClick={() => updateNavigation({ seccion: "plantillas", detalle: null }, "push")}>Plantillas</button></nav>;
+  const nav = <nav className={styles.tabs} aria-label="Entrenamiento"><button aria-current={!templates && !hiit ? "page" : undefined} onClick={() => { if (hiitSaveUncertain) return; if (hiit && !window.confirm("¿Salir del temporizador? La sesión sin guardar se descartará.")) return; updateNavigation({ seccion: null, detalle: null }, "push"); }}>Diario</button><button aria-current={templates ? "page" : undefined} onClick={() => { if (hiitSaveUncertain) return; if (hiit && !window.confirm("¿Salir del temporizador? La sesión sin guardar se descartará.")) return; updateNavigation({ seccion: "plantillas", detalle: null }, "push"); }}>Plantillas</button>{initialContext.hiitEnabled && <button aria-current={hiit ? "page" : undefined} onClick={() => updateNavigation({ seccion: "temporizador", detalle: null }, "push")}>Temporizador</button>}</nav>;
   if (templates && !editor) return <><div className={styles.page}>{nav}</div><TrainingApp today={ctx.today} memberName={memberName} optionalMetrics asTemplates readOnly={!ctx.writable} onUseRoutine={template => openEditor({ mode: "create", date, destination: date > ctx.today ? "plan" : "result", template })} /></>;
   return <main data-app-frame className={styles.page}>
-    <header data-legacy-chrome className={styles.header}><Link href="/" className={styles.back}>← Aplicaciones</Link><span className={styles.private}>Espacio personal</span></header>
+    <header data-legacy-chrome className={styles.header}><Link href="/" className={styles.back} onClick={event => { if (hiitSaveUncertain) { event.preventDefault(); return; } if (hiit && !window.confirm("¿Salir del temporizador? La sesión sin guardar se descartará.")) event.preventDefault(); }}>← Aplicaciones</Link><span className={styles.private}>Espacio personal</span></header>
     <div data-page-heading className={styles.hero}><p className={styles.eyebrow}>UN DÍA A LA VEZ</p><h1 tabIndex={-1} ref={heading}>Entrenamiento</h1><p>{memberName}, anotá lo que hiciste y lo que tenés previsto.</p></div>
     {!editor && nav}
     {!ctx.writable && <p className={styles.notice}>Modo de consulta. Tus anotaciones se conservan y se pueden consultar.</p>}
-    {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} activityFormEnabled={ctx.activityFormEnabled} onClose={closeEditor} onSaved={saved} /> : <>
+    {hiitSaveUncertain && <p role="status" className={styles.notice}>El guardado del temporizador es incierto. Reintentá la misma operación antes de salir.</p>}
+    <HiitTimer active={hiit} timeZone={ctx.timeZone} today={ctx.today} writable={ctx.writable} activityFormEnabled={!!ctx.activityFormEnabled} onSaved={saved} onUncertainChange={setHiitSaveUncertain} />
+    {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} activityFormEnabled={ctx.activityFormEnabled} onClose={closeEditor} onSaved={saved} /> : hiit ? null : <>
       {handoff && <section className={styles.confirm}><p>Hay un formulario conservado al actualizar. Se elimina a los 30 minutos.</p><button disabled={busy || !ctx.writable} onClick={() => void restoreHandoff()}>Recuperar formulario</button><button onClick={() => { clearTrainingHandoffs(); setHandoff(null); }}>Descartar formulario</button></section>}
       <DateNavigation date={date} today={ctx.today} min={DIARY_MIN} max={DIARY_MAX} step={7} className={styles.dateNavigation} onSelect={selectDate} />
       <ol className={styles.week} aria-label="Semana de entrenamiento">{weekDates(week).map(day => {

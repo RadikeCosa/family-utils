@@ -266,3 +266,26 @@ presupuesto de 500 ms. Compilación, tipos, lint de archivos cambiados, metadato
 Drizzle y orden de las 59 migraciones verificados. Capturas y muestras en
 `test-results-training-diary/`. La bandera nueva permanece apagada por defecto;
 este ensayo no aplica 0068 ni activa el formulario en producción.
+
+## Temporizador HIIT
+
+`TRAINING_HIIT_ENABLED=false` expone un temporizador rápido solo después de la
+transición del diario. Puede ejecutarse en modo de consulta; el guardado sigue
+requiriendo `TRAINING_DIARY_ENABLED=true`. No cambia el esquema ni crea endpoints. Admite
+preparación 0–3600 s, trabajo 1–3600 s, descanso 0–3600 s y 1–100 rondas; la
+duración total, incluida preparación y sin el descanso final, no supera cuatro
+horas. Incluye presets editables 20/10 × 8 y 40/20 × 8.
+
+La sesión vive en memoria. Usa intervalos de trabajo/descanso y permite pausar,
+descartar o terminar parcialmente. Al ocultarse el documento se pausa; una demora
+de tick mayor a 2000 ms también pausa sin consumir ese salto. El tiempo de diario
+es trabajo más descansos efectivamente ejecutados, truncado a segundos; preparación
+y pausas se muestran por separado. Para registrar se requiere al menos 1000 ms de
+trabajo acumulado. La fecha es la fecha civil familiar del primer trabajo.
+
+El resumen ofrece registro editable en el diario. La clave de operación pertenece
+a la sesión terminada y se conserva para reintentos; repetir inicia otra sesión.
+No se conserva estado al recargar. Cambio de perfil descarta la sesión y sus
+intentos locales; una escritura ya confirmada en el servidor permanece en el
+perfil original. Wake Lock y audio dependen del navegador y requieren comprobación
+manual en dispositivos reales.

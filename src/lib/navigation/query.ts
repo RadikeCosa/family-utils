@@ -22,7 +22,7 @@ const keys: Record<string, string[]> = {
   family: [],
 };
 const enums: Record<string, string[]> = {
-  seccion: ["historial", "plantillas"],
+  seccion: ["historial", "plantillas", "temporizador"],
   estado: ["completed", "archived"],
   vista: ["dia", "semana"],
   archived: ["true"],

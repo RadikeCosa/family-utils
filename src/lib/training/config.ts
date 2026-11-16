@@ -5,3 +5,5 @@ export function optionalTrainingMetricsFormEnabled() { return process.env.TRAINI
 export function trainingDiaryEnabled() { return process.env.TRAINING_DIARY_ENABLED === "true"; }
 
 export function trainingActivityFormEnabled() { return trainingDiaryEnabled() && process.env.TRAINING_ACTIVITY_FORM_ENABLED === "true"; }
+// The timer may run read-only after the diary transition; writes remain guarded by trainingDiaryEnabled().
+export function trainingHiitEnabled() { return process.env.TRAINING_HIIT_ENABLED === "true"; }
