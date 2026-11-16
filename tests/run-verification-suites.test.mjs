@@ -4,8 +4,8 @@ import { parsePlaywright, parseTap, playwrightRetryCount, shouldStopLocally } fr
 
 test("runner retries Playwright once only in GitHub Actions and stops local suites at first failure", () => {
   // Pass the local value explicitly so the assertion is stable inside GitHub Actions too.
-  assert.equal(playwrightRetryCount(""), 0);
-  assert.equal(playwrightRetryCount("true"), 1);
+  assert.equal(playwrightRetryCount("", ""), 0);
+  assert.equal(playwrightRetryCount("true", ""), 1);
   assert.equal(playwrightRetryCount("true", "0"), 0);
   assert.equal(playwrightRetryCount("", "1"), 1);
   assert.equal(shouldStopLocally(undefined, false), true);
