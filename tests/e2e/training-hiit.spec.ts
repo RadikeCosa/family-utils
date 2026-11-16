@@ -22,7 +22,7 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.getByRole("button", { name: "Registrar en mi diario" }).click();
   await expect(page.getByLabel("Duración (minutos, opcional)")).toHaveValue("1");
   await expect(page.getByLabel("¿Qué hiciste?")).toHaveValue(/HIIT/);
-  await page.getByRole("button", { name: "Guardar anotación" }).click();
+  await page.getByRole("button", { name: "Guardar actividad" }).click();
   await expect(page.getByText("Sesión registrada en el diario.")).toBeVisible();
   const rows = await db.pool.query("SELECT count(*)::int AS n FROM training_entries WHERE owner_member_id=$1", [profile.id]);
   expect(rows.rows[0].n).toBe(1);
