@@ -9,7 +9,7 @@
     ".env.example", "docker-compose.yml", "middleware.", "src/app/layout.",
     "src/app/globals.css"
   ],
-  "sharedUiPrefixes": ["src/app/", "src/components/"],
+  "sharedUiPrefixes": ["src/components/"],
   "domains": {
     "tasks": {
       "paths": ["src/app/tareas/", "src/app/api/tasks/", "src/lib/tasks/"],

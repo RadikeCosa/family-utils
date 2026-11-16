@@ -81,6 +81,10 @@ fuerza. La lista documental es cerrada: solo `README.md`; si se mezcla con códi
 se conserva el alcance del código. Los contratos operativos y `AGENTS.md` requieren
 cobertura completa.
 
+Un cambio en una pantalla añade la suite de navegador de su dominio y accesibilidad;
+un cambio de componente compartido añade además la interfaz unificada. Las rutas API
+no activan auditorías visuales por su ubicación.
+
 CI siempre inicia en PR y `main`; no usa filtros de rutas a nivel del workflow.
 Los PR seleccionan por impacto usando el ancestro común y checkout de historial
 completo. Si no se puede resolver, se alerta y se elige todo. Al integrar, `main`

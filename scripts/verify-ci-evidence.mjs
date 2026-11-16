@@ -69,7 +69,7 @@ function readArtifact(archive) {
   return JSON.parse(extracted.stdout);
 }
 
-function suiteFilesForScope(catalog, groups, full, sharedUi) {
+function suiteFilesForScope(catalog, groups, full, sharedUi, screenA11y) {
   const node = new Set(), route = new Set(), browser = new Map();
   for (const name of groups) {
     const domain = catalog.domains?.[name];
@@ -86,7 +86,8 @@ function suiteFilesForScope(catalog, groups, full, sharedUi) {
     for (const file of catalog.sharedNodeTests ?? []) node.add(file);
     for (const file of catalog.sharedRouteTests ?? []) route.add(file);
   }
-  if (full || sharedUi) for (const suite of catalog.sharedBrowser ?? []) {
+  if (full || sharedUi || screenA11y) for (const suite of catalog.sharedBrowser ?? []) {
+    if (!full && !sharedUi && screenA11y && suite.kind !== "a11y") continue;
     const files = browser.get(suite.kind) ?? new Set();
     for (const file of suite.files) files.add(file);
     browser.set(suite.kind, files);
@@ -179,8 +180,8 @@ export async function verifyCiEvidence({ repository, runId, candidateSha, mainSh
     const expectedGroups = evidence.selection?.mode === "full" ? allGroups : evidenceGroups;
     if (!evidenceGroups.length || evidenceGroups.some((name) => !allGroups.includes(name)) || JSON.stringify(evidenceGroups) !== JSON.stringify(expectedGroups)) result.errors.push("El alcance declarado contiene grupos inválidos o incompletos.");
     const expectedSuites = unionSuiteFiles(
-      suiteFilesForScope(baselineCatalog, evidenceGroups, evidence.selection?.mode === "full", evidence.selection?.sharedUi === true),
-      suiteFilesForScope(candidateCatalog, evidenceGroups, evidence.selection?.mode === "full", evidence.selection?.sharedUi === true),
+      suiteFilesForScope(baselineCatalog, evidenceGroups, evidence.selection?.mode === "full", evidence.selection?.sharedUi === true, evidence.selection?.screenA11y === true),
+      suiteFilesForScope(candidateCatalog, evidenceGroups, evidence.selection?.mode === "full", evidence.selection?.sharedUi === true, evidence.selection?.screenA11y === true),
     );
     if (JSON.stringify(evidence.selection?.suiteFiles) !== JSON.stringify(expectedSuites)) result.errors.push("El inventario de suites no cubre el catálogo de main y candidato.");
     return { ...result, runUrl: run.html_url, evidence, workflowId: workflow.id, workflowSha: evidence.workflowSha, artifactExpiresAt: artifact.expires_at };

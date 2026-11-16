@@ -93,9 +93,37 @@ export function mergeCatalogChangeScope(selection, catalogScope, domains = catal
     mode: groups.length || selection.mode === "impact" ? "impact" : selection.mode,
     groups,
     sharedUi: selection.sharedUi || catalogScope.sharedUi,
+    screenA11y: selection.screenA11y || catalogScope.screenA11y,
     browser: selection.browser || catalogScope.browser,
     reasons: [...selection.reasons, ...catalogScope.reasons],
   };
+}
+
+export function suiteFilesForSelection(selection, candidateCatalogs = [catalog]) {
+  const selectedGroups = new Set(selection.groups);
+  const suiteFiles = { node: new Set(), route: new Set(), browser: new Map() };
+  for (const candidateCatalog of candidateCatalogs) {
+    for (const [name, domain] of Object.entries(candidateCatalog.domains ?? {})) if (selection.mode === "full" || selectedGroups.has(name)) {
+      for (const file of domain.nodeTests ?? []) suiteFiles.node.add(file);
+      for (const file of domain.routeTests ?? []) suiteFiles.route.add(file);
+      for (const suite of domain.browser ?? []) {
+        const files = suiteFiles.browser.get(suite.kind) ?? new Set();
+        for (const file of suite.files) files.add(file);
+        suiteFiles.browser.set(suite.kind, files);
+      }
+    }
+    if (selection.mode === "full") {
+      for (const file of candidateCatalog.sharedNodeTests ?? []) suiteFiles.node.add(file);
+      for (const file of candidateCatalog.sharedRouteTests ?? []) suiteFiles.route.add(file);
+    }
+    if (selection.mode === "full" || selection.sharedUi || selection.screenA11y) for (const suite of candidateCatalog.sharedBrowser ?? []) {
+      if (selection.mode !== "full" && !selection.sharedUi && selection.screenA11y && suite.kind !== "a11y") continue;
+      const files = suiteFiles.browser.get(suite.kind) ?? new Set();
+      for (const file of suite.files) files.add(file);
+      suiteFiles.browser.set(suite.kind, files);
+    }
+  }
+  return { node: [...suiteFiles.node].sort(), route: [...suiteFiles.route].sort(), browser: [...suiteFiles.browser].map(([kind, files]) => ({ kind, files: [...files].sort() })).sort((a, b) => a.kind.localeCompare(b.kind)) };
 }
 
 async function walk(directory) {
@@ -232,9 +260,9 @@ function select(files, { full = false, alert = null, knownGroups = allGroups } =
   if (!files.length && !alert && !full) alert = "No se detectaron cambios; se ejecuta todo para evitar una aprobación vacía.";
   if (full || alert) {
     if (alert) reasons.push(alert);
-    return { mode: "full", groups: [...knownGroups].sort(), sharedUi: true, browser: true, reasons };
+    return { mode: "full", groups: [...knownGroups].sort(), sharedUi: true, screenA11y: false, browser: true, reasons };
   }
-  if (isDocsOnly(files)) return { mode: "documentation", groups: [], sharedUi: false, browser: false, reasons: ["Todos los cambios están en rutas Markdown permitidas."] };
+  if (isDocsOnly(files)) return { mode: "documentation", groups: [], sharedUi: false, screenA11y: false, browser: false, reasons: ["Todos los cambios están en rutas Markdown permitidas."] };
   const groups = new Set();
   let needsFull = false;
   for (const file of files) {
@@ -255,12 +283,14 @@ function select(files, { full = false, alert = null, knownGroups = allGroups } =
     if (!found) { needsFull = true; reasons.push(`Ruta sin clasificar: ${file}`); }
   }
   const selected = expandConsumers([...groups]);
-  if (needsFull) return { mode: "full", groups: [...allGroups].sort(), sharedUi: true, browser: true, reasons };
+  if (needsFull) return { mode: "full", groups: [...allGroups].sort(), sharedUi: true, screenA11y: false, browser: true, reasons };
   const sharedUi = files.some((file) => catalog.sharedUiPrefixes.some((prefix) => file.startsWith(prefix)) && !file.startsWith("src/app/api/") && /\.(?:tsx?|css)$/.test(file));
-  const browser = selected.some((name) => catalog.domains[name].browser.length > 0) || (sharedUi && catalog.sharedBrowser.length > 0);
-  if (sharedUi) reasons.push("Cambios de interfaz: se agregan accesibilidad e interfaz unificada.");
+  const screenA11y = files.some((file) => file.startsWith("src/app/") && !file.startsWith("src/app/api/") && /\.(?:tsx|css)$/.test(file));
+  const browser = selected.some((name) => catalog.domains[name].browser.length > 0) || sharedUi || screenA11y;
+  if (sharedUi) reasons.push("Cambio en componente compartido: se agregan accesibilidad e interfaz unificada.");
+  else if (screenA11y) reasons.push("Cambio visual de pantalla: se agrega accesibilidad junto con la suite del dominio.");
   if (!reasons.length) reasons.push(`Pruebas seleccionadas por impacto: ${selected.join(", ") || "ninguna"}.`);
-  return { mode: "impact", groups: selected, sharedUi, browser, reasons };
+  return { mode: "impact", groups: selected, sharedUi, screenA11y, browser, reasons };
 }
 
 async function main() {
@@ -330,30 +360,8 @@ async function main() {
   } else if (git("rev-parse", "--verify", policyRef).status !== 0) alert = `No se pudo leer la política confiable ${policyRef}; se ejecuta todo.`;
   let selection = select([...new Set(files)].sort(), { full: asBool, alert, knownGroups });
   if (catalogScope && !alert) selection = mergeCatalogChangeScope(selection, catalogScope);
-  const selectedGroups = new Set(selection.groups);
   const selectedCatalogs = [trustedCatalog, catalog];
-  const suiteFiles = { node: new Set(), route: new Set(), browser: new Map() };
-  for (const candidateCatalog of selectedCatalogs) {
-    for (const [name, domain] of Object.entries(candidateCatalog.domains ?? {})) if (selection.mode === "full" || selectedGroups.has(name)) {
-      for (const file of domain.nodeTests ?? []) suiteFiles.node.add(file);
-      for (const file of domain.routeTests ?? []) suiteFiles.route.add(file);
-      for (const suite of domain.browser ?? []) {
-        const files = suiteFiles.browser.get(suite.kind) ?? new Set();
-        for (const file of suite.files) files.add(file);
-        suiteFiles.browser.set(suite.kind, files);
-      }
-    }
-    if (selection.mode === "full") {
-      for (const file of candidateCatalog.sharedNodeTests ?? []) suiteFiles.node.add(file);
-      for (const file of candidateCatalog.sharedRouteTests ?? []) suiteFiles.route.add(file);
-    }
-    if (selection.mode === "full" || selection.sharedUi) for (const suite of candidateCatalog.sharedBrowser ?? []) {
-      const files = suiteFiles.browser.get(suite.kind) ?? new Set();
-      for (const file of suite.files) files.add(file);
-      suiteFiles.browser.set(suite.kind, files);
-    }
-  }
-  selection.suiteFiles = { node: [...suiteFiles.node].sort(), route: [...suiteFiles.route].sort(), browser: [...suiteFiles.browser].map(([kind, set]) => ({ kind, files: [...set].sort() })).sort((a, b) => a.kind.localeCompare(b.kind)) };
+  selection.suiteFiles = suiteFilesForSelection(selection, selectedCatalogs);
   const result = { version: catalog.version, trustedCatalogVersion: trustedCatalog.version, base: comparisonBase ?? (asBool ? "not-calculated-full-run" : "merge-base(origin/main, HEAD)"), requestedBase: base ?? null, head: head ?? "working-tree", files: [...new Set(files)].sort(), ...selection, catalogErrors: validation.errors, importEdges: validation.edges, unresolvedImports: validation.unresolvedImports };
   console.log(JSON.stringify(result, null, 2));
   const output = getArg("--output");

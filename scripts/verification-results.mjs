@@ -106,7 +106,7 @@ export async function createVerificationEvidence({ selectionPath, suitePath, job
     catalogVersion: version,
     hashes: Object.fromEntries(["scripts/verification-catalog.json", "scripts/verification-policy.json", "scripts/verification-impact.mjs", "scripts/run-verification-suites.mjs", "scripts/verification-results.mjs", "scripts/reuse-main-verification.mjs", "package-lock.json"].map((file) => [file, sha256(readFileSync(path.join(root, file)))])),
     environment: { node: process.version, npm: spawnSync("npm", ["--version"], { cwd: root, encoding: "utf8" }).stdout.trim() || null, postgresMajor },
-    selection: { mode: selection.mode, groups: selection.groups, sharedUi: selection.sharedUi, browser: selection.browser, reasons: selection.reasons, files: selection.files, suiteFiles: selection.suiteFiles },
+    selection: { mode: selection.mode, groups: selection.groups, sharedUi: selection.sharedUi, screenA11y: selection.screenA11y, browser: selection.browser, reasons: selection.reasons, files: selection.files, suiteFiles: selection.suiteFiles },
     suites: suites?.suites ?? [],
     suiteStatus: suites?.ok ? "success" : suites ? "failure" : "incomplete",
     unstable: (suites?.suites ?? []).reduce((sum, suite) => sum + (suite.unstable ?? 0), 0),

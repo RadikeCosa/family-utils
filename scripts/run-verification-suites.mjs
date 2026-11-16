@@ -157,7 +157,7 @@ async function main() {
   executeTap("Reglas e integración seleccionadas", [...nodeFiles].sort());
   executeTap("Handlers seleccionados", [...routeFiles].sort());
 
-  const browserSuites = selection.suiteFiles?.browser ?? [...domains.flatMap(([, item]) => item.browser), ...(selection.sharedUi ? catalog.sharedBrowser : [])];
+  const browserSuites = selection.suiteFiles?.browser ?? [...domains.flatMap(([, item]) => item.browser), ...(selection.sharedUi ? catalog.sharedBrowser : selection.screenA11y ? catalog.sharedBrowser.filter((suite) => suite.kind === "a11y") : [])];
   const byKind = new Map();
   for (const suite of browserSuites) {
     const files = byKind.get(suite.kind) ?? new Set();

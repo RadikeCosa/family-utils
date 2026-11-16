@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { catalog, catalogChangeScope, mergeCatalogChangeScope, parseChangedPaths, select, undeclaredDependencies, unclassifiedTestFiles, validateCatalog, validateInvariantCoverage } from "../scripts/verification-impact.mjs";
+import { catalog, catalogChangeScope, mergeCatalogChangeScope, parseChangedPaths, select, suiteFilesForSelection, undeclaredDependencies, unclassifiedTestFiles, validateCatalog, validateInvariantCoverage } from "../scripts/verification-impact.mjs";
 
 test("catalogue classifies every test and declares every static cross-domain import", async () => {
   const result = await validateCatalog();
@@ -28,17 +28,27 @@ test("shared changes and unknown paths select every domain", () => {
   assert.deepEqual(select(["new-unmapped-area/file.ts"]).groups, ["acceso", "cinemateca", "cocina", "comidas", "deportes", "entrenamiento", "plataforma", "tasks"]);
 });
 
-test("interface changes add shared accessibility and unified UI suites", () => {
+test("screen changes add accessibility; shared components also add unified UI suites", () => {
   const result = select(["src/app/tareas/page.tsx"]);
-  assert.equal(result.sharedUi, true);
+  assert.equal(result.sharedUi, false);
+  assert.equal(result.screenA11y, true);
   assert.equal(result.browser, true);
   assert.ok(result.groups.includes("tasks"));
+  const screenSuites = suiteFilesForSelection(result);
+  assert.ok(screenSuites.browser.some((suite) => suite.kind === "a11y"));
+  assert.ok(screenSuites.browser.some((suite) => suite.kind === "default"));
+  assert.equal(screenSuites.browser.some((suite) => suite.kind === "unified"), false);
+  const shared = select(["src/components/FamilyNav.tsx"]);
+  assert.equal(shared.sharedUi, true);
+  assert.equal(shared.screenA11y, false);
+  assert.ok(suiteFilesForSelection(shared).browser.some((suite) => suite.kind === "unified"));
 });
 
 test("API routes do not trigger shared UI audits; auth remains full scope", () => {
   const api = select(["src/app/api/tasks/route.ts"]);
   assert.equal(api.mode, "impact");
   assert.equal(api.sharedUi, false);
+  assert.equal(api.screenA11y, false);
   assert.equal(api.browser, true);
   assert.equal(select(["src/app/api/auth/[...all]/route.ts"]).mode, "full");
   assert.equal(select(["src/app/api/families/route.ts"]).mode, "full");
@@ -77,12 +87,12 @@ test("all required safety invariants map to catalogued cases", () => {
 
 test("route-to-scope snapshots for representative changes", () => {
   const cases = [
-    { name: "HIIT change", paths: ["src/app/entrenamiento/HiitTimer.tsx"], before: "impact: entrenamiento,plataforma + global UI", after: "impact: entrenamiento,plataforma", groups: "entrenamiento,plataforma", browser: true },
+    { name: "HIIT change", paths: ["src/app/entrenamiento/HiitTimer.tsx"], before: "impact: entrenamiento,plataforma + broad global UI", after: "impact: entrenamiento,plataforma + accessibility", groups: "entrenamiento,plataforma", browser: true },
     { name: "API change", paths: ["src/app/api/tasks/route.ts"], before: "impact: acceso,deportes,plataforma,tasks + global UI", after: "impact: acceso,deportes,plataforma,tasks", groups: "acceso,deportes,plataforma,tasks", browser: true },
     { name: "documentation", paths: ["README.md"], before: "documentation", after: "documentation", groups: "", browser: false },
     { name: "shared styles", paths: ["src/app/globals.css"], before: "full", after: "full", groups: "acceso,cinemateca,cocina,comidas,deportes,entrenamiento,plataforma,tasks", browser: true },
     { name: "migration", paths: ["drizzle/0001_test.sql"], before: "full", after: "full", groups: "acceso,cinemateca,cocina,comidas,deportes,entrenamiento,plataforma,tasks", browser: true },
-    { name: "HIIT plus documentation", paths: ["src/app/entrenamiento/HiitTimer.tsx", "README.md"], before: "full", after: "impact: entrenamiento,plataforma", groups: "entrenamiento,plataforma", browser: true },
+    { name: "HIIT plus documentation", paths: ["src/app/entrenamiento/HiitTimer.tsx", "README.md"], before: "full", after: "impact: entrenamiento,plataforma + accessibility", groups: "entrenamiento,plataforma", browser: true },
     { name: "HIIT plus catalogue", paths: ["src/app/entrenamiento/HiitTimer.tsx", "README.md", "scripts/verification-catalog.json"], before: "full", after: "impact: deportes,entrenamiento,plataforma", groups: "deportes,entrenamiento,plataforma", browser: true, catalogueEdit: "deportes" },
   ];
   for (const item of cases) {
