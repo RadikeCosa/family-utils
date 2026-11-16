@@ -71,7 +71,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
   }
   function openEditor(target: DiaryEditorTarget) { opener.current = document.activeElement as HTMLElement; setEditor(target); }
   function closeEditor() { setEditor(null); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); else heading.current?.focus(); }); }
-  function saved(entry: DiaryEntry) { closeEditor(); updateNavigation({ fecha: entry.date, detalle: entry.id, seccion: null }, "push"); setNotice("Anotación guardada."); setHandoff(null); setRefreshToken(value => value + 1); }
+  function saved(entry: DiaryEntry) { closeEditor(); updateNavigation(hiit ? { fecha: entry.date, detalle: null, seccion: "temporizador" } : { fecha: entry.date, detalle: entry.id, seccion: null }, "push"); setNotice("Anotación guardada."); setHandoff(null); setRefreshToken(value => value + 1); }
   async function action(entry: DiaryEntry, action: string, retry?: string) {
     if (busy) return;
     if (!retry && !window.confirm(action === "archive" ? "¿Archivar esta anotación? Podés recuperarla después." : action === "restore" ? "¿Restaurar esta anotación?" : "¿Marcar este plan como no realizado?")) return;

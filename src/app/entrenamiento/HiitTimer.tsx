@@ -17,7 +17,7 @@ function tone(context: AudioContext | null, kind: string) {
 }
 export default function HiitTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange }: Props) {
   const [config, setConfig] = useState<HiitConfig>(INITIAL), [view, setView] = useState<"setup" | "run" | "summary">("setup");
-  const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<string | null>(null);
+  const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null);
   const run = useRef<HiitRun | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), timer = useRef<number | null>(null), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), editorOpener = useRef<HTMLElement | null>(null), titleRef = useRef<HTMLHeadingElement>(null), pauseRef = useRef<() => void>(() => {}), activeHref = useRef(""), soundRef = useRef(sound), uncertainRef = useRef(false);
   const inProgress = view === "run", unsavedSummary = view === "summary" && !registered;
   const configError = validateHiitConfig(config), duration = hiitTotalMs(config), trainingDuration = hiitTrainingMs(config);
@@ -68,7 +68,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
     const text = `HIIT · ${current.config.rounds} rondas previstas. Trabajo: ${formatActivityDuration(Math.floor(current.workMs / 1000))}; descansos: ${formatActivityDuration(Math.floor(current.restMs / 1000))}; preparación: ${formatActivityDuration(Math.floor(current.preparationMs / 1000))}; pausas: ${formatActivityDuration(Math.floor(shown.pausedMs / 1000))}.`;
     setEditor({ mode: "create", date: sessionDate.current, destination: "result", initialContent: { title: "Entrenamiento HIIT", text, durationSeconds }, operationKey: summaryKey.current });
   }
-  function saved(entry: EntryResponse["item"]) { setRegistered(entry.id); setEditor(null); onSaved(entry); }
+  function saved(entry: EntryResponse["item"]) { setRegistered({ id: entry.id, date: entry.date }); setEditor(null); onSaved(entry); }
   const handleUncertainChange = useCallback((value: boolean) => {
     uncertainRef.current = value;
     onUncertainChange(value);
@@ -118,7 +118,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
       <p>Tiempo en pausa: {formatActivityDuration(Math.floor(display.pausedMs / 1000))}</p>
       {!writable && <p className={styles.notice}>Modo de consulta: no se puede registrar en el diario.</p>}
       {display.workMs < 1000 && <p className={styles.muted}>Completá al menos un segundo de trabajo para registrar la sesión.</p>}
-      {registered && <p role="status">Sesión registrada en el diario. <button onClick={() => { setView("setup"); setRegistered(null); }}>Cerrar</button></p>}
+      {registered && <p role="status">Sesión registrada en el diario. <a href={`/entrenamiento?${new URLSearchParams({ fecha: registered.date, detalle: registered.id })}`}>Ver en mi diario</a> <button onClick={() => { setView("setup"); setRegistered(null); }}>Cerrar</button></p>}
       {!registered && <div className={styles.actions}><button className={styles.primary} disabled={!writable || display.workMs < 1000} onClick={openDiary}>Registrar en mi diario</button><button onClick={start}>Repetir</button><button onClick={() => { if (!window.confirm("¿Cerrar el resumen? La sesión sin registrar se descartará.")) return; setView("setup"); setDisplay(null); setEditor(null); run.current = null; summaryKey.current = null; sessionDate.current = null; }}>Cerrar</button></div>}
     </div> : null}
   </section>;
