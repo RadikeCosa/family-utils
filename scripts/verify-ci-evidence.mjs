@@ -162,7 +162,7 @@ export async function verifyCiEvidence({ repository, runId, candidateSha, mainSh
     if (evidence.treeSha !== candidateTree) result.errors.push("El árbol local del candidato difiere del árbol probado.");
     const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", mainSha, candidateSha], { cwd: root });
     if (ancestor.status !== 0) result.errors.push("El candidato no contiene el main declarado.");
-    const names = ["scripts/verification-catalog.json", "scripts/verification-policy.json", "scripts/verification-impact.mjs", "scripts/run-verification-suites.mjs", "scripts/verification-results.mjs", "package-lock.json"];
+    const names = ["scripts/verification-catalog.json", "scripts/verification-policy.json", "scripts/verification-impact.mjs", "scripts/run-verification-suites.mjs", "scripts/verification-results.mjs", "scripts/reuse-main-verification.mjs", "package-lock.json"];
     for (const name of names) {
       const committed = spawnSync("git", ["show", `${candidateSha}:${name}`], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
       if (committed.status !== 0 || evidence.hashes?.[name] !== sha(committed.stdout)) result.errors.push(`Hash de evidencia no coincide con el candidato: ${name}`);

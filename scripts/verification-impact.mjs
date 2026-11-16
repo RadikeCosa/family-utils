@@ -15,6 +15,7 @@ const verificationToolPrefixes = [
   "scripts/verification-impact.", "scripts/run-verification-suites.",
   "scripts/preflight-publicacion.", "scripts/verification-results.",
   "scripts/verify-ci-evidence.",
+  "scripts/reuse-main-verification.",
   "scripts/check-documentation.",
   "scripts/verification-policy.json",
 ];

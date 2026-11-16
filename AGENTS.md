@@ -86,7 +86,7 @@
 - Seguir la [matriz de verificación](sources/verification.md) según el cambio.
 - Ejecutar comprobaciones locales por impacto durante el desarrollo; usar CI y la [guía de publicación](sources/deployment.md) para la evidencia completa previa a producción.
 - `bash scripts/verificar-todo.sh` selecciona por impacto; agregar `--full` para todas las suites y auditorías del inventario.
-- Todo PR ejecuta CI. `main`, la corrida semanal y `workflow_dispatch` con SHA explícito ejecutan cobertura completa.
+- Todo PR ejecuta CI por impacto. Al integrar, `main` reutiliza evidencia de PR solo si API, base, árbol, alcance y workflow coinciden; si no, ejecuta cobertura completa. La corrida semanal y `workflow_dispatch` con SHA explícito ejecutan cobertura completa; la certificación manual no usa reintentos.
 - La cobertura funcional completa incluye todos los grupos y pruebas funcionales del catálogo; cobertura completa/`--full` añade auditorías amplias.
 - Antes de autorizar producción, el preflight debe consultar una evidencia CI aprobada, confiable y suficiente para el SHA candidato y la base `main` vigente.
 - Si una suite completa de `main` descubre un fallo reproducible que el PR por impacto no ejecutó, suspender selección por impacto y volver a suite completa hasta corregir y cubrir el selector.

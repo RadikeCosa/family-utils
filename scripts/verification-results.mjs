@@ -104,7 +104,7 @@ export async function createVerificationEvidence({ selectionPath, suitePath, job
     baseSha: process.env.VERIFICATION_BASE_SHA ?? null,
     mainSha: process.env.VERIFICATION_MAIN_SHA ?? null,
     catalogVersion: version,
-    hashes: Object.fromEntries(["scripts/verification-catalog.json", "scripts/verification-policy.json", "scripts/verification-impact.mjs", "scripts/run-verification-suites.mjs", "scripts/verification-results.mjs", "package-lock.json"].map((file) => [file, sha256(readFileSync(path.join(root, file)))])),
+    hashes: Object.fromEntries(["scripts/verification-catalog.json", "scripts/verification-policy.json", "scripts/verification-impact.mjs", "scripts/run-verification-suites.mjs", "scripts/verification-results.mjs", "scripts/reuse-main-verification.mjs", "package-lock.json"].map((file) => [file, sha256(readFileSync(path.join(root, file)))])),
     environment: { node: process.version, npm: spawnSync("npm", ["--version"], { cwd: root, encoding: "utf8" }).stdout.trim() || null, postgresMajor },
     selection: { mode: selection.mode, groups: selection.groups, sharedUi: selection.sharedUi, browser: selection.browser, reasons: selection.reasons, files: selection.files, suiteFiles: selection.suiteFiles },
     suites: suites?.suites ?? [],

@@ -24,6 +24,8 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 jobs:
   check:
@@ -52,8 +54,16 @@ jobs:
         with:
           node-version: 24.13.1
           cache: npm
+      - name: Reuse verified PR evidence after merge when the integrated tree matches
+        id: reuse
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/reuse-main-verification.mjs
       - run: npm ci
+        if: steps.reuse.outputs.reused != 'true'
       - name: Select trusted or candidate verification tools
+        if: steps.reuse.outputs.reused != 'true'
         env:
           TRUSTED_WORKFLOW_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || job.workflow_sha }}
         run: |
@@ -71,6 +81,7 @@ jobs:
           fi
       - name: Verify catalogue and select impact
         id: scope
+        if: steps.reuse.outputs.reused != 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -99,12 +110,12 @@ jobs:
           node -e 'const s=require(process.argv[1]);require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY,`## Alcance de CI\n\n- Modo: ${s.mode}\n- Base: ${s.base}\n- Candidato: ${s.head}\n- Grupos: ${s.groups.join(", ")||"documentación"}\n- Motivos: ${s.reasons.join("; ")}\n`)' "$RUNNER_TEMP/selection.json"
           if [ "$SELECTOR_STATUS" -ne 0 ]; then exit "$SELECTOR_STATUS"; fi
       - name: Check documentation links
-        if: steps.scope.outputs.documentation == 'true'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.documentation == 'true'
         run: |
           git diff --check "${{ steps.scope.outputs.base }}" --
           node scripts/check-documentation.mjs verification-results/selection.json
       - name: Start PostgreSQL 18 after selecting scope
-        if: steps.scope.outputs.mode != 'documentation'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.mode != 'documentation'
         run: |
           docker run -d --name family-utils-postgres -e POSTGRES_USER=family -e POSTGRES_PASSWORD=family -e POSTGRES_DB=champions_test -p 5432:5432 postgres:18
           for attempt in $(seq 1 60); do
@@ -114,7 +125,7 @@ jobs:
           docker logs family-utils-postgres
           exit 1
       - name: Check dependency and migration metadata
-        if: steps.scope.outputs.mode != 'documentation'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.mode != 'documentation'
         run: |
           npm ls --depth=0
           npm run db:check
@@ -122,35 +133,35 @@ jobs:
           npm run db:migrate
           npm run db:verify
       - name: Check SQL permissions
-        if: steps.scope.outputs.mode == 'full'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.mode == 'full'
         run: psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
       - name: Lint, types and production build
-        if: steps.scope.outputs.mode != 'documentation'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.mode != 'documentation'
         run: |
           npm run lint
           npm run typecheck
           npm run build
       - name: Install browser dependencies
-        if: steps.scope.outputs.browser == 'true'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.browser == 'true'
         timeout-minutes: 10
         run: npx playwright install --with-deps chromium webkit
       - name: Create isolated UI database
-        if: steps.scope.outputs.shared_ui == 'true'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.shared_ui == 'true'
         run: psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE family_unified_test'
       - name: Migrate isolated UI database
-        if: steps.scope.outputs.shared_ui == 'true'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.shared_ui == 'true'
         run: npm run db:migrate
         env:
           DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
           DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/family_unified_test
       - name: Run selected suites sequentially
-        if: steps.scope.outputs.mode != 'documentation'
+        if: steps.reuse.outputs.reused != 'true' && steps.scope.outputs.mode != 'documentation'
         env:
           FAMILY_UTILS_UNIFIED_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
           VERIFICATION_PLAYWRIGHT_RETRIES: ${{ github.event_name == 'workflow_dispatch' && inputs.no_retries && '0' || '1' }}
         run: node "$VERIFICATION_TOOLS_DIRECTORY/run-verification-suites.mjs" --selection "$RUNNER_TEMP/selection.json"
       - name: Generate verification evidence
-        if: always()
+        if: always() && steps.reuse.outputs.reused != 'true'
         env:
           JOB_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
@@ -165,7 +176,7 @@ jobs:
             exit 1
           fi
       - name: Upload browser evidence
-        if: always() && steps.scope.outputs.browser == 'true'
+        if: always() && steps.reuse.outputs.reused != 'true' && steps.scope.outputs.browser == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: browser-verification-${{ github.run_id }}
@@ -178,7 +189,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Upload verification evidence
-        if: always()
+        if: always() && steps.reuse.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
@@ -186,7 +197,7 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
       - name: Stop PostgreSQL test container
-        if: always()
+        if: always() && steps.reuse.outputs.reused != 'true'
         run: |
           docker rm -f family-utils-postgres || true
 

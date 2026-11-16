@@ -68,7 +68,7 @@
       "browser": []
     }
   },
-  "sharedNodeTests": ["src/lib/navigation/navigation.test.ts", "tests/agent-tooling.test.mjs", "tests/verification-impact.test.mjs", "tests/preflight-publicacion.test.mjs", "tests/run-verification-suites.test.mjs", "tests/verification-results.test.mjs", "tests/verify-ci-evidence.test.mjs"],
+  "sharedNodeTests": ["src/lib/navigation/navigation.test.ts", "tests/agent-tooling.test.mjs", "tests/verification-impact.test.mjs", "tests/preflight-publicacion.test.mjs", "tests/run-verification-suites.test.mjs", "tests/verification-results.test.mjs", "tests/verify-ci-evidence.test.mjs", "tests/reuse-main-verification.test.mjs"],
   "sharedRouteTests": [],
   "sharedBrowser": [
     {"kind":"a11y","files":["tests/accessibility.spec.ts"]},

@@ -83,9 +83,14 @@ cobertura completa.
 
 CI siempre inicia en PR y `main`; no usa filtros de rutas a nivel del workflow.
 Los PR seleccionan por impacto usando el ancestro común y checkout de historial
-completo. Si no se puede resolver, se alerta y se elige todo. `main`, la corrida
-semanal y `workflow_dispatch` con SHA explícito ejecutan la suite completa. Solo PR cancela una ejecución
-anterior del mismo número; eventos de `main` y manuales no se cancelan.
+completo. Si no se puede resolver, se alerta y se elige todo. Al integrar, `main`
+verifica el PR asociado e intenta reutilizar su evidencia confiable solo si API,
+base, árbol integrado, alcance y workflow coinciden; si falta evidencia o falla
+cualquier comparación, ejecuta la suite completa. La corrida semanal y
+`workflow_dispatch` con SHA explícito ejecutan todo. La certificación manual
+predeterminada usa cero reintentos; el PR y la corrida semanal permiten un
+reintento automático por caso Playwright. Solo PR cancela una ejecución anterior
+del mismo número; eventos de `main` y manuales no se cancelan.
 
 En local:
 

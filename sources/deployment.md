@@ -46,14 +46,15 @@ Un check de PR sirve cuando la revisión del workflow coincide en contenido con
 `main`, la API confirma el PR contra la base vigente y el artefacto cubre la unión
 de los catálogos anterior y candidato. Si el PR modifica el workflow o no hay una
 evidencia verificable suficiente, ejecutar `workflow_dispatch` desde la rama
-`main` pasando el SHA candidato. Si cambia el candidato o la base, repetir la
-verificación. Después del merge se puede reutilizar el check del PR solo cuando
+`main` pasando el SHA candidato; esa certificación manual corre sin reintentos.
+Si cambia el candidato o la base, repetir la verificación. Al integrar, CI busca el PR asociado y reutiliza su check solo cuando
 la base registrada sigue siendo ancestro de `main`, el árbol integrado coincide
-exactamente con el artefacto y el workflow mantiene el mismo contenido confiable.
-Cada intento usa un artefacto distinto retenido por 90 días. Si el
+exactamente con el artefacto, el alcance cubre lo exigido y el workflow mantiene
+el mismo contenido confiable. Si no encuentra evidencia válida, ejecuta la suite
+completa en `main`. Cada intento usa un artefacto distinto retenido por 90 días. Si el
 merge actualiza código que
 Vercel publica automáticamente, pedir autorización antes del merge. La suite
-completa de `main` es un control periódico y no reemplaza evidencia insuficiente.
+completa semanal es un control periódico y no reemplaza evidencia insuficiente.
 
 Preparar un archivo privado de evidencia, fuera de Git y sin credenciales:
 
