@@ -20,6 +20,7 @@ export function validateWorkflowEvidence({ run, workflow, jobs, artifact, eviden
   if (workflow.path !== workflowPath || run.path !== workflowPath || run.workflow_id !== workflow.id) errors.push("La ejecución no proviene del workflow CI esperado.");
   if (run.event === "workflow_dispatch") {
     if (run.head_branch !== "main" || run.head_sha !== expected.mainSha || evidence.workflowSha !== expected.mainSha || evidence.trustedToolsSha !== expected.mainSha) errors.push("La ejecución manual debe usar el workflow y herramientas vigentes de main.");
+    if (evidence.playwrightRetries !== 0) errors.push("La certificación manual debe ejecutarse sin reintentos de Playwright.");
   } else if (run.event === "pull_request") {
     if (!pullRequest || pullRequest.head?.sha !== run.head_sha || pullRequest.base?.ref !== "main" || pullRequest.base?.repo?.full_name !== expected.repository) errors.push("La ejecución PR no acredita el commit fuente y repositorio esperados.");
     if (!integrated && pullRequest?.base?.sha !== expected.mainSha) errors.push("La ejecución PR no acredita la base main vigente.");

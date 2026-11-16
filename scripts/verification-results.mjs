@@ -111,6 +111,7 @@ export async function createVerificationEvidence({ selectionPath, suitePath, job
     suiteStatus: suites?.ok ? "success" : suites ? "failure" : "incomplete",
     unstable: (suites?.suites ?? []).reduce((sum, suite) => sum + (suite.unstable ?? 0), 0),
     omitted: (suites?.suites ?? []).reduce((sum, suite) => sum + (suite.skipped ?? 0), 0) + (suites?.notRun?.length ?? 0),
+    playwrightRetries: suites?.playwrightRetries ?? null,
     jobStatus,
     approved: jobStatus === "success" && suiteClean && trustedToolsClean && selection.mode !== "documentation",
   };

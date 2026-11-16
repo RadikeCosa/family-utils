@@ -10,6 +10,11 @@ on:
         description: Full candidate commit SHA to verify; select main as the workflow branch
         required: true
         type: string
+      no_retries:
+        description: Run the full manual certification without Playwright retries
+        required: false
+        default: true
+        type: boolean
   schedule:
     - cron: '0 12 * * 0'
 
@@ -142,13 +147,14 @@ jobs:
         if: steps.scope.outputs.mode != 'documentation'
         env:
           FAMILY_UTILS_UNIFIED_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
+          VERIFICATION_PLAYWRIGHT_RETRIES: ${{ github.event_name == 'workflow_dispatch' && inputs.no_retries && '0' || '1' }}
         run: node "$VERIFICATION_TOOLS_DIRECTORY/run-verification-suites.mjs" --selection "$RUNNER_TEMP/selection.json"
       - name: Generate verification evidence
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
           EVENT_NAME: ${{ github.event_name }}
-          VERIFICATION_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          VERIFICATION_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           VERIFICATION_WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
           if node "$VERIFICATION_TOOLS_DIRECTORY/verification-results.mjs" --write-evidence --selection verification-results/selection.json --suites verification-results/suite-summary.json; then

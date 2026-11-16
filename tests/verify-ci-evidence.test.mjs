@@ -7,7 +7,7 @@ function fixture(overrides = {}) {
   const workflow = { id: 7, path: ".github/workflows/ci.yml" };
   const jobs = [{ name: "check", conclusion: "success", run_attempt: 1 }];
   const artifact = { name: "verification-evidence-123-1", expired: false, created_at: "2026-01-01T00:00:00Z", expires_at: "2099-01-01T00:00:00Z", workflow_run: { id: 123, head_sha: "a".repeat(40) } };
-  const evidence = { runId: "123", runAttempt: 1, repository: "example/family-utils", event: "workflow_dispatch", workflowPath: ".github/workflows/ci.yml", workflowSha: "a".repeat(40), trustedToolsSha: "a".repeat(40), candidateSha: "b".repeat(40), baseSha: "a".repeat(40), mainSha: "a".repeat(40), approved: true, jobStatus: "success", suiteStatus: "success", suites: [{ name: "Reglas", status: "passed", skipped: 0, unstable: 0 }], unstable: 0, omitted: 0, selection: { mode: "full" }, runUrl: run.html_url };
+  const evidence = { runId: "123", runAttempt: 1, repository: "example/family-utils", event: "workflow_dispatch", workflowPath: ".github/workflows/ci.yml", workflowSha: "a".repeat(40), trustedToolsSha: "a".repeat(40), candidateSha: "b".repeat(40), baseSha: "a".repeat(40), mainSha: "a".repeat(40), approved: true, jobStatus: "success", suiteStatus: "success", suites: [{ name: "Reglas", status: "passed", skipped: 0, unstable: 0 }], unstable: 0, omitted: 0, playwrightRetries: 0, selection: { mode: "full" }, runUrl: run.html_url };
   const expected = { repository: "example/family-utils", runId: "123", candidateSha: "b".repeat(40), mainSha: "a".repeat(40) };
   return { run, workflow, jobs, artifact, evidence, expected, ...overrides };
 }
@@ -27,6 +27,7 @@ test("workflow evidence rejects untrusted workflow, mismatched artifacts, and in
     { evidence: { ...base.evidence, unstable: 1 } },
     { evidence: { ...base.evidence, omitted: 1 } },
     { evidence: { ...base.evidence, candidateSha: "d".repeat(40) } },
+    { evidence: { ...base.evidence, playwrightRetries: 1 } },
     { evidence: { ...base.evidence, selection: { mode: "impact" } } },
     { jobs: [{ ...base.jobs[0], conclusion: "failure" }] },
   ]) assert.equal(validateWorkflowEvidence({ ...base, ...changed }).ok, false);

@@ -9,8 +9,12 @@ import pg from "pg";
 const root = path.resolve(process.env.FAMILY_UTILS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
 const catalog = JSON.parse(await readFile(path.join(root, "scripts/verification-catalog.json"), "utf8"));
 const started = Date.now();
-const report = { schemaVersion: 1, startedAt: new Date(started).toISOString(), selection: null, suites: [], notRun: [], ok: true };
-export const playwrightRetryCount = (githubActions = process.env.GITHUB_ACTIONS) => githubActions === "true" ? 1 : 0;
+const report = { schemaVersion: 1, startedAt: new Date(started).toISOString(), selection: null, suites: [], notRun: [], ok: true, playwrightRetries: null };
+export const playwrightRetryCount = (githubActions = process.env.GITHUB_ACTIONS, configured = process.env.VERIFICATION_PLAYWRIGHT_RETRIES) => {
+  if (configured === "0" || configured === "1") return Number(configured);
+  return githubActions === "true" ? 1 : 0;
+};
+report.playwrightRetries = playwrightRetryCount();
 export const shouldStopLocally = (githubActions, previousSuitesPassed) => githubActions !== "true" && !previousSuitesPassed;
 const stopLocally = (name) => {
   if (!shouldStopLocally(process.env.GITHUB_ACTIONS, report.ok)) return false;
