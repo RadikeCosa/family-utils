@@ -6,11 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      ref:
-        description: Git reference to verify completely
+      candidate_sha:
+        description: Full candidate commit SHA to verify; select main as the workflow branch
         required: true
         type: string
-        default: main
+  schedule:
+    - cron: '0 12 * * 0'
 
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}-{1}', github.ref, github.run_id) }}
@@ -22,20 +23,6 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: family
-          POSTGRES_PASSWORD: family
-          POSTGRES_DB: champions_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U family -d family_utils"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       DATABASE_URL: postgres://family:family@localhost:5432/champions_test
       DATABASE_URL_UNPOOLED: postgres://family:family@localhost:5432/champions_test
@@ -46,39 +33,75 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
           fetch-depth: 0
+      - name: Validate manual candidate SHA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: 24.13.1
           cache: npm
       - run: npm ci
+      - name: Load trusted verification tools from trusted base revision
+        env:
+          TRUSTED_WORKFLOW_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p .trusted-workflow/scripts
+          for tool in verification-impact.mjs run-verification-suites.mjs verification-results.mjs; do
+            git show "${TRUSTED_WORKFLOW_SHA}:scripts/${tool}" > ".trusted-workflow/scripts/${tool}"
+            test -s ".trusted-workflow/scripts/${tool}"
+          done
       - name: Verify catalogue and select impact
         id: scope
-        continue-on-error: true
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.event.pull_request.head.sha || github.sha }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || job.workflow_sha }}
         run: |
           set -euo pipefail
           mkdir -p verification-results
           HEAD_SHA="$(git rev-parse HEAD)"
           MAIN_SHA="$(git rev-parse origin/main)"
+          echo "VERIFICATION_MAIN_SHA=$MAIN_SHA" >> "$GITHUB_ENV"
+          echo "VERIFICATION_TRUSTED_TOOLS_SHA=$TRUSTED_WORKFLOW_SHA" >> "$GITHUB_ENV"
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            if node scripts/verification-impact.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
+            if [ "$BASE_SHA" != "$MAIN_SHA" ] || ! git merge-base --is-ancestor "$MAIN_SHA" "$HEAD_SHA"; then
+              echo "::error::El PR debe probarse sobre el main vigente; actualice la rama y vuelva a ejecutar CI."
+              exit 1
+            fi
+            echo "VERIFICATION_BASE_SHA=$BASE_SHA" >> "$GITHUB_ENV"
+            if FAMILY_UTILS_ROOT="$GITHUB_WORKSPACE" node .trusted-workflow/scripts/verification-impact.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --policy-ref origin/main --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
           else
-            if node scripts/verification-impact.mjs --full --base "$MAIN_SHA" --head "$HEAD_SHA" --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
+            echo "VERIFICATION_BASE_SHA=$MAIN_SHA" >> "$GITHUB_ENV"
+            if FAMILY_UTILS_ROOT="$GITHUB_WORKSPACE" node .trusted-workflow/scripts/verification-impact.mjs --full --base "$MAIN_SHA" --head "$HEAD_SHA" --policy-ref origin/main --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
           fi
           test -s verification-results/selection.json
           cp verification-results/selection.json "$RUNNER_TEMP/selection.json"
           node -e 'const s=require(process.argv[1]);require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY,`## Alcance de CI\n\n- Modo: ${s.mode}\n- Base: ${s.base}\n- Candidato: ${s.head}\n- Grupos: ${s.groups.join(", ")||"documentación"}\n- Motivos: ${s.reasons.join("; ")}\n`)' "$RUNNER_TEMP/selection.json"
           if [ "$SELECTOR_STATUS" -ne 0 ]; then exit "$SELECTOR_STATUS"; fi
       - name: Check documentation links
-        if: steps.scope.outputs.mode == 'documentation'
+        if: steps.scope.outputs.documentation == 'true'
         run: |
-          git diff --check "${{ github.event.pull_request.base.sha || github.event.before }}" --
+          git diff --check "${{ steps.scope.outputs.base }}" --
           node scripts/check-documentation.mjs verification-results/selection.json
+      - name: Start PostgreSQL 18 after selecting scope
+        if: steps.scope.outputs.mode != 'documentation'
+        run: |
+          docker run -d --name family-utils-postgres -e POSTGRES_USER=family -e POSTGRES_PASSWORD=family -e POSTGRES_DB=champions_test -p 5432:5432 postgres:18
+          for attempt in $(seq 1 60); do
+            if docker exec family-utils-postgres pg_isready -U family -d champions_test; then exit 0; fi
+            sleep 2
+          done
+          docker logs family-utils-postgres
+          exit 1
       - name: Check dependency and migration metadata
         if: steps.scope.outputs.mode != 'documentation'
         run: |
@@ -113,7 +136,14 @@ jobs:
         if: steps.scope.outputs.mode != 'documentation'
         env:
           FAMILY_UTILS_UNIFIED_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
-        run: node scripts/run-verification-suites.mjs --selection "$RUNNER_TEMP/selection.json"
+        run: FAMILY_UTILS_ROOT="$GITHUB_WORKSPACE" node .trusted-workflow/scripts/run-verification-suites.mjs --selection "$RUNNER_TEMP/selection.json"
+      - name: Generate verification evidence
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          VERIFICATION_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          VERIFICATION_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: FAMILY_UTILS_ROOT="$GITHUB_WORKSPACE" node .trusted-workflow/scripts/verification-results.mjs --write-evidence --selection verification-results/selection.json --suites verification-results/suite-summary.json
       - name: Upload browser evidence
         if: always() && steps.scope.outputs.browser == 'true'
         uses: actions/upload-artifact@v4
@@ -126,15 +156,40 @@ jobs:
             test-results-unified/performance.json
             test-results-training-diary/**/*.png
           if-no-files-found: warn
+          retention-days: 7
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verification-evidence-${{ github.run_id }}
+          name: verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: verification-results/
+          retention-days: 90
           if-no-files-found: warn
-      - name: Require a valid verification catalogue
-        if: always() && steps.scope.outcome == 'failure'
+      - name: Stop PostgreSQL test container
+        if: always()
         run: |
-          echo "::error::El catálogo/selector falló; la suite completa se ejecutó, pero CI no puede aprobar hasta corregirlo."
-          exit 1
+          docker rm -f family-utils-postgres || true
+
+  report-weekly-failure:
+    if: always() && github.event_name == 'schedule' && needs.check.result != 'success'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open issue with failed weekly run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          cat > "$RUNNER_TEMP/weekly-failure.md" <<EOF
+          La ejecución completa semanal falló para el SHA ${HEAD_SHA}.
+
+          Ejecución: ${RUN_URL}
+
+          Revisar el alcance y distinguir defectos de selección de fallos dentro del alcance.
+          EOF
+          gh api "repos/$GITHUB_REPOSITORY/issues" --method POST \
+            -f title="Falló la verificación semanal ${GITHUB_RUN_ID}" \
+            -F body="@${RUNNER_TEMP}/weekly-failure.md"

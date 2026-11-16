@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "documentationAllowlist": ["README.md", "AGENTS.md", "agent-skills.md", "sources/"],
+  "documentationAllowlist": ["README.md"],
   "sharedPrefixes": [
-    ".github/", "scripts/", "src/components/", "src/db/", "src/lib/access/",
+    "src/components/", "src/db/", "src/lib/access/",
     "src/lib/auth/", "src/lib/calendar/", "src/lib/navigation/", "drizzle/",
     "drizzle-deferred/", "package.json", "package-lock.json", "tsconfig.",
     "next.config.", "eslint.config.", "playwright.", ".nvmrc", ".npmrc",
@@ -68,10 +68,19 @@
       "browser": []
     }
   },
-  "sharedNodeTests": ["src/lib/navigation/navigation.test.ts", "tests/agent-tooling.test.mjs", "tests/verification-impact.test.mjs", "tests/preflight-publicacion.test.mjs", "tests/run-verification-suites.test.mjs"],
+  "sharedNodeTests": ["src/lib/navigation/navigation.test.ts", "tests/agent-tooling.test.mjs", "tests/verification-impact.test.mjs", "tests/preflight-publicacion.test.mjs", "tests/run-verification-suites.test.mjs", "tests/verification-results.test.mjs", "tests/verify-ci-evidence.test.mjs"],
   "sharedRouteTests": [],
   "sharedBrowser": [
     {"kind":"a11y","files":["tests/accessibility.spec.ts"]},
     {"kind":"unified","files":["tests/e2e/unified.spec.ts"]}
-  ]
+  ],
+  "invariants": {
+    "authorization": ["tests/access-routes.integration.mjs", "tests/tasks-daily-routes.integration.mjs", "tests/training-routes.integration.mjs"],
+    "familyIsolation": ["tests/access-routes.integration.mjs", "tests/postgres-training.integration.test.mjs"],
+    "persistence": ["tests/postgres-training.integration.test.mjs", "tests/postgres-task-query-plans.integration.test.mjs"],
+    "concurrency": ["tests/training-routes.integration.mjs", "tests/recipes-routes.integration.mjs"],
+    "retries": ["tests/training-routes.integration.mjs", "tests/training-diary.integration.mjs"],
+    "familyDates": ["tests/tasks-daily-routes.integration.mjs", "tests/training-diary.integration.mjs"],
+    "recovery": ["tests/training-diary.integration.mjs", "tests/postgres-training-diary-migration.integration.test.mjs"]
+  }
 }

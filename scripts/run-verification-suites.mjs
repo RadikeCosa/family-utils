@@ -6,10 +6,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(process.env.FAMILY_UTILS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
 const catalog = JSON.parse(await readFile(path.join(root, "scripts/verification-catalog.json"), "utf8"));
 const started = Date.now();
-const report = { schemaVersion: 1, startedAt: new Date(started).toISOString(), selection: null, suites: [], ok: true };
+const report = { schemaVersion: 1, startedAt: new Date(started).toISOString(), selection: null, suites: [], notRun: [], ok: true };
+export const playwrightRetryCount = (githubActions = process.env.GITHUB_ACTIONS) => githubActions === "true" ? 1 : 0;
+export const shouldStopLocally = (githubActions, previousSuitesPassed) => githubActions !== "true" && !previousSuitesPassed;
+const stopLocally = (name) => {
+  if (!shouldStopLocally(process.env.GITHUB_ACTIONS, report.ok)) return false;
+  report.notRun.push({ name, reason: "Detenida tras el primer fallo local." });
+  return true;
+};
 
 function parseArgs(args) {
   const out = {};
@@ -63,12 +70,13 @@ export function parseTap(output) {
 export function parsePlaywright(output) {
   let data;
   try { data = JSON.parse(output); } catch { return null; }
-  let passed = 0, failed = 0, skipped = 0;
+  let passed = 0, failed = 0, skipped = 0, unstable = 0;
   const failures = [];
   const visit = (suite) => {
     for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) {
       const status = test.status ?? test.results?.at(-1)?.status ?? "unknown";
       if (status === "skipped") skipped++;
+      else if (status === "flaky") { failed++; unstable++; }
       else if (status === "expected" || status === "passed") passed++;
       else {
         failed++;
@@ -84,20 +92,22 @@ export function parsePlaywright(output) {
   };
   for (const suite of data.suites ?? []) visit(suite);
   if (passed + failed + skipped === 0) return null;
-  return { executed: passed + failed + skipped, passed, failed, skipped, failures };
+  return { executed: passed + failed + skipped, passed, failed, skipped, unstable, failures };
 }
 function executeTap(name, files) {
-  if (!files.length) return;
+  if (stopLocally(name) || !files.length) return;
   const result = run(process.execPath, ["--experimental-strip-types", "--test", "--test-concurrency=1", "--test-reporter=tap", ...files]);
   const counts = parseTap(result.stdout ?? "");
   if (!counts) { result.status = result.status || 1; result.stderr += "\nSin resumen TAP válido o suite vacía.\n"; }
   addSuite(name, result, counts ?? { executed: 0, passed: 0, failed: 1, skipped: 0 });
 }
 function executePlaywright(name, command, args, env = process.env) {
-  const result = run(command, args, env);
+  if (stopLocally(name)) return;
+  const retryArgs = args.includes("--retries=0") || args.includes("--retries=1") ? args : [...args, `--retries=${playwrightRetryCount()}`];
+  const result = run(command, retryArgs, env);
   const counts = parsePlaywright(result.stdout ?? "");
   if (!counts) { result.status = result.status || 1; result.stderr += "\nReporte Playwright vacío o inválido.\n"; }
-  addSuite(name, result, counts ?? { executed: 0, passed: 0, failed: 1, skipped: 0 });
+  addSuite(name, result, counts ?? { executed: 0, passed: 0, failed: 1, skipped: 0, unstable: 0 });
 }
 
 async function makeUnifiedDatabase() {
@@ -129,16 +139,16 @@ async function main() {
   const selection = report.selection;
   const selected = new Set(selection.groups);
   const domains = Object.entries(catalog.domains).filter(([name]) => selected.has(name));
-  const nodeFiles = new Set(domains.flatMap(([, item]) => item.nodeTests));
-  const routeFiles = new Set(domains.flatMap(([, item]) => item.routeTests));
-  if (selection.mode === "full") {
+  const nodeFiles = new Set(selection.suiteFiles?.node ?? domains.flatMap(([, item]) => item.nodeTests));
+  const routeFiles = new Set(selection.suiteFiles?.route ?? domains.flatMap(([, item]) => item.routeTests));
+  if (!selection.suiteFiles && selection.mode === "full") {
     for (const file of catalog.sharedNodeTests) nodeFiles.add(file);
     for (const file of catalog.sharedRouteTests) routeFiles.add(file);
   }
   executeTap("Reglas e integración seleccionadas", [...nodeFiles].sort());
   executeTap("Handlers seleccionados", [...routeFiles].sort());
 
-  const browserSuites = [...domains.flatMap(([, item]) => item.browser), ...(selection.sharedUi ? catalog.sharedBrowser : [])];
+  const browserSuites = selection.suiteFiles?.browser ?? [...domains.flatMap(([, item]) => item.browser), ...(selection.sharedUi ? catalog.sharedBrowser : [])];
   const byKind = new Map();
   for (const suite of browserSuites) {
     const files = byKind.get(suite.kind) ?? new Set();
@@ -157,7 +167,7 @@ async function main() {
   for (const [kind, label, script] of special) if (byKind.has(kind)) executePlaywright(label, "npm", ["--silent", "run", script, "--", "--reporter=json"]);
 
   let unifiedDatabase;
-  if (byKind.has("unified")) {
+  if (byKind.has("unified") && !stopLocally("Preparar interfaz unificada")) {
     const baseUrl = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
     try {
       unifiedDatabase = await makeUnifiedDatabase();
@@ -165,6 +175,7 @@ async function main() {
       const migrate = run("npm", ["--silent", "run", "db:migrate"], env);
       addSuite("Migración de base auxiliar unificada", migrate);
       if (migrate.status === 0) executePlaywright("Interfaz unificada", "npm", ["--silent", "run", "test:unified", "--", "--reporter=json"], env);
+      else report.notRun.push({ name: "Interfaz unificada", reason: "Falló la migración indispensable de la base auxiliar." });
     } catch (error) {
       addSuite("Preparar interfaz unificada", { status: 1, durationMs: 0, stderr: `${error.message}\n` });
     } finally {

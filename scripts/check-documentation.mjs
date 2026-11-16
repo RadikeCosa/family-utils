@@ -7,7 +7,7 @@ const selectionPath = process.argv[2];
 if (!selectionPath) throw new Error("Uso: check-documentation.mjs <selection.json>");
 const selection = JSON.parse(await readFile(selectionPath, "utf8"));
 const errors = [];
-for (const file of selection.files.filter((name) => name.endsWith(".md"))) {
+for (const file of selection.files.filter((name) => /\.md$/i.test(name))) {
   const content = await readFile(path.join(root, file), "utf8");
   for (const match of content.matchAll(/\]\(([^)]+)\)/g)) {
     const raw = match[1].trim().replace(/^<|>$/g, "");
@@ -23,4 +23,4 @@ for (const file of selection.files.filter((name) => name.endsWith(".md"))) {
   }
 }
 if (errors.length) { console.error(errors.join("\n")); process.exitCode = 1; }
-else console.log(`Enlaces locales comprobados en ${selection.files.filter((name) => name.endsWith(".md")).length} documentos.`);
+else console.log(`Enlaces locales comprobados en ${selection.files.filter((name) => /\.md$/i.test(name)).length} documentos.`);

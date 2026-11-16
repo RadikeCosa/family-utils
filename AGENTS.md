@@ -85,9 +85,10 @@
 
 - Seguir la [matriz de verificación](sources/verification.md) según el cambio.
 - Ejecutar comprobaciones locales por impacto durante el desarrollo; usar CI y la [guía de publicación](sources/deployment.md) para la evidencia completa previa a producción.
-- `bash scripts/verificar-todo.sh` selecciona por impacto; agregar `--full` para todas las suites.
-- Todo PR ejecuta CI. `main` y la ejecución manual solicitada ejecutan el inventario completo del catálogo.
-- Antes de autorizar producción, la suite completa debe aprobar sobre el SHA candidato que incluye el `main` vigente.
+- `bash scripts/verificar-todo.sh` selecciona por impacto; agregar `--full` para todas las suites y auditorías del inventario.
+- Todo PR ejecuta CI. `main`, la corrida semanal y `workflow_dispatch` con SHA explícito ejecutan cobertura completa.
+- La cobertura funcional completa incluye todos los grupos y pruebas funcionales del catálogo; cobertura completa/`--full` añade auditorías amplias.
+- Antes de autorizar producción, el preflight debe consultar una evidencia CI aprobada, confiable y suficiente para el SHA candidato y la base `main` vigente.
 - Si una suite completa de `main` descubre un fallo reproducible que el PR por impacto no ejecutó, suspender selección por impacto y volver a suite completa hasta corregir y cubrir el selector.
 - Esa herramienta acepta solo PostgreSQL local en la base descartable `champions_test`.
 - Preparar PostgreSQL 18 y navegadores según la guía; no reutilizar el volumen de PostgreSQL 17.

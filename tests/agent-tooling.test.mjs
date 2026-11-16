@@ -19,7 +19,8 @@ test("verifier rejects missing, malformed, remote and overridden destinations be
     const result = spawnSync("bash", ["scripts/verificar-todo.sh"], { env, encoding: "utf8" });
     assert.ifError(result.error);
     assert.equal(result.status, 2, `${url}: ${result.stderr}`);
-    assert.doesNotMatch(result.stdout, /==>/);
+    if (url === undefined) assert.match(result.stderr, /FAMILY_UTILS_TEST_DATABASE_URL no está definida/);
+    else assert.doesNotMatch(result.stdout, /==>/);
     assert.match(result.stderr, /ERROR:/);
   }
 });
