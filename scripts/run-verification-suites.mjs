@@ -36,6 +36,7 @@ function addSuite(name, result, counts = {}) {
   for (const failure of counts.failures?.slice(0, 15) ?? []) {
     console.error(`  ${failure.project}: ${failure.title} — ${failure.message}`);
   }
+  if (counts.skipped) console.error(`  Pruebas omitidas: ${counts.skipped} (ver reporte JSON).`);
   if ((counts.failures?.length ?? 0) > 15) console.error(`  … y ${counts.failures.length - 15} fallos más (ver JSON).`);
   if (result.status !== 0 && result.stderr) process.stderr.write(result.stderr);
 }
@@ -91,6 +92,10 @@ export function parsePlaywright(output) {
     for (const child of suite.suites ?? []) visit(child);
   };
   for (const suite of data.suites ?? []) visit(suite);
+  for (const error of data.errors ?? []) {
+    failed++;
+    failures.push({ title: "Error global de Playwright", project: "runner", message: (error.message ?? error.value ?? "Error global desconocido").split(/\r?\n/, 1)[0].slice(0, 300) });
+  }
   if (passed + failed + skipped === 0) return null;
   return { executed: passed + failed + skipped, passed, failed, skipped, unstable, failures };
 }

@@ -3,7 +3,8 @@ import test from "node:test";
 import { parsePlaywright, parseTap, playwrightRetryCount, shouldStopLocally } from "../scripts/run-verification-suites.mjs";
 
 test("runner retries Playwright once only in GitHub Actions and stops local suites at first failure", () => {
-  assert.equal(playwrightRetryCount(undefined), 0);
+  // Pass the local value explicitly so the assertion is stable inside GitHub Actions too.
+  assert.equal(playwrightRetryCount(""), 0);
   assert.equal(playwrightRetryCount("true"), 1);
   assert.equal(shouldStopLocally(undefined, false), true);
   assert.equal(shouldStopLocally("true", false), false);
@@ -61,4 +62,12 @@ test("Playwright reports count and identify failures without accepting skipped t
 test("empty or invalid Playwright reports fail closed", () => {
   assert.equal(parsePlaywright("not-json"), null);
   assert.equal(parsePlaywright(JSON.stringify({ suites: [] })), null);
+  assert.deepEqual(parsePlaywright(JSON.stringify({ suites: [], errors: [{ message: "global setup failed" }] })), {
+    executed: 1,
+    passed: 0,
+    failed: 1,
+    skipped: 0,
+    unstable: 0,
+    failures: [{ title: "Error global de Playwright", project: "runner", message: "global setup failed" }],
+  });
 });
