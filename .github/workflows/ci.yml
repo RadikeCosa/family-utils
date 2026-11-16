@@ -48,16 +48,22 @@ jobs:
           node-version: 24.13.1
           cache: npm
       - run: npm ci
-      - name: Load trusted verification tools from trusted base revision
+      - name: Select trusted or candidate verification tools
         env:
           TRUSTED_WORKFLOW_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || job.workflow_sha }}
         run: |
           set -euo pipefail
-          mkdir -p .trusted-workflow
-          for tool in verification-impact.mjs run-verification-suites.mjs verification-results.mjs; do
-            git show "${TRUSTED_WORKFLOW_SHA}:scripts/${tool}" > ".trusted-workflow/${tool}"
-            test -s ".trusted-workflow/${tool}"
-          done
+          if git show "${TRUSTED_WORKFLOW_SHA}:scripts/verification-results.mjs" | grep -q -- '--write-evidence'; then
+            mkdir -p .trusted-workflow
+            for tool in verification-impact.mjs run-verification-suites.mjs verification-results.mjs; do
+              git show "${TRUSTED_WORKFLOW_SHA}:scripts/${tool}" > ".trusted-workflow/${tool}"
+              test -s ".trusted-workflow/${tool}"
+            done
+            echo 'VERIFICATION_TOOLS_DIRECTORY=.trusted-workflow' >> "$GITHUB_ENV"
+          else
+            # First adoption: main predates the evidence-capable tools. The candidate controls run without secrets and cannot certify itself.
+            echo 'VERIFICATION_TOOLS_DIRECTORY=scripts' >> "$GITHUB_ENV"
+          fi
       - name: Verify catalogue and select impact
         id: scope
         env:
@@ -78,10 +84,10 @@ jobs:
               exit 1
             fi
             echo "VERIFICATION_BASE_SHA=$BASE_SHA" >> "$GITHUB_ENV"
-            if node .trusted-workflow/verification-impact.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --policy-ref origin/main --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
+            if node "$VERIFICATION_TOOLS_DIRECTORY/verification-impact.mjs" --base "$BASE_SHA" --head "$HEAD_SHA" --policy-ref origin/main --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
           else
             echo "VERIFICATION_BASE_SHA=$MAIN_SHA" >> "$GITHUB_ENV"
-            if node .trusted-workflow/verification-impact.mjs --full --base "$MAIN_SHA" --head "$HEAD_SHA" --policy-ref origin/main --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
+            if node "$VERIFICATION_TOOLS_DIRECTORY/verification-impact.mjs" --full --base "$MAIN_SHA" --head "$HEAD_SHA" --policy-ref origin/main --output verification-results/selection.json; then SELECTOR_STATUS=0; else SELECTOR_STATUS=$?; fi
           fi
           test -s verification-results/selection.json
           cp verification-results/selection.json "$RUNNER_TEMP/selection.json"
@@ -136,14 +142,22 @@ jobs:
         if: steps.scope.outputs.mode != 'documentation'
         env:
           FAMILY_UTILS_UNIFIED_DATABASE_URL: postgres://family:family@localhost:5432/family_unified_test
-        run: node .trusted-workflow/run-verification-suites.mjs --selection "$RUNNER_TEMP/selection.json"
+        run: node "$VERIFICATION_TOOLS_DIRECTORY/run-verification-suites.mjs" --selection "$RUNNER_TEMP/selection.json"
       - name: Generate verification evidence
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
+          EVENT_NAME: ${{ github.event_name }}
           VERIFICATION_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           VERIFICATION_WORKFLOW_SHA: ${{ job.workflow_sha }}
-        run: node .trusted-workflow/verification-results.mjs --write-evidence --selection verification-results/selection.json --suites verification-results/suite-summary.json
+        run: |
+          if node "$VERIFICATION_TOOLS_DIRECTORY/verification-results.mjs" --write-evidence --selection verification-results/selection.json --suites verification-results/suite-summary.json; then
+            exit 0
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$VERIFICATION_TOOLS_DIRECTORY" = "scripts" ]; then
+            echo "::warning::La primera adopción no puede emitir evidencia certificadora; se conserva el procedimiento previo hasta integrar."
+          else
+            exit 1
+          fi
       - name: Upload browser evidence
         if: always() && steps.scope.outputs.browser == 'true'
         uses: actions/upload-artifact@v4
