@@ -709,3 +709,27 @@
   min-width: 44px;
   min-height: 44px;
 }
+
+/* Focus mode removes shared navigation from layout and accessibility order. */
+.shell:has([data-focus-mode="true"]) {
+  background: #111a14;
+}
+.shell:has([data-focus-mode="true"]) .sidebar,
+.shell:has([data-focus-mode="true"]) > .workspace > .header,
+.shell:has([data-focus-mode="true"]) .mobileLocation,
+.shell:has([data-focus-mode="true"]) :global([data-page-heading]),
+.shell:has([data-focus-mode="true"]) :global(.tabs) {
+  display: none !important;
+}
+.shell:has([data-focus-mode="true"]) .workspace {
+  margin-left: 0;
+}
+.shell:has([data-focus-mode="true"]) .body {
+  max-width: none;
+  min-height: 100dvh;
+  padding: clamp(8px, 2vw, 24px);
+}
+.shell:has([data-focus-mode="true"]) .content {
+  max-width: 1040px;
+  margin: 0 auto;
+}

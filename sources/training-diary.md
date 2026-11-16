@@ -274,7 +274,13 @@ transición del diario. Puede ejecutarse en modo de consulta; el guardado sigue
 requiriendo `TRAINING_DIARY_ENABLED=true`. No cambia el esquema ni crea endpoints. Admite
 preparación 0–3600 s, trabajo 1–3600 s, descanso 0–3600 s y 1–100 rondas; la
 duración total, incluida preparación y sin el descanso final, no supera cuatro
-horas. Incluye presets editables 20/10 × 8 y 40/20 × 8.
+horas. Incluye presets editables 20/10 × 8 y 40/20 × 8. La duración visible usa
+mm:ss e incluye la preparación configurada: 20/10 dura 4:00 y 40/20 dura 7:50.
+La preparación y la ausencia de descanso final se explicitan también en las
+configuraciones personalizadas. Durante la sesión, el modo foco oculta navegación
+y encabezados; se puede salir sin detener la sesión. El reloj no se anuncia cada
+segundo: los anuncios accesibles ocurren al cambiar de etapa o ronda, al pausar,
+reanudar y finalizar.
 
 La sesión vive en memoria. Usa intervalos de trabajo/descanso y permite pausar,
 descartar o terminar parcialmente. Al ocultarse el documento se pausa; una demora
