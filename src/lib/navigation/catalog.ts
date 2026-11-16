@@ -149,7 +149,15 @@ export function activeSection(
   query: URLSearchParams,
 ) {
   if (app.id === "menus") return query.get("vista") === "semana" ? 1 : 0;
-  if (app.id === "training") return ["historial", "plantillas"].includes(query.get("seccion") ?? "") ? 1 : 0;
+  if (app.id === "training") {
+    const section = query.get("seccion");
+    if (!section) return 0;
+    const active = app.sections.findIndex(
+      (entry) =>
+        new URL(entry.href, "https://family.invalid").searchParams.get("seccion") === section,
+    );
+    return active >= 0 ? active : 0;
+  }
   if (app.id === "tasks")
     return query.get("seccion") === "historial" ? 1 : 0;
   if (["recipes", "shopping", "library"].includes(app.id))
