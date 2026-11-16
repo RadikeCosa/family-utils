@@ -11,7 +11,7 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await context.addCookies(cookies);
   await page.goto(`${server.origin}/entrenamiento?seccion=temporizador`);
   await expect(page.getByRole("heading", { name: "Temporizador HIIT" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Temporizador" })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator('a[href="/entrenamiento?seccion=temporizador"][aria-current="page"]')).not.toHaveCount(0);
   await page.getByRole("button", { name: "20/10 × 8" }).click();
   await expect(page.getByText("Duración prevista: 3:50 de entrenamiento + 0:10 de preparación.")).toBeVisible();
   await page.getByLabel("Preparación (segundos)").fill("0");
