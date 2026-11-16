@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
   useCallback,
@@ -53,13 +53,15 @@ export default function PlatformShell({
 }) {
   const path = usePathname(),
     search = useNavigationQuery(),
+    routeSearch = useSearchParams(),
     router = useRouter();
   const href = `${path}${search.size ? `?${search}` : ""}`;
   const app = findApp(path, apps) ?? apps[0];
+  const activeQuery = routeSearch.toString() || search.toString();
   const sectionIndex = activeSection(
     app,
     path,
-    new URLSearchParams(search.toString()),
+    new URLSearchParams(activeQuery),
   );
   const section = app.sections[sectionIndex];
   const [open, setOpen] = useState(false),
