@@ -83,6 +83,20 @@ test("catalog order and disabled capabilities", () => {
   );
   assert.equal(validDestination("/recetas/a", reduced), null);
 });
+test("training sidebar highlights the active diary, templates, or HIIT section", () => {
+  const withHiit = appCatalog({
+    recipes: false,
+    library: false,
+    sports: false,
+    champions: false,
+    training: true,
+    trainingDiary: true,
+    trainingHiit: true,
+  }).find((app) => app.id === "training")!;
+  assert.equal(activeSection(withHiit, "/entrenamiento", new URLSearchParams()), 0);
+  assert.equal(activeSection(withHiit, "/entrenamiento", new URLSearchParams("seccion=plantillas")), 1);
+  assert.equal(activeSection(withHiit, "/entrenamiento", new URLSearchParams("seccion=temporizador")), 2);
+});
 test("destinations reject external URLs, unknown routes and malformed paths", () => {
   for (const target of [
     "https://evil.invalid",
