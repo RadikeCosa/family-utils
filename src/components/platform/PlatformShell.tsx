@@ -57,7 +57,10 @@ export default function PlatformShell({
     router = useRouter();
   const href = `${path}${search.size ? `?${search}` : ""}`;
   const app = findApp(path, apps) ?? apps[0];
-  const activeQuery = routeSearch.toString() || search.toString();
+  const activeQuery =
+    typeof window !== "undefined"
+      ? window.location.search
+      : routeSearch.toString() || search.toString();
   const sectionIndex = activeSection(
     app,
     path,
