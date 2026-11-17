@@ -9,7 +9,7 @@ function input(overrides = {}) {
     ancestor: true, containsMain: true, historyComplete: true, changes: [], databaseUrlPresent: false, tools: {},
     evidence: {
       deployment: { id: "deployment-1", url: "https://example.vercel.app", state: "READY", target: "production", commitSha: deployed, verifiedAt: new Date().toISOString() },
-      fullSuite: { status: "success", complete: true, commitSha: candidate, mainSha: main, runUrl: "https://github.com/example/actions/runs/1" }
+      ciEvidence: { verified: true, status: "success", approved: true, candidateSha: candidate, mainSha: main, runUrl: "https://github.com/example/actions/runs/1", verifiedRunUrl: "https://github.com/example/actions/runs/1", coversRequiredScope: true }
     },
     ...overrides,
   };
@@ -35,7 +35,8 @@ test("preflight rejects stale deployed state, mismatched destination, divergent 
   assert.ok(evaluatePreflight(input({ evidence: { ...input().evidence, deployment: { ...input().evidence.deployment, verifiedAt: "2020-01-01T00:00:00.000Z" } } })).errors.some((error) => error.includes("actual")));
   assert.ok(evaluatePreflight(input({ destination: "preview" })).errors.some((error) => error.includes("destino")));
   assert.ok(evaluatePreflight(input({ ancestor: false })).errors.some((error) => error.includes("desciende")));
-  assert.ok(evaluatePreflight(input({ evidence: { ...input().evidence, fullSuite: { status: "success", complete: false, commitSha: candidate, mainSha: main, runUrl: "https://github.com/example/actions/runs/1" } } })).errors.some((error) => error.includes("suite completa")));
+  assert.ok(evaluatePreflight(input({ evidence: { ...input().evidence, ciEvidence: { ...input().evidence.ciEvidence, coversRequiredScope: false } } })).errors.some((error) => error.includes("evidencia CI verificable")));
+  assert.ok(evaluatePreflight(input({ evidence: { ...input().evidence, ciEvidence: { status: "success", candidateSha: candidate, mainSha: main, runUrl: "https://github.com/example/actions/runs/1" } } })).errors.some((error) => error.includes("evidencia CI verificable")));
 });
 
 test("schema and transition require direct connection, compatible tools, and synthetic populated rehearsal", () => {

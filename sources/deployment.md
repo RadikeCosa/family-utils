@@ -39,11 +39,22 @@ y agregar una regresión. Aplicar el mismo criterio después de la ventana.
 ## Evidencia previa a producción
 
 Antes de pedir autorización, el candidato debe incluir el `main` vigente y tener
-una suite completa aprobada exactamente para su SHA. Ejecutar el modo manual de
-CI sobre esa referencia y conservar enlace, SHA y alcance completo. Si cambia el
-candidato o `main`, repetir la suite completa. Si el merge actualiza código que
+una evidencia CI aprobada en el SHA candidato y la base `main` vigente. El
+preflight verifica en GitHub la ruta e identidad del workflow, revisión confiable,
+evento, SHA/base, intento, job, artefacto, digest, vencimiento y alcance requerido.
+Un check de PR sirve cuando la revisión del workflow coincide en contenido con
+`main`, la API confirma el PR contra la base vigente y el artefacto cubre la unión
+de los catálogos anterior y candidato. Si el PR modifica el workflow o no hay una
+evidencia verificable suficiente, ejecutar `workflow_dispatch` desde la rama
+`main` pasando el SHA candidato; esa certificación manual corre sin reintentos.
+Si cambia el candidato o la base, repetir la verificación. Al integrar, CI busca el PR asociado y reutiliza su check solo cuando
+la base registrada sigue siendo ancestro de `main`, el árbol integrado coincide
+exactamente con el artefacto, el alcance cubre lo exigido y el workflow mantiene
+el mismo contenido confiable. Si no encuentra evidencia válida, ejecuta la suite
+completa en `main`. Cada intento usa un artefacto distinto retenido por 90 días. Si el
+merge actualiza código que
 Vercel publica automáticamente, pedir autorización antes del merge. La suite
-completa de `main` es un segundo control y no reemplaza la evidencia previa.
+completa semanal es un control periódico y no reemplaza evidencia insuficiente.
 
 Preparar un archivo privado de evidencia, fuera de Git y sin credenciales:
 
@@ -56,13 +67,6 @@ Preparar un archivo privado de evidencia, fuera de Git y sin credenciales:
     "target": "production",
     "commitSha": "<sha actualmente desplegado>",
     "verifiedAt": "2026-11-15T12:00:00.000Z"
-  },
-  "fullSuite": {
-    "status": "success",
-    "complete": true,
-    "commitSha": "<sha candidato>",
-    "mainSha": "<sha main vigente cuando se ejecutó la suite>",
-    "runUrl": "https://github.com/example/repo/actions/runs/123"
   },
   "data": {
     "backupRestoreVerified": true,
@@ -103,15 +107,22 @@ bash scripts/preflight-publicacion.sh \
   --deployed <sha-desplegado> \
   --main <sha-main-vigente> \
   --destination production \
-  --evidence-file /ruta/privada/release-evidence.json
+  --evidence-file /ruta/privada/release-evidence.json \
+  --verification-run <id-ejecucion-ci> \
+  --repository RadikeCosa/family-utils
 ```
+
+La verificación en GitHub necesita `GH_TOKEN` o `GITHUB_TOKEN` con lectura de
+Actions y del contenido del repositorio, además de `git` y `unzip` disponibles.
+No se guarda ese token en el archivo de evidencia. El preflight no acepta un
+campo `fullSuite` autodeclarado como prueba.
 
 Usar `schema` para migraciones compatibles y `transition` para transformaciones
 o activaciones incompatibles. Los dos modos de datos requieren
 `DATABASE_URL_UNPOOLED` explícita, `psql`, `pg_dump`, `pg_restore`, versión
 compatible del cliente y evidencia de respaldo restaurado y ensayo sintético.
 El preflight contrasta el destino/SHA del despliegue, la frescura de esa evidencia,
-la suite completa para el candidato y el `main` indicados, la ascendencia de Git y los archivos entre los
+el alcance requerido para el candidato y el `main` indicados, la ascendencia de Git y los archivos entre los
 SHAs. `code` falla ante cualquier cambio en `drizzle/`, `drizzle-deferred/` o
 `src/db/schema.ts`; un archivo de migración existente no puede modificarse,
 borrarse ni renombrarse. La ausencia de historial o de prueba no equivale a un
@@ -128,6 +139,9 @@ La autorización de una entrega enumera por separado, en este orden:
    irreversible y momento de parada.
 4. **Recuperación:** versión/binario compatible, rollback de despliegue, acción
    sobre banderas y tratamiento del esquema/datos.
+5. **Dispositivo real:** registrar resultado, dispositivo y versión solo cuando el
+   cambio afecta instalación, offline o capacidades nativas. Playwright WebKit no
+   reemplaza una comprobación en Safari de iPhone.
 
 Detenerse en el primer fallo y no iniciar pasos posteriores. Si falla la suite de
 `main`, congelar entregas y aplicar la recuperación ya autorizada: revertir el

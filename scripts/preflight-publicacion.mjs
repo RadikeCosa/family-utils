@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { verifyCiEvidence } from "./verify-ci-evidence.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const migrationSql = /^drizzle\/\d+_.+\.sql$/;
@@ -19,13 +20,13 @@ export function evaluatePreflight(input) {
   if (!["code", "schema", "transition"].includes(input.mode)) errors.push("Modo inválido; usar code, schema o transition.");
   const evidence = input.evidence ?? {};
   const deployment = evidence.deployment ?? {};
-  const suite = evidence.fullSuite ?? {};
+  const suite = evidence.ciEvidence ?? {};
   if (!deployment.id || !deployment.url || deployment.state !== "READY") errors.push("La evidencia no identifica un despliegue listo.");
   if (deployment.target !== input.destination) errors.push("El destino de la evidencia no coincide con el destino solicitado.");
   if (deployment.commitSha !== input.deployedSha) errors.push("El SHA del despliegue no coincide con el SHA desplegado indicado.");
   const freshness = Date.parse(deployment.verifiedAt ?? "");
   if (!Number.isFinite(freshness) || Date.now() - freshness > 24 * 60 * 60 * 1000 || freshness > Date.now() + 5 * 60 * 1000) errors.push("La evidencia del despliegue debe ser actual (máximo 24 horas).");
-  if (suite.status !== "success" || suite.complete !== true || suite.commitSha !== input.candidateSha || suite.mainSha !== input.mainSha || !suite.runUrl) errors.push("Falta evidencia de suite completa aprobada para el candidato y el main indicados.");
+  if (suite.verified !== true || suite.status !== "success" || suite.approved !== true || suite.candidateSha !== input.candidateSha || suite.mainSha !== input.mainSha || suite.runUrl !== suite.verifiedRunUrl || suite.coversRequiredScope !== true) errors.push("Falta evidencia CI verificable, confiable y suficiente para el candidato y el main indicados.");
   if (input.ancestor === false) errors.push("El candidato no desciende del SHA actualmente desplegado; requiere conciliación.");
   if (input.containsMain === false) errors.push("El candidato no contiene el main vigente.");
   if (input.historyComplete !== true) errors.push("No se pudo leer el historial completo entre despliegue y candidato.");
@@ -69,7 +70,7 @@ function version(command) {
 
 async function main() {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
-    console.log("Uso: preflight-publicacion.sh --mode code|schema|transition --candidate SHA --deployed SHA --main SHA --destination DESTINO --evidence-file JSON");
+    console.log("Uso: preflight-publicacion.sh --mode code|schema|transition --candidate SHA --deployed SHA --main SHA --destination DESTINO --evidence-file JSON --verification-run ID [--repository owner/repo]");
     process.exit(0);
   }
   const values = argsMap(process.argv.slice(2));
@@ -78,6 +79,8 @@ async function main() {
   const deployed = values.get("deployed");
   const destination = values.get("destination");
   const evidenceFile = values.get("evidence-file");
+  const verificationRun = values.get("verification-run");
+  const repository = values.get("repository") ?? process.env.GITHUB_REPOSITORY;
   let evidence;
   try { evidence = JSON.parse(await readFile(path.resolve(root, evidenceFile), "utf8")); }
   catch { evidence = {}; }
@@ -94,6 +97,33 @@ async function main() {
     const result = run("git", ["rev-parse", "--verify", `${values.get("main")}^{commit}`]);
     if (result.status === 0) mainSha = result.stdout.trim();
   }
+  let verifiedEvidence = null;
+  if (verificationRun && candidateSha && mainSha && repository) {
+    try {
+      const checked = await verifyCiEvidence({ repository, runId: verificationRun, candidateSha, mainSha, root });
+      verifiedEvidence = {
+        verified: checked.ok,
+        status: checked.ok ? "success" : "failure",
+        approved: checked.evidence?.approved === true,
+        candidateSha: checked.ok ? candidateSha : checked.evidence?.candidateSha,
+        mainSha: checked.ok ? mainSha : checked.evidence?.mainSha,
+        testedCandidateSha: checked.evidence?.candidateSha,
+        verifiedBaseSha: checked.evidence?.baseSha,
+        treeSha: checked.evidence?.treeSha,
+        runUrl: checked.evidence?.runUrl,
+        verifiedRunUrl: checked.runUrl,
+        coversRequiredScope: checked.ok,
+        errors: checked.errors,
+        workflowId: checked.workflowId,
+        workflowSha: checked.workflowSha,
+        artifactExpiresAt: checked.artifactExpiresAt,
+      };
+      evidence = { ...evidence, ciEvidence: verifiedEvidence };
+    } catch (error) {
+      verifiedEvidence = { verified: false, status: "failure", approved: false, candidateSha, mainSha, errors: [error.message] };
+      evidence = { ...evidence, ciEvidence: verifiedEvidence };
+    }
+  } else evidence = { ...evidence, ciEvidence: { verified: false } };
   if (candidateSha && deployedSha) {
     ancestor = run("git", ["merge-base", "--is-ancestor", deployedSha, candidateSha]).status === 0;
     const trackingMain = run("git", ["rev-parse", "--verify", "origin/main^{commit}"]);

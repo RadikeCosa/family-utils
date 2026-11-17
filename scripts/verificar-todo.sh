@@ -15,11 +15,11 @@ for arg in "$@"; do
   esac
 done
 
-if [[ -z "$DATABASE_URL_VALUE" ]]; then
-  echo "ERROR: FAMILY_UTILS_TEST_DATABASE_URL no está definida; no se ejecutó nada." >&2
-  exit 2
-fi
-if ! FAMILY_UTILS_VALIDATION_URL="$DATABASE_URL_VALUE" node <<'NODE'
+cd "$ROOT_DIR"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+if [[ -n "$DATABASE_URL_VALUE" ]]; then
+  if ! FAMILY_UTILS_VALIDATION_URL="$DATABASE_URL_VALUE" node <<'NODE'
 const raw = process.env.FAMILY_UTILS_VALIDATION_URL;
 let url;
 try { url = new URL(raw); decodeURIComponent(url.pathname); }
@@ -31,8 +31,32 @@ if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.search || url.ha
   process.exit(2);
 }
 NODE
-then exit 2; fi
+  then exit 2; fi
+fi
+SCOPE_ARGS=(--local "--main-ref" "$MAIN_REF" --policy-ref "$MAIN_REF" --output "$TMP_DIR/selection.json")
+if (( FULL )); then SCOPE_ARGS+=(--full); fi
+echo "==> Seleccionar alcance"
+if ! node scripts/verification-impact.mjs "${SCOPE_ARGS[@]}" >"$TMP_DIR/selection.log"; then
+  cat "$TMP_DIR/selection.log"
+  echo "ERROR: selector, catálogo o política inválidos; no se preparó infraestructura." >&2
+  exit 1
+fi
+cat "$TMP_DIR/selection.log"
+MODE="$(node -e 'const s=require(process.argv[1]);process.stdout.write(s.mode)' "$TMP_DIR/selection.json")"
+if node -e 'const s=require(process.argv[1]);process.exit(s.files.some((file) => /\.md$/i.test(file)) ? 0 : 1)' "$TMP_DIR/selection.json"; then
+  echo "==> Verificar documentación cambiada"
+  git diff --check "$(node -e 'const s=require(process.argv[1]);process.stdout.write(s.base)' "$TMP_DIR/selection.json")" --
+  node scripts/check-documentation.mjs "$TMP_DIR/selection.json"
+fi
+if [[ "$MODE" == documentation ]]; then
+  echo "Verificación documental terminada. No se preparó PostgreSQL ni se ejecutaron suites de aplicación."
+  exit 0
+fi
 
+if [[ -z "$DATABASE_URL_VALUE" ]]; then
+  echo "ERROR: FAMILY_UTILS_TEST_DATABASE_URL no está definida; no se ejecutó nada." >&2
+  exit 2
+fi
 export DATABASE_URL="$DATABASE_URL_VALUE"
 export DATABASE_URL_UNPOOLED="$DATABASE_URL_VALUE"
 export BETTER_AUTH_SECRET="verification-local-only-secret-at-least-32-characters"
@@ -40,7 +64,6 @@ export CODE_PEPPER="verification-local-only-pepper-at-least-32-characters"
 export BETTER_AUTH_URL="http://localhost:3000"
 export GOOGLE_CLIENT_ID=""
 export GOOGLE_CLIENT_SECRET=""
-cd "$ROOT_DIR"
 
 SERVER_MAJOR="$(node --input-type=module <<'NODE'
 import pg from 'pg';
@@ -50,29 +73,6 @@ finally { await pool.end(); }
 NODE
 )" || { echo "ERROR: PostgreSQL 18 local no está disponible; no se ejecutaron suites." >&2; exit 2; }
 if [[ "$SERVER_MAJOR" != 18 ]]; then echo "ERROR: se requiere PostgreSQL 18 (detectado $SERVER_MAJOR)." >&2; exit 2; fi
-
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
-SCOPE_ARGS=(--local "--main-ref" "$MAIN_REF" --output "$TMP_DIR/selection.json")
-if (( FULL )); then SCOPE_ARGS+=(--full); fi
-echo "==> Seleccionar alcance"
-CATALOG_INVALID=0
-if node scripts/verification-impact.mjs "${SCOPE_ARGS[@]}" >"$TMP_DIR/selection.log"; then
-  :
-else
-  SELECTOR_STATUS=$?
-  if [[ -s "$TMP_DIR/selection.json" ]]; then CATALOG_INVALID=1; else cat "$TMP_DIR/selection.log"; exit "$SELECTOR_STATUS"; fi
-fi
-cat "$TMP_DIR/selection.log"
-MODE="$(node -e 'const s=require(process.argv[1]);process.stdout.write(s.mode)' "$TMP_DIR/selection.json")"
-if (( CATALOG_INVALID )) && [[ "$MODE" != full ]]; then echo "ERROR: el catálogo inválido no forzó ejecución completa." >&2; exit 1; fi
-if [[ "$MODE" == documentation ]]; then
-  echo "==> Revisar whitespace y conflictos en documentación"
-  git diff --check "$(node -e 'const s=require(process.argv[1]);process.stdout.write(s.base)' "$TMP_DIR/selection.json")" --
-  node scripts/check-documentation.mjs "$TMP_DIR/selection.json"
-  echo "Verificación documental terminada. No se compilaron ni ejecutaron suites de aplicación."
-  exit 0
-fi
 
 run_check() {
   echo "==> $1"
@@ -92,4 +92,3 @@ if [[ "$MODE" == full ]]; then
   run_check "Permisos SQL public" psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -f sources/champions/permisos-check.sql
 fi
 run_check "Suites del alcance seleccionado" node scripts/run-verification-suites.mjs --selection "$TMP_DIR/selection.json"
-if (( CATALOG_INVALID )); then echo "ERROR: suite completa terminada, pero el catálogo requiere corrección." >&2; exit 1; fi
