@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SportsEvent, SportsPageData } from "@/lib/sports/types";
 import { formatSportsDate, formatSportsTime, sportsNowDay } from "@/lib/sports/rules";
+import type { UfcCardChanges } from "@/lib/sports/import-rules";
+import UfcImportPreview from "./UfcImportPreview";
 import Comments from "./Comments";
 import styles from "./sports.module.css";
 
@@ -24,7 +26,7 @@ export default function SportsApp({ initial }: { initial: SportsPageData }) {
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
   const [importMessage, setImportMessage] = useState("");
-  const [importPreview, setImportPreview] = useState<{ summary: { riverMatches: number; ufcCards: number; ufcFights: number; through: { river: string; ufc: string } }; warnings: string[] } | null>(null);
+  const [importPreview, setImportPreview] = useState<{ summary: { riverMatches: number; ufcCards: number; ufcFights: number; through?: { river: string; ufc: string } }; card?: UfcCardChanges; warnings: string[] } | null>(null);
   const admin = initial.role === "administrator";
   const match = initial.football[0] ?? null;
 
@@ -51,7 +53,7 @@ export default function SportsApp({ initial }: { initial: SportsPageData }) {
       const response = await fetch("/api/sports/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, bundle }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "No se pudo validar el archivo.");
-      if (mode === "preview") setImportPreview({ summary: data.summary, warnings: data.warnings ?? [] });
+      if (mode === "preview") setImportPreview({ summary: data.summary, card: data.card, warnings: data.warnings ?? [] });
       else { setImportPreview(null); setBundleText(""); setImportMessage(`Importación lista: ${countLabel(data.summary.riverMatches, "partido", "partidos")}, ${countLabel(data.summary.ufcCards, "cartelera", "carteleras")} y ${countLabel(data.summary.ufcFights, "pelea", "peleas")}.`); router.refresh(); }
     } catch (reason) {
       setImportPreview(null);
@@ -62,7 +64,7 @@ export default function SportsApp({ initial }: { initial: SportsPageData }) {
   return <main data-app-frame className={styles.page}>
     <header data-legacy-chrome className={styles.header}><Link href="/" className={styles.back}>‹ Inicio</Link><span className={styles.brand}>Deportes</span><span className={styles.role}>{admin ? "Administración" : "Familia"}</span></header>
     <section className={styles.intro}><p className={styles.eyebrow}>EN EQUIPO</p><h1>Deportes</h1><p>River, UFC y las conversaciones de casa.</p></section>
-    {admin && <details className={styles.importPanel}><summary>Importar datos curados desde el chat</summary><p>Pegá el JSON revisado que te entregue el chat. Primero se valida sin escribir datos; la importación conserva comentarios, formaciones y eventos ocultos.</p><label>Archivo JSON<input type="file" accept="application/json,.json" onChange={async event => { const file = event.currentTarget.files?.[0]; if (file) { setBundleText(await file.text()); setImportPreview(null); setImportError(""); } }} /></label><label>Contenido JSON<textarea rows={8} value={bundleText} onChange={event => { setBundleText(event.target.value); setImportPreview(null); setImportError(""); }} placeholder="Pegá acá el JSON curado" /></label><div className={styles.actions}><button type="button" className={styles.secondary} disabled={importBusy || !bundleText.trim()} onClick={() => void importBundle("preview")}>{importBusy ? "Validando…" : "Validar JSON"}</button>{importPreview && <button type="button" className={styles.primary} disabled={importBusy} onClick={() => void importBundle("import")}>{importBusy ? "Importando…" : "Confirmar importación"}</button>}</div>{importPreview && <div className={styles.importPreview} role="status"><strong>{countLabel(importPreview.summary.riverMatches, "partido", "partidos")} · {countLabel(importPreview.summary.ufcCards, "cartelera", "carteleras")} · {countLabel(importPreview.summary.ufcFights, "pelea", "peleas")}</strong><span>Horizonte: River hasta {formatSportsDate(importPreview.summary.through.river)}; UFC hasta {formatSportsDate(importPreview.summary.through.ufc)}.</span>{importPreview.warnings.map(warning => <small key={warning}>{warning}</small>)}</div>}{importMessage && <p role="status">{importMessage}</p>}{importError && <p role="alert" className={styles.error}>{importError}</p>}</details>}
+    {admin && <details className={styles.importPanel}><summary>Importar datos curados desde el chat</summary><p>Pegá el JSON revisado que te entregue el chat. Primero se valida sin escribir datos; la importación conserva comentarios, formaciones y eventos ocultos.</p><p><a href="/api/sports/templates?kind=ufc-card" download="deportes-ufc-card.json">Descargar plantilla de una cartelera UFC</a></p><label>Archivo JSON<input type="file" accept="application/json,.json" onChange={async event => { const file = event.currentTarget.files?.[0]; if (file) { setBundleText(await file.text()); setImportPreview(null); setImportError(""); } }} /></label><label>Contenido JSON<textarea rows={8} value={bundleText} onChange={event => { setBundleText(event.target.value); setImportPreview(null); setImportError(""); }} placeholder="Pegá acá el JSON curado" /></label><div className={styles.actions}><button type="button" className={styles.secondary} disabled={importBusy || !bundleText.trim()} onClick={() => void importBundle("preview")}>{importBusy ? "Validando…" : "Validar JSON"}</button>{importPreview && <button type="button" className={styles.primary} disabled={importBusy} onClick={() => void importBundle("import")}>{importBusy ? "Importando…" : "Confirmar importación"}</button>}</div>{importPreview && <div className={styles.importPreview} role="status"><strong>{countLabel(importPreview.summary.riverMatches, "partido", "partidos")} · {countLabel(importPreview.summary.ufcCards, "cartelera", "carteleras")} · {countLabel(importPreview.summary.ufcFights, "pelea", "peleas")}</strong>{importPreview.card && <UfcImportPreview card={importPreview.card} />}{importPreview.summary.through && <span>Horizonte: River hasta {formatSportsDate(importPreview.summary.through.river)}; UFC hasta {formatSportsDate(importPreview.summary.through.ufc)}.</span>}{importPreview.warnings.map(warning => <small key={warning}>{warning}</small>)}</div>}{importMessage && <p role="status">{importMessage}</p>}{importError && <p role="alert" className={styles.error}>{importError}</p>}</details>}
     <nav data-legacy-sections className={styles.tabs} aria-label="Deportes">
       <button type="button" aria-pressed={tab === "football"} className={tab === "football" ? styles.activeTab : ""} onClick={() => setTab("football")}>River</button>
       <button type="button" aria-pressed={tab === "ufc"} className={tab === "ufc" ? styles.activeTab : ""} onClick={() => setTab("ufc")}>UFC</button>

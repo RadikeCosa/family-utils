@@ -5,7 +5,7 @@ import { getPool } from "@/db";
 import { getMemberContext } from "@/lib/auth/context";
 import { sportsNowDay, sportsWeek } from "./rules";
 import { normalizeSportsAlias } from "./sync-rules";
-import { parseSportsCuratedBundle, sportsBundleSummary, type CuratedEvent, type SportsCuratedBundle } from "./import-rules";
+import { parseSportsCuratedBundle, parseSingleUfcCardImport, sportsBundleSummary, type SingleUfcCardImport, type CuratedUfcEvent, type UfcCardChanges, type CuratedEvent, type SportsCuratedBundle } from "./import-rules";
 
 type Actor = { familyId: string; memberId: string; authUser: { id: string } };
 type EventRow = Record<string, unknown> & {
@@ -70,37 +70,21 @@ function applyOverrides<T extends Record<string, unknown>>(values: T, overrides:
   return result;
 }
 
-async function findOrInsertEvent(
-  tx: PoolClient,
-  familyId: string,
-  memberId: string,
-  item: CuratedEvent,
-  bundle: SportsCuratedBundle,
-) {
+async function resolveCuratedEvent(tx: PoolClient, familyId: string, item: CuratedEvent, ufcIntegrityEnabled: boolean, lock: boolean) {
   const day = item.payload.eventDate!;
-  await tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-    `sports-curated:${familyId}:${item.kind}`,
-  ]);
-  const ufcIntegrityEnabled =
-    sportsFeatures().ufc ||
-    (
-      await tx.query(
-        "SELECT to_regclass('public.sports_predictions') IS NOT NULL AS enabled",
-      )
-    ).rows[0].enabled === true;
   if (item.kind === "football_match") {
     const linked = await tx.query("SELECT e.football_category FROM sports_football_event_sources s JOIN sports_events e ON e.id=s.event_id AND e.family_id=s.family_id WHERE s.family_id=$1 AND s.provider=$2 AND s.external_id=$3",[familyId,item.sourceProvider,item.externalReference]);
     if (linked.rows.some(row=>row.football_category === "champions")) fail(409,"La referencia pertenece a Champions; no se modificó River.");
   }
   const { rows: exactRows } = await tx.query(
-    "SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND source_provider=$3 AND external_reference=$4 FOR UPDATE",
+    `SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND source_provider=$3 AND external_reference=$4${lock ? " FOR UPDATE" : ""}`,
     [familyId, item.kind, item.sourceProvider, item.externalReference],
   );
   let current = exactRows[0] as EventRow | undefined;
   if (current?.football_category === "champions") fail(409, "La referencia pertenece a Champions; no se modificó River.");
   if (!current) {
     const { rows: nearby } = await tx.query(
-      "SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND (kind='ufc_card' OR football_category='river') AND source_provider=$3 AND event_date BETWEEN ($4::date - 7) AND ($4::date + 7) FOR UPDATE",
+      `SELECT *,event_date::text AS event_date FROM sports_events WHERE family_id=$1 AND kind=$2 AND (kind='ufc_card' OR football_category='river') AND source_provider=$3 AND event_date BETWEEN ($4::date - 7) AND ($4::date + 7)${lock ? " FOR UPDATE" : ""}`,
       [familyId, item.kind, item.sourceProvider, day],
     );
     let equivalent: EventRow[] = [];
@@ -143,6 +127,28 @@ async function findOrInsertEvent(
       );
     current = equivalent[0];
   }
+
+  return current;
+}
+
+async function findOrInsertEvent(
+  tx: PoolClient,
+  familyId: string,
+  memberId: string,
+  item: CuratedEvent,
+  bundle: Pick<SportsCuratedBundle, "checkedAt">,
+) {
+  await tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+    `sports-curated:${familyId}:${item.kind}`,
+  ]);
+  const ufcIntegrityEnabled =
+    sportsFeatures().ufc ||
+    (
+      await tx.query(
+        "SELECT to_regclass('public.sports_predictions') IS NOT NULL AS enabled",
+      )
+    ).rows[0].enabled === true;
+  const current = await resolveCuratedEvent(tx, familyId, item, ufcIntegrityEnabled, true);
 
   if (item.kind === "football_match") {
     const payload = item.payload;
@@ -569,6 +575,59 @@ async function importCategory(
   }
 }
 
+async function singleUfcCardChanges(tx: PoolClient, familyId: string, item: CuratedUfcEvent): Promise<UfcCardChanges> {
+  const current = await resolveCuratedEvent(tx, familyId, item, true, false);
+  const changes: UfcCardChanges = { title: item.payload.title, eventDate: item.payload.eventDate, action: current ? "updated" : "inserted", retained: [], added: [], removed: [], warnings: [] };
+  const { rows: old } = current ? await tx.query<FightRow>("SELECT id,first_fighter,second_fighter,bout_block,is_main_event FROM sports_fights WHERE family_id=$1 AND event_id=$2 AND removed_at IS NULL ORDER BY bout_order,id", [familyId, current.id]) : { rows: [] };
+  const key = (first: string, second: string) => mainPair([{ firstFighter: first, secondFighter: second, isMainEvent: true }]);
+  const incoming = new Map(item.payload.fights.map(f => [key(f.firstFighter, f.secondFighter), `${f.firstFighter} vs ${f.secondFighter}`]));
+  const oldKeys = new Set(old.map(f => key(f.first_fighter, f.second_fighter)));
+  if (current) {
+    const close = current.ufc_prediction_closed_at ?? current.ufc_prediction_closes_at;
+    const closed = !!close && new Date(close as string | Date).getTime() <= Date.now();
+    if (closed && current.event_date !== item.payload.eventDate) fail(409, "La cartelera ya cerró: una postergación real requiere un evento nuevo con otra referencia. Volvé a validar el archivo.");
+    const { rows: confirmed } = await tx.query("SELECT f.first_fighter,f.second_fighter FROM sports_fight_results r JOIN sports_fights f ON f.id=r.fight_id WHERE r.family_id=$1 AND r.event_id=$2", [familyId, current.id]);
+    if (confirmed.some(f => !incoming.has(key(f.first_fighter, f.second_fighter)))) fail(409, "La agenda contradice una pelea con resultado confirmado. Volvé a validar el archivo.");
+    if (closed) changes.warnings.push("Los pronósticos ya cerraron. Las peleas nuevas no serán elegibles; se conservan las elecciones y los roles de puntuación fijados.");
+    if (overrideKeys(current).length) changes.warnings.push("Se conservan los campos con correcciones manuales.");
+    if (current.manual_fights || current.card_status === "finalized") {
+      changes.action = "protected";
+      changes.retained = old.map(f => `${f.first_fighter} vs ${f.second_fighter}`);
+      changes.warnings.push(current.card_status === "finalized" ? "La cartelera está finalizada: se conserva su contenido." : "Las peleas tienen correcciones protegidas: se conserva la composición guardada.");
+      return changes;
+    }
+  }
+  for (const [pair, label] of incoming) (oldKeys.has(pair) ? changes.retained : changes.added).push(label);
+  changes.removed = old.filter(f => !incoming.has(key(f.first_fighter, f.second_fighter))).map(f => `${f.first_fighter} vs ${f.second_fighter}`);
+  if (changes.removed.length) changes.warnings.push("Las peleas retiradas conservan sus pronósticos e historial y suman cero puntos. Las elecciones no se trasladan a reemplazos.");
+  return changes;
+}
+
+async function importSingleUfcCard(actor: Actor, bundle: SingleUfcCardImport, preview: boolean) {
+  const tx = await getPool().connect();
+  try {
+    await tx.query(preview ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : "BEGIN");
+    const member = await tx.query("SELECT id FROM members WHERE id=$1 AND family_id=$2 AND role='administrator' AND archived_at IS NULL" + (preview ? "" : " FOR UPDATE"), [actor.memberId, actor.familyId]);
+    if (!member.rows.length) fail(403, "Tu acceso de administración cambió. Volvé a ingresar.");
+    if (!preview) await tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`sports-curated:${actor.familyId}:ufc_card`]);
+    const changes = await singleUfcCardChanges(tx, actor.familyId, bundle.event);
+    const summary = { importMode: bundle.importMode, riverMatches: 0, ufcCards: 1, ufcFights: bundle.event.payload.fights.length };
+    const warnings = [...changes.warnings];
+    if ((bundle.event.source.validation as Record<string, unknown>)?.independentCrossCheck !== "passed") warnings.push(`${bundle.event.payload.title}: la verificación independiente está pendiente.`);
+    if (preview) {
+      await tx.query("ROLLBACK");
+      return Response.json({ valid: true, summary, card: changes, warnings }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const result = await findOrInsertEvent(tx, actor.familyId, actor.memberId, bundle.event, bundle);
+    await tx.query(`INSERT INTO audit_events(family_id,actor_member_id,entity_type,entity_id,action,"after") VALUES($1,$2,'sports_import',$3,'curated_card_imported',$4::jsonb)`, [actor.familyId, actor.memberId, result.id, JSON.stringify({ checkedAt: bundle.checkedAt, source: bundle.event.source, changes })]);
+    await tx.query("COMMIT");
+    return Response.json({ imported: true, summary, river: [], ufc: [result.action], card: changes, warnings }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    await tx.query("ROLLBACK");
+    throw error;
+  } finally { tx.release(); }
+}
+
 export async function importSportsBundle(request: Request) {
   if (process.env.SPORTS_ENABLED !== "true") return Response.json({ error: "Deportes no está habilitado." }, { status: 404 });
   try {
@@ -580,6 +639,12 @@ export async function importSportsBundle(request: Request) {
     try { body = JSON.parse(rawBody); } catch { body = null; }
     if (!record(body) || (body.mode !== "preview" && body.mode !== "import") || !record(body.bundle)) fail(400, "Enviá un archivo JSON curado válido.");
     const requestBody = body as Record<string, unknown>;
+    if (record(requestBody.bundle) && requestBody.bundle.importMode === "single_ufc_card") {
+      const single = parseSingleUfcCardImport(requestBody.bundle);
+      if (!single.ok) throw new ImportError(400, single.error);
+      if (requestBody.mode === "import" && single.bundle.status === "example") fail(400, "El ejemplo contiene datos ficticios. Completá y verificá una carga curada antes de importar.");
+      return await importSingleUfcCard(actor, single.bundle, requestBody.mode === "preview");
+    }
     const parsed = parseSportsCuratedBundle(requestBody.bundle);
     if (parsed.ok === false) throw new ImportError(400, parsed.error);
     if (requestBody.mode === "import" && parsed.bundle.status === "example") fail(400, "El ejemplo contiene datos ficticios. Completá y verificá una carga curada antes de importar.");

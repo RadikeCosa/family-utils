@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { parseSportsCuratedBundle, sportsBundleSummary } from "./import-rules.ts";
+import { parseSportsCuratedBundle, parseSingleUfcCardImport, sportsBundleSummary } from "./import-rules.ts";
 
 const snapshot = JSON.parse(readFileSync(new URL("../../../sources/deportes-carga-2026-10-15.json", import.meta.url), "utf8")) as Record<string, unknown>;
 const checkedAt = new Date(String(snapshot.checkedAt));
@@ -39,7 +39,7 @@ test("rejects duplicate provider references in a bundle", () => {
   assert.equal(result.ok, false);
 });
 
-import { agendaExample } from "./templates.ts";
+import { agendaExample, singleUfcCardExample } from "./templates.ts";
 test("agenda example validates and location fields distinguish absent from null", () => {
   const now = new Date();
   const example = agendaExample(now);
@@ -55,4 +55,31 @@ test("agenda example validates and location fields distinguish absent from null"
   if(next.ok){const c=next.bundle.events[1];if(c.kind==="ufc_card"){assert.equal(Object.hasOwn(c.location,"city"),false);assert.equal(c.location.venue,null);}}
   raw.eventType = "unknown";
   assert.equal(parseSportsCuratedBundle(changed,now).ok,false);
+});
+
+
+test("single UFC import requires only a complete card and rejects ambiguous or invalid input", () => {
+  const now = new Date();
+  const single = singleUfcCardExample(now);
+  const parsed = parseSingleUfcCardImport(single, now);
+  assert.equal(parsed.ok, true);
+  assert.equal(parseSportsCuratedBundle(single, now).ok, false);
+  type MutableCard = ReturnType<typeof singleUfcCardExample> & { events?: unknown[] };
+  const mutations = [
+    (v) => { v.event.source.validation!.officialFightCount++; },
+    (v) => { v.event.fights!.push({ ...v.event.fights![0] }); v.event.source.validation!.officialFightCount++; },
+    (v) => { v.event.mainCardTime = "25:99"; },
+    (v) => { v.event.source.primary = "https://untrusted.example/card"; },
+    (v) => { v.checkedAt = new Date(now.getTime() - 31 * 86400000).toISOString(); },
+    (v) => { v.event.source.checkedAt = new Date(now.getTime() - 31 * 86400000).toISOString(); },
+    (v) => { v.event.fights![0].isMainEvent = false; },
+    (v) => { Object.assign(v.event, { kind: "football_match" }); },
+    (v) => { v.events = [v.event]; },
+    (v) => { Object.assign(v, { status: undefined }); },
+  ] as Array<(v: MutableCard) => void>;
+  for (const mutate of mutations) {
+    const changed = structuredClone(single);
+    mutate(changed);
+    assert.equal(parseSingleUfcCardImport(changed, now).ok, false);
+  }
 });
