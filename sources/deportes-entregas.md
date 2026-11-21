@@ -106,3 +106,12 @@ Los despliegues se prepararon con configuración de producción sin mover el dom
 Ante una incidencia, apagar primero la bandera de la funcionalidad afectada y preparar un nuevo despliegue de **este mismo código** con la configuración corregida. Para volver a la pantalla anterior, apagar A (sus dependencias B y C quedan bloqueadas); mantener la sincronización automática apagada. Los cambios de configuración requieren un nuevo despliegue para tener efecto. Verificarlo antes de promoverlo.
 
 No revertir las migraciones ni eliminar tablas, elecciones o resultados como parte de una reversión visual. Los controles de identidad y resultados deben conservarse aunque las banderas estén apagadas. El respaldo se reserva para recuperación de datos, con revisión del alcance antes de restaurarlo sobre producción; la restauración ya ensayada fue únicamente en una base descartable.
+
+## Importación individual UFC
+
+`POST /api/sports/import` acepta también `importMode: "single_ufc_card"` con un
+único `event`, sin River ni horizonte. Mantiene administración y aislamiento
+familiar; la vista previa es de solo lectura y la confirmación es transaccional.
+La importación conserva pronósticos por identidad de pelea y retira las parejas
+omitidas sin trasladar elecciones a reemplazos. No cambia reglas de cierre ni
+puntajes. Contrato y plantilla en la [guía de importación](deportes-ux-ui.md#importación-de-una-cartelera-ufc).

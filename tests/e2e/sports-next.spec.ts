@@ -1044,3 +1044,31 @@ test("UFC: card and dashboard agree when one main-event hit beats two other hits
   await page.getByRole('button',{name:'Histórico',exact:true}).click();
   await expect(table).toContainText('Suma de puntos según la regla de cada velada');
 });
+
+test("one UFC card: file, text, preview and confirmation", async ({ page }) => {
+  const template = await (await api.get("/api/sports/templates?kind=ufc-card")).json();
+  const single = { ...template, status: "curated" };
+  await page.goto("/deportes?sport=ufc");
+  await page.getByText("Administrar", { exact: true }).click();
+  await page.getByText("Agenda · cargas y resultados", { exact: true }).click();
+  const importer = page.locator("section").filter({ has: page.getByRole("heading", { name: "Actualizar agenda", exact: true }) }).last();
+  await expect(importer.getByRole("button", { name: "Descargar plantilla de una cartelera UFC" })).toBeVisible();
+  await importer.getByLabel("Archivo JSON").setInputFiles({ name: "ufc.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(single)) });
+  await importer.getByRole("button", { name: "Validar y revisar" }).click();
+  await expect(importer.getByRole("heading", { name: single.event.title })).toBeVisible();
+  await expect(importer.getByText("Se agregan: 2")).toBeVisible();
+  expect((await pool.query("SELECT count(*)::int n FROM sports_events WHERE family_id=$1 AND kind='ufc_card'", [familyId])).rows[0].n).toBe(0);
+  await importer.getByLabel("Contenido JSON").fill("{}");
+  await expect(importer.getByRole("button", { name: "Confirmar importación" })).toHaveCount(0);
+  await importer.getByRole("button", { name: "Validar y revisar" }).click();
+  await expect(importer.getByRole("alert")).toBeVisible();
+  await importer.getByLabel("Contenido JSON").fill(JSON.stringify(single));
+  await importer.getByRole("button", { name: "Validar y revisar" }).click();
+  const confirm = importer.getByRole("button", { name: "Confirmar importación" });
+  await expect(confirm).toBeVisible();
+  await confirm.focus();
+  await page.keyboard.press("Enter");
+  await expect(importer.getByText("Importación completada.", { exact: true })).toBeVisible();
+  expect((await pool.query("SELECT count(*)::int n FROM sports_events WHERE family_id=$1 AND kind='ufc_card'", [familyId])).rows[0].n).toBe(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

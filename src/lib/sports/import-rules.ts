@@ -54,9 +54,59 @@ function pairKey(first: string, second: string) {
   return [first, second].map(name => name.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]/g, "")).sort().join("|");
 }
 
+export type SingleUfcCardImport = {
+  schemaVersion: 1;
+  importMode: "single_ufc_card";
+  status: string;
+  checkedAt: string;
+  timezone: "America/Argentina/Buenos_Aires";
+  event: CuratedUfcEvent;
+};
+
+function parseCuratedUfcEvent(raw: Record<string, unknown>, now: Date): CuratedUfcEvent | null {
+  const externalReference = typeof raw.externalReference === "string" ? raw.externalReference.trim() : "";
+  if (raw.kind !== "ufc_card" || !record(raw.source) || !safeSourceUrl(raw.source.primary) || !validInstant(raw.source.checkedAt, now)) return null;
+  if (raw.sourceProvider !== "ufc_official" || !/^[a-z0-9-]{1,160}$/.test(externalReference)) return null;
+  const payload = ufcCardInput(raw);
+  if (!payload || !record(raw.source.validation) || raw.source.validation.officialCardComplete !== true || raw.source.validation.officialFightCount !== payload.fights.length) return null;
+  const pairs = new Set<string>();
+  for (const fight of payload.fights) {
+    const key = pairKey(fight.firstFighter, fight.secondFighter);
+    if (pairs.has(key)) return null;
+    pairs.add(key);
+  }
+  const location: Record<string, string | null> = {};
+  for (const field of ["venue", "city", "country", "eventType"]) {
+    if (!Object.hasOwn(raw, field)) continue;
+    const value = raw[field];
+    if (value !== null && (typeof value !== "string" || !value.trim() || value.length > (field === "venue" ? 200 : 160))) return null;
+    if (field === "eventType" && value !== null && !["numerado", "fight_night", "otro"].includes(String(value))) return null;
+    location[field] = typeof value === "string" ? value.trim() : null;
+  }
+  return { kind: "ufc_card", sourceProvider: "ufc_official", externalReference, source: raw.source as CuratedSource, payload, location };
+}
+
+export function parseSingleUfcCardImport(value: unknown, now = new Date()): { ok: true; bundle: SingleUfcCardImport } | { ok: false; error: string } {
+  const invalid = () => ({ ok: false as const, error: "El archivo no tiene un formato válido para importar una cartelera UFC." });
+  if (!record(value) || value.schemaVersion !== 1 || value.importMode !== "single_ufc_card" || value.timezone !== "America/Argentina/Buenos_Aires" || !validInstant(value.checkedAt, now) || !["curated", "example"].includes(String(value.status)) || !record(value.event) || Object.hasOwn(value, "events") || Object.hasOwn(value, "curation")) return invalid();
+  const event = parseCuratedUfcEvent(value.event, now);
+  if (!event) return invalid();
+  return { ok: true, bundle: { schemaVersion: 1, importMode: "single_ufc_card", status: String(value.status), checkedAt: String(value.checkedAt), timezone: "America/Argentina/Buenos_Aires", event } };
+}
+
+export type UfcCardChanges = {
+  title: string;
+  eventDate: string;
+  action: "inserted" | "updated" | "protected";
+  retained: string[];
+  added: string[];
+  removed: string[];
+  warnings: string[];
+};
+
 export function parseSportsCuratedBundle(value: unknown, now = new Date()): { ok: true; bundle: SportsCuratedBundle } | { ok: false; error: string } {
   const invalid = (): { ok: false; error: string } => ({ ok: false, error: "El archivo no tiene un formato válido para importar." });
-  if (!record(value) || value.schemaVersion !== 1 || !Array.isArray(value.events) || value.events.length < 2 || value.events.length > 20) return invalid();
+  if (!record(value) || Object.hasOwn(value, "importMode") || value.schemaVersion !== 1 || !Array.isArray(value.events) || value.events.length < 2 || value.events.length > 20) return invalid();
   if (typeof value.checkedAt !== "string" || !validInstant(value.checkedAt, now) || value.timezone !== "America/Argentina/Buenos_Aires") return invalid();
   if (!record(value.curation) || !record(value.curation.completeHorizon)) return invalid();
   const today = sportsNowDay(now);
@@ -83,25 +133,10 @@ export function parseSportsCuratedBundle(value: unknown, now = new Date()): { ok
       riverCount++;
       events.push({ kind: "football_match", sourceProvider: "espn", externalReference, source: raw.source as CuratedSource, payload });
     } else {
-      if (raw.sourceProvider !== "ufc_official" || !/^[a-z0-9-]{1,160}$/.test(externalReference)) return invalid();
-      const payload = ufcCardInput(raw);
-      if (!payload || !record(raw.source.validation) || raw.source.validation.officialCardComplete !== true || raw.source.validation.officialFightCount !== payload.fights.length) return invalid();
-      const pairs = new Set<string>();
-      for (const fight of payload.fights) {
-        const key = pairKey(fight.firstFighter, fight.secondFighter);
-        if (pairs.has(key)) return invalid();
-        pairs.add(key);
-      }
-      const location: Record<string, string | null> = {};
-      for (const field of ["venue", "city", "country", "eventType"]) {
-        if (!Object.hasOwn(raw, field)) continue;
-        const value = raw[field];
-        if (value !== null && (typeof value !== "string" || !value.trim() || value.length > (field === "venue" ? 200 : 160))) return invalid();
-        if (field === "eventType" && value !== null && !["numerado", "fight_night", "otro"].includes(String(value))) return invalid();
-        location[field] = typeof value === "string" ? value.trim() : null;
-      }
+      const event = parseCuratedUfcEvent(raw, now);
+      if (!event) return invalid();
       ufcCount++;
-      events.push({ kind: "ufc_card", sourceProvider: "ufc_official", externalReference, source: raw.source as CuratedSource, payload, location });
+      events.push(event);
     }
   }
   if (riverCount === 0 || ufcCount === 0) return invalid();

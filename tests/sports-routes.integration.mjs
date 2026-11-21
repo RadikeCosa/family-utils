@@ -127,6 +127,96 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
       assert.deepEqual((await pool.query("SELECT to_jsonb(e) AS record FROM sports_events e WHERE id=$1", [champions.event])).rows[0].record, championBefore);
     });
 
+    await t.test("single UFC import previews safely and preserves predictions through card changes", async () => {
+      const isolated = await family(), importer = await identity(isolated, "administrator"), participant = await identity(isolated);
+      const template = await ok(importer, "/api/sports/templates?kind=ufc-card");
+      assert.equal(template.importMode, "single_ufc_card");
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "import", bundle: template })).status, 400);
+      const bundle = structuredClone(template);
+      bundle.status = "curated";
+      bundle.event.externalReference = "ufc-individual";
+      bundle.event.fights = [
+        { firstFighter: "First Alpha", secondFighter: "First Beta", boutBlock: "main", isMainEvent: true },
+        { firstFighter: "Second Alpha", secondFighter: "Second Beta", boutBlock: "main", isMainEvent: false },
+        { firstFighter: "Third Alpha", secondFighter: "Third Beta", boutBlock: "preliminaries", isMainEvent: false },
+      ];
+      bundle.event.source.validation.officialFightCount = 3;
+      assert.equal((await request(participant, "/api/sports/import", "POST", { mode: "preview", bundle })).status, 403);
+      let preview = await ok(importer, "/api/sports/import", "POST", { mode: "preview", bundle });
+      assert.equal(preview.card.added.length, 3);
+      assert.equal((await pool.query("SELECT count(*)::int n FROM sports_events WHERE family_id=$1", [isolated])).rows[0].n, 0);
+      const imported = await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      assert.deepEqual(imported.river, []);
+      const event = (await pool.query("SELECT * FROM sports_events WHERE family_id=$1 AND external_reference=$2", [isolated, bundle.event.externalReference])).rows[0];
+      const fights = (await pool.query("SELECT * FROM sports_fights WHERE event_id=$1 ORDER BY bout_order", [event.id])).rows;
+      for (const fight of fights) await pool.query("INSERT INTO sports_predictions(family_id,event_id,fight_id,member_id,winner_id) VALUES($1,$2,$3,$4,$5)", [isolated, event.id, fight.id, participant.id, fight.first_fighter_id]);
+      const votes = async () => (await pool.query("SELECT to_jsonb(p) record FROM sports_predictions p WHERE event_id=$1 ORDER BY fight_id", [event.id])).rows;
+      const beforeVotes = await votes();
+      const other = structuredClone(bundle);
+      other.event.externalReference = "ufc-unrelated";
+      other.event.fights[0].firstFighter = "Unrelated Alpha";
+      await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle: other });
+      const untouched = async () => (await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id<>$1 ORDER BY id", [event.id])).rows;
+      const otherEvents = await untouched();
+      bundle.event.fights = [
+        { ...bundle.event.fights[0], firstFighter: "First Beta", secondFighter: "First Alpha" },
+        { firstFighter: "Replacement Alpha", secondFighter: "Replacement Beta", boutBlock: "main", isMainEvent: false },
+        { ...bundle.event.fights[2], boutBlock: "main" },
+      ];
+      const beforePreview = (await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id=$1", [event.id])).rows;
+      preview = await ok(importer, "/api/sports/import", "POST", { mode: "preview", bundle });
+      assert.equal(preview.card.retained.length, 2);
+      assert.equal(preview.card.added.length, 1);
+      assert.equal(preview.card.removed.length, 1);
+      assert.ok(!JSON.stringify(preview).includes(participant.id));
+      assert.deepEqual((await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id=$1", [event.id])).rows, beforePreview);
+      await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      const changed = (await pool.query("SELECT * FROM sports_fights WHERE event_id=$1 ORDER BY bout_order,id", [event.id])).rows;
+      assert.equal(changed.length, 4);
+      assert.equal(changed.find(f => f.id === fights[0].id).second_fighter_id, fights[0].first_fighter_id);
+      assert.ok(changed.find(f => f.id === fights[1].id).removed_at);
+      assert.equal(changed.find(f => f.id === fights[2].id).bout_block, "main");
+      assert.deepEqual(await votes(), beforeVotes);
+      assert.deepEqual(await untouched(), otherEvents);
+      await pool.query("UPDATE sports_events SET manual_fights=true WHERE id=$1", [event.id]);
+      const protectedBundle = structuredClone(bundle);
+      protectedBundle.event.fights.pop(); protectedBundle.event.source.validation.officialFightCount--;
+      assert.equal((await ok(importer, "/api/sports/import", "POST", { mode: "preview", bundle: protectedBundle })).card.action, "protected");
+      await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle: protectedBundle });
+      assert.equal((await pool.query("SELECT count(*)::int n FROM sports_fights WHERE event_id=$1 AND removed_at IS NULL", [event.id])).rows[0].n, 3);
+      await pool.query("UPDATE sports_events SET manual_fights=false,main_card_starts_at=clock_timestamp()-interval '1 minute' WHERE id=$1", [event.id]);
+      const closed = (await pool.query("SELECT ufc_prediction_closed_at,ufc_main_fight_id,ufc_co_main_fight_id FROM sports_events WHERE id=$1", [event.id])).rows[0];
+      assert.ok(closed.ufc_prediction_closed_at);
+      bundle.event.fights.push({ firstFighter: "Late Alpha", secondFighter: "Late Beta", boutBlock: "main", isMainEvent: false });
+      bundle.event.source.validation.officialFightCount++;
+      await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      assert.equal((await pool.query("SELECT prode_eligible FROM sports_fights WHERE event_id=$1 AND first_fighter='Late Alpha'", [event.id])).rows[0].prode_eligible, false);
+      assert.deepEqual((await pool.query("SELECT ufc_prediction_closed_at,ufc_main_fight_id,ufc_co_main_fight_id FROM sports_events WHERE id=$1", [event.id])).rows[0], closed);
+      assert.deepEqual(await votes(), beforeVotes);
+      const rescheduled = structuredClone(bundle); rescheduled.event.eventDate = "2099-01-01";
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "preview", bundle: rescheduled })).status, 409);
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "import", bundle: rescheduled })).status, 409);
+      await pool.query("INSERT INTO sports_fight_results(family_id,event_id,fight_id,outcome,winner_id,source,checked_at,updated_by_member_id) VALUES($1,$2,$3,'winner',$4,'fixture',clock_timestamp(),$5)", [isolated, event.id, fights[0].id, fights[0].first_fighter_id, importer.id]);
+      const conflict = structuredClone(bundle); conflict.event.fights.shift(); conflict.event.fights[0].isMainEvent = true; conflict.event.source.validation.officialFightCount--;
+      const beforeConflict = (await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id=$1", [event.id])).rows;
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "preview", bundle: conflict })).status, 409);
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "import", bundle: conflict })).status, 409);
+      assert.deepEqual((await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id=$1", [event.id])).rows, beforeConflict);
+      assert.deepEqual(await votes(), beforeVotes);
+      assert.deepEqual(await untouched(), otherEvents);
+      await pool.query("UPDATE sports_events SET card_status='finalized' WHERE id=$1", [event.id]);
+      const finalized = (await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id=$1", [event.id])).rows;
+      assert.equal((await ok(importer, "/api/sports/import", "POST", { mode: "preview", bundle })).card.action, "protected");
+      await ok(importer, "/api/sports/import", "POST", { mode: "import", bundle });
+      assert.deepEqual((await pool.query("SELECT to_jsonb(e) record FROM sports_events e WHERE id=$1", [event.id])).rows, finalized);
+      const duplicate = (await pool.query("INSERT INTO sports_events(family_id,kind,title,event_date,main_card_starts_at,source_provider,external_reference,created_by_member_id,updated_by_member_id) VALUES($1,'ufc_card','Ambiguous fixture',$2,$3,'ufc_official','ufc-duplicate',$4,$4) RETURNING id", [isolated, other.event.eventDate, event.main_card_starts_at, importer.id])).rows[0];
+      await pool.query("INSERT INTO sports_fights(family_id,event_id,bout_order,first_fighter,second_fighter,bout_block,is_main_event) VALUES($1,$2,1,'Unrelated Alpha','First Beta','main',true)", [isolated, duplicate.id]);
+      other.event.externalReference = "ufc-ambiguous";
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "preview", bundle: other })).status, 409);
+      assert.equal((await request(importer, "/api/sports/import", "POST", { mode: "import", bundle: other })).status, 409);
+    });
+
     await t.test("UFC import respects single closure from 0037", async (t) => {
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
       const date = (offset) => {
@@ -264,8 +354,16 @@ test("sports permissions and family isolation", { skip: !connectionString && "re
   } finally {
     server.kill();
     if (families.length) {
-      await pool.query("DELETE FROM audit_events WHERE family_id=ANY($1::uuid[]) AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week')", [families]);
-      for (const table of [...championsCleanupTables, "sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) {
+      await pool.query("DELETE FROM audit_events WHERE family_id=ANY($1::uuid[]) AND entity_type IN ('sports_event','sports_comment','sports_formation','sports_week','sports_import')", [families]);
+      // Synthetic fixtures only: late predictions are deliberately immutable in production.
+      const cleanup = await pool.connect();
+      try {
+        await cleanup.query("BEGIN");
+        await cleanup.query("SET LOCAL session_replication_role=replica");
+        await cleanup.query("DELETE FROM sports_predictions WHERE family_id=ANY($1::uuid[])", [families]);
+        await cleanup.query("COMMIT");
+      } finally { await cleanup.query("ROLLBACK"); cleanup.release(); }
+      for (const table of [...championsCleanupTables, "sports_fight_results", "sports_block_closures", "sports_formations", "sports_comments", "sports_fights", "sports_weeks", "sports_events"]) {
         await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);
       }
       for (const table of championsIdentityTables) await pool.query(`DELETE FROM ${table} WHERE family_id=ANY($1::uuid[])`, [families]);

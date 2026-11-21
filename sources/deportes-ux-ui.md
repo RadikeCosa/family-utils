@@ -114,6 +114,41 @@ fechas de revisión y advertencias. No reemplazar el archivo histórico de una
 carga ya publicada; revisar y validar el nuevo JSON con el mismo parser de la
 app antes de confirmar la importación.
 
+## Importación de una cartelera UFC
+
+El mismo importador acepta un archivo independiente con `schemaVersion: 1`,
+`importMode: "single_ufc_card"`, `status: "curated"`, `checkedAt`,
+`timezone: "America/Argentina/Buenos_Aires"` y un único objeto `event`.
+No lleva `events` ni `curation.completeHorizon`: únicamente actualiza o crea esa
+cartelera, sin reconciliar ni marcar ausentes otros eventos. El formato combinado
+anterior continúa disponible con sus requisitos originales.
+
+`event` usa los mismos campos de una cartelera del formato combinado: `kind`,
+`sourceProvider`, `externalReference`, título, fecha oficial, fechas y horarios
+argentinos por bloque, ubicación opcional, `fights` y `source`. La fuente debe
+estar permitida y revisada recientemente; `source.validation` declara
+`officialCardComplete: true` y `officialFightCount` igual a la lista completa.
+La lista exige exactamente una estelar y no admite parejas repetidas. Omitir una
+pelea existente significa retirarla: no usar este formato para listas parciales.
+
+La vista previa consulta el estado guardado sin escribir y muestra la cartelera,
+su fecha, peleas conservadas, agregadas y retiradas, y las protecciones aplicables.
+No revela elecciones individuales. La confirmación vuelve a revisar el estado
+dentro de una transacción; un conflicto revierte la carga individual completa.
+
+Una pareja vigente conserva identidad y pronósticos aunque cambie de orden,
+bloque u orientación. Una pelea reemplazada o retirada conserva sus registros y
+pronósticos, queda fuera de la cartelera activa y suma cero puntos. El reemplazo
+se crea sin elecciones heredadas; las incorporaciones posteriores al cierre no
+son elegibles. Se respetan los cierres, roles de puntuación fijados, resultados
+confirmados, correcciones protegidas y carteleras finalizadas existentes.
+
+«Descargar plantilla de una cartelera UFC» obtiene el formato desde
+`GET /api/sports/templates?kind=ufc-card`. La plantilla y el
+ejemplo individual incluido abajo contienen datos
+ficticios con `status: "example"`: se pueden validar, pero no confirmar. El chat
+debe reemplazarlos por datos comprobados antes de entregar una carga real.
+
 ## Verificación
 
 `npm test` valida reglas y formato. `npm run test:routes` ejerce permisos,
@@ -176,3 +211,55 @@ migraciones y compilación de producción completados correctamente.
 La auditoría de accesibilidad del caso de anulación en Champions espera el
 título esperado después de actualizar la página. Esto evita auditar el estado
 intermedio de metadatos de WebKit sin desactivar ninguna regla de axe.
+
+### Ejemplo ficticio de cartelera individual
+
+Actualizar las fechas y reemplazar los datos ficticios por información verificada.
+
+```json
+{
+  "schemaVersion": 1,
+  "importMode": "single_ufc_card",
+  "status": "example",
+  "checkedAt": "2026-11-21T15:00:00.000Z",
+  "timezone": "America/Argentina/Buenos_Aires",
+  "event": {
+    "kind": "ufc_card",
+    "sourceProvider": "ufc_official",
+    "externalReference": "ufc-example",
+    "source": {
+      "primary": "https://www.ufc.com/events",
+      "checkedAt": "2026-11-21T15:00:00.000Z",
+      "validation": {
+        "officialCardComplete": true,
+        "officialFightCount": 2,
+        "independentCrossCheck": "pending"
+      }
+    },
+    "title": "UFC: Ejemplo Uno vs Ejemplo Dos",
+    "eventDate": "2026-11-28",
+    "preliminaryDate": "2026-11-28",
+    "preliminaryTime": "18:00",
+    "mainCardDate": "2026-11-28",
+    "mainCardTime": "21:00",
+    "venue": "Recinto de ejemplo",
+    "city": "Ciudad de ejemplo",
+    "country": "País de ejemplo",
+    "eventType": "fight_night",
+    "fights": [
+      {
+        "firstFighter": "Ejemplo Uno",
+        "secondFighter": "Ejemplo Dos",
+        "boutBlock": "main",
+        "isMainEvent": true
+      },
+      {
+        "firstFighter": "Ejemplo Tres",
+        "secondFighter": "Ejemplo Cuatro",
+        "boutBlock": "preliminaries",
+        "isMainEvent": false
+      }
+    ]
+  }
+}
+```

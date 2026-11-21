@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import type { UfcCardChanges } from "@/lib/sports/import-rules";
+import UfcImportPreview from "./UfcImportPreview";
 import styles from "./agenda.module.css";
 const MAX_BYTES = 900_000;
 function resultLabel(value: unknown): string {
@@ -26,10 +28,10 @@ export default function CuratedImporter({
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [example, setExample] = useState("");
-  async function template(action: "view" | "copy" | "download") {
+  async function template(action: "view" | "copy" | "download", singleCard = false) {
     try {
       const response = await fetch(
-        `/api/sports/templates?kind=${kind}${action !== "download" ? "&example=true" : ""}`,
+        `/api/sports/templates?kind=${singleCard ? "ufc-card" : kind}${action !== "download" ? "&example=true" : ""}`,
         { cache: "no-store" },
       );
       const data = await response.json();
@@ -46,7 +48,7 @@ export default function CuratedImporter({
         );
         const a = document.createElement("a");
         a.href = url;
-        a.download = `deportes-${kind}.json`;
+        a.download = `deportes-${singleCard ? "ufc-card" : kind}.json`;
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -104,7 +106,7 @@ export default function CuratedImporter({
       <h3>{kind === "agenda" ? "Actualizar agenda" : "Cargar resultados"}</h3>
       <p>
         Pedile al chat que complete el formato con datos verificados y sus
-        fuentes. Revisá la vista previa antes de confirmar. Los ejemplos de
+        fuentes. Revisá la vista previa antes de confirmar. Podés cargar una sola cartelera UFC con su formato individual. Los ejemplos de
         agenda contienen datos ficticios.
       </p>
       <div className={styles.actions}>
@@ -117,6 +119,7 @@ export default function CuratedImporter({
         <button type="button" onClick={() => void template("download")}>
           Descargar plantilla
         </button>
+        {kind === "agenda" && <button type="button" onClick={() => void template("download", true)}>Descargar plantilla de una cartelera UFC</button>}
       </div>
       {example && (
         <details open>
@@ -179,6 +182,8 @@ export default function CuratedImporter({
         <div role="status">
           <strong>Vista previa · todavía no se guardó</strong>
           {kind === "agenda" ? (
+            <>
+            {preview.card ? <UfcImportPreview card={preview.card as UfcCardChanges} /> : null}
             <p>
               {String(
                 (preview.summary as Record<string, unknown>)?.riverMatches ?? 0,
@@ -193,6 +198,7 @@ export default function CuratedImporter({
               )}{" "}
               peleas
             </p>
+            </>
           ) : (
             Array.isArray(preview.events) &&
             preview.events.map(

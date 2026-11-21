@@ -71,3 +71,15 @@ export function agendaExample(now = new Date()) {
     ],
   };
 }
+
+export function singleUfcCardExample(now = new Date()) {
+  const agenda = agendaExample(now);
+  return {
+    schemaVersion: 1,
+    importMode: "single_ufc_card",
+    status: "example",
+    checkedAt: agenda.checkedAt,
+    timezone: agenda.timezone,
+    event: agenda.events[1],
+  };
+}
