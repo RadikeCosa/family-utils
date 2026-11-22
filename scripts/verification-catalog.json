@@ -35,9 +35,9 @@
     "entrenamiento": {
       "paths": ["src/app/entrenamiento/", "src/app/api/training/", "src/lib/training/"],
       "dependsOn": [],
-      "nodeTests": ["src/lib/training/diary.test.ts", "src/lib/training/drafts.test.ts", "src/lib/training/hiit.test.ts", "src/lib/training/rules.test.ts", "tests/postgres-training-diary-migration.integration.test.mjs", "tests/postgres-training.integration.test.mjs", "tests/training-activity.integration.mjs", "tests/training-diary.integration.mjs"],
+      "nodeTests": ["src/lib/training/diary.test.ts", "src/lib/training/drafts.test.ts", "src/lib/training/hiit.test.ts", "src/lib/training/block-timer.test.ts", "src/lib/training/rules.test.ts", "tests/postgres-training-diary-migration.integration.test.mjs", "tests/postgres-training.integration.test.mjs", "tests/training-activity.integration.mjs", "tests/training-diary.integration.mjs"],
       "routeTests": ["tests/training-routes.integration.mjs"],
-      "browser": [{"kind":"default","files":["tests/e2e/training.spec.ts"]},{"kind":"training-diary","files":["tests/e2e/training-diary.spec.ts","tests/e2e/training-activity.spec.ts","tests/e2e/training-hiit.spec.ts"]}]
+      "browser": [{"kind":"default","files":["tests/e2e/training.spec.ts"]},{"kind":"training-diary","files":["tests/e2e/training-diary.spec.ts","tests/e2e/training-activity.spec.ts","tests/e2e/training-hiit.spec.ts"]},{"kind":"block-timer","files":["tests/e2e/training-block-timer.spec.ts"]}]
     },
     "deportes": {
       "paths": ["src/app/deportes/", "src/app/api/sports/", "src/lib/sports/"],
