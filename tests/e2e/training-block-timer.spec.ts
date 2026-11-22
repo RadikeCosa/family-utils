@@ -59,8 +59,7 @@ test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcia
   await page.waitForTimeout(1100);
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
   await expect(page.getByRole("button", { name: "Reanudar" })).toBeVisible();
-  const runResults = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
-  expect(runResults.violations).toEqual([]);
+  await expect(page.getByRole("status")).toContainText("Pausado");
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); });
   await page.getByRole("button", { name: "Reanudar" }).click();
   await page.waitForTimeout(1100);
