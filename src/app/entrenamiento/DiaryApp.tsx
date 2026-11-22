@@ -12,7 +12,7 @@ import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import TrainingApp from "./TrainingApp";
 import { BlockSummary } from "./TrainingEditor";
 import styles from "./training.module.css";
-import HiitTimer from "./HiitTimer";
+import TimerModes from "./TimerModes";
 type Summary = DiaryContext & { days: { date: string; counts: DayCounts }[] };
 export default function DiaryApp({ initialContext, memberName, scope }: { initialContext: DiaryContext; memberName: string; scope: string }) {
   const params = useNavigationQuery(), hash = useNavigationHash();
@@ -98,7 +98,7 @@ export default function DiaryApp({ initialContext, memberName, scope }: { initia
     {!editor && nav}
     {!ctx.writable && <p className={styles.notice}>Modo de consulta. Tus anotaciones se conservan y se pueden consultar.</p>}
     {hiitSaveUncertain && <p role="status" className={styles.notice}>El guardado del temporizador es incierto. Reintentá la misma operación antes de salir.</p>}
-    <HiitTimer active={hiit} timeZone={ctx.timeZone} today={ctx.today} writable={ctx.writable} activityFormEnabled={!!ctx.activityFormEnabled} onSaved={saved} onUncertainChange={setHiitSaveUncertain} />
+    <TimerModes active={hiit} timeZone={ctx.timeZone} today={ctx.today} writable={ctx.writable} activityFormEnabled={!!ctx.activityFormEnabled} onSaved={saved} onUncertainChange={setHiitSaveUncertain} />
     {editor ? <DiaryEditor key={`${editor.mode}-${editor.entry?.id ?? "new"}`} target={editor} today={ctx.today} activityFormEnabled={ctx.activityFormEnabled} onClose={closeEditor} onSaved={saved} /> : hiit ? null : <>
       {handoff && <section className={styles.confirm}><p>Hay un formulario conservado al actualizar. Se elimina a los 30 minutos.</p><button disabled={busy || !ctx.writable} onClick={() => void restoreHandoff()}>Recuperar formulario</button><button onClick={() => { clearTrainingHandoffs(); setHandoff(null); }}>Descartar formulario</button></section>}
       <DateNavigation date={date} today={ctx.today} min={DIARY_MIN} max={DIARY_MAX} step={7} className={styles.dateNavigation} onSelect={selectDate} />

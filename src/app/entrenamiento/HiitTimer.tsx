@@ -7,7 +7,7 @@ import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import styles from "./training.module.css";
 
 const INITIAL: HiitConfig = { preparationSeconds: 10, workSeconds: 20, restSeconds: 10, rounds: 8 };
-type Props = { active: boolean; timeZone: string; today: string; writable: boolean; activityFormEnabled: boolean; onSaved: (entry: EntryResponse["item"]) => void; onUncertainChange: (uncertain: boolean) => void };
+type Props = { active: boolean; timeZone: string; today: string; writable: boolean; activityFormEnabled: boolean; onSaved: (entry: EntryResponse["item"]) => void; onUncertainChange: (uncertain: boolean) => void; onBusyChange?: (busy: boolean) => void };
 function formatClock(ms: number) { const seconds = Math.ceil(ms / 1000); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; }
 function tone(context: AudioContext | null, kind: string) {
   if (!context || context.state !== "running") return;
@@ -15,13 +15,14 @@ function tone(context: AudioContext | null, kind: string) {
   oscillator.frequency.value = kind === "finish" ? 880 : kind === "rest" ? 440 : 660; gain.gain.value = .08;
   oscillator.start(); oscillator.stop(context.currentTime + (kind === "finish" ? .32 : .12));
 }
-export default function HiitTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange }: Props) {
+export default function HiitTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange, onBusyChange }: Props) {
   const [config, setConfig] = useState<HiitConfig>(INITIAL), [view, setView] = useState<"setup" | "run" | "summary">("setup");
   const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null), [focusMode, setFocusMode] = useState(true);
   const run = useRef<HiitRun | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), timer = useRef<number | null>(null), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), editorOpener = useRef<HTMLElement | null>(null), titleRef = useRef<HTMLHeadingElement>(null), startRef = useRef<HTMLButtonElement>(null), pauseControl = useRef<HTMLButtonElement>(null), focusControl = useRef<HTMLButtonElement>(null), pauseRef = useRef<() => void>(() => {}), activeHref = useRef(""), soundRef = useRef(sound), uncertainRef = useRef(false);
   const inProgress = view === "run", unsavedSummary = view === "summary" && !registered;
   const configError = validateHiitConfig(config), duration = hiitTotalMs(config);
   const timerPaused = display?.paused ?? null;
+  useEffect(() => { onBusyChange?.(view !== "setup" || !!editor); }, [view, editor, onBusyChange]);
   useEffect(() => { if (view === "summary") titleRef.current?.focus(); }, [view]);
   useEffect(() => { if (view === "run" && timerPaused !== null) requestAnimationFrame(() => pauseControl.current?.focus()); }, [view, timerPaused]);
   useEffect(() => { soundRef.current = sound; }, [sound]);

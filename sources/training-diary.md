@@ -295,3 +295,36 @@ No se conserva estado al recargar. Cambio de perfil descarta la sesión y sus
 intentos locales; una escritura ya confirmada en el servidor permanece en el
 perfil original. Wake Lock y audio dependen del navegador y requieren comprobación
 manual en dispositivos reales.
+
+## Temporizador por bloques
+
+El modo «Por bloques» se ofrece junto al HIIT y mantiene configuración y sesión
+separadas. HIIT es el modo predeterminado. El circuito inicial editable propone
+bici 4:20, descanso 0:40, cuatro ejercicios de 1:00 y descanso 1:30, por seis
+vueltas; los cambios son de 2 s y se omite únicamente el último descanso. Su
+duración prevista es 62:50. Las configuraciones viven en memoria y al recargar se
+restablecen estos valores.
+
+Cada vuelta expande trabajo y descanso en fases; «Cambio» se intercala entre
+fases ejecutadas. Se permite 1–50 bloques, 1–100 vueltas, bloques de 1–3600 s,
+cambios de 0–60 s y una duración expandida máxima de cuatro horas. La omisión
+solo aplica si el último bloque configurado es descanso; también elimina el
+cambio previo a ese descanso en la última vuelta. Si el circuito termina en
+trabajo, la opción no aplica. La secuencia debe contener trabajo.
+
+El reloj usa marcas monotónicas, excluye pausas del progreso y pausa al ocultar
+la pantalla. Una interrupción superior a `HIIT_MAX_GAP_MS` (2000 ms) también
+pausa sin consumir el salto. Reanudar es manual. Los tonos de inicio de fase,
+cuenta final de 3/2/1 s en bloques de más de 3 s y fin de sesión reutilizan el
+audio del HIIT.
+
+El resumen parcial detalla trabajo, descansos, cambios y pausas. El diario suma
+solo trabajo y descansos ejecutados, requiere al menos un segundo de trabajo y
+usa la fecha civil familiar del primer trabajo incluso si la sesión cruza
+medianoche. El formulario existente propone título, duración y texto editable;
+si el texto rebasa `LIMITS.note` (2000 caracteres), resume nombres del circuito
+antes de truncar su descripción y conserva los tiempos ejecutados completos.
+La sesión y su clave de operación permanecen en memoria para reintentos; no se
+guardan plantillas ni configuraciones entre recargas. El modo de consulta permite
+ejecutar y revisar, pero no registrar en el diario.
+
