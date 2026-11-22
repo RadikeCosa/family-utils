@@ -32,6 +32,7 @@ test("Por bloques muestra el circuito inicial y pasa accesibilidad en configurac
   await expect(page.getByRole("button", { name: "Iniciar entrenamiento" })).toBeVisible();
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByText("Duración prevista: 62:50")).toBeVisible();
+  await expect(page.getByLabel("Duración del bloque 1 (segundos)")).toHaveValue("260");
   await expect(page.getByLabel("Omitir el último descanso al finalizar el circuito")).toBeChecked();
   const results = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
   expect(results.violations).toEqual([]);
@@ -45,22 +46,23 @@ test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcia
   await page.getByRole("button", { name: "Bajar bloque 1" }).focus();
   await page.keyboard.press("Enter");
   for (let index = 0; index < 6; index++) await page.getByRole("button", { name: "Eliminar" }).last().click();
-  await page.getByLabel("Minutos del bloque 1").fill("0");
-  await page.getByLabel("Segundos del bloque 1").fill("5");
+  await page.getByLabel("Duración del bloque 1 (segundos)").fill("5");
   await page.getByLabel("Vueltas").fill("1");
   await page.getByLabel("Cambio (segundos)").fill("0");
-  await page.getByLabel("Segundos del bloque 1").fill("0");
+  await page.getByLabel("Duración del bloque 1 (segundos)").fill("0");
   await expect(page.getByRole("button", { name: "Iniciar circuito" })).toBeDisabled();
-  await page.getByLabel("Segundos del bloque 1").fill("5");
+  await page.getByLabel("Duración del bloque 1 (segundos)").fill("5");
   await page.getByRole("button", { name: "Volver a HIIT" }).click();
   await page.getByRole("button", { name: "Por bloques" }).click();
-  await expect(page.getByLabel("Segundos del bloque 1")).toHaveValue("5");
+  await expect(page.getByLabel("Duración del bloque 1 (segundos)")).toHaveValue("5");
   await page.getByRole("button", { name: "Iniciar circuito" }).click();
   await page.waitForTimeout(1100);
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
   await expect(page.getByRole("button", { name: "Reanudar" })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Pausado");
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); });
   await page.getByRole("button", { name: "Reanudar" }).click();
+  await page.waitForTimeout(1100);
   await page.getByRole("button", { name: "Terminar y revisar" }).click();
   await expect(page.getByRole("heading", { name: "Circuito parcial" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Registrar en mi diario" })).toBeEnabled();
@@ -77,8 +79,7 @@ test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcia
 
 test("Por bloques permite pausar durante Cambio y retoma el tiempo restante", async ({ page, context }) => {
   await openBlockTimer(page, context);
-  await page.getByLabel("Minutos del bloque 1").fill("0");
-  await page.getByLabel("Segundos del bloque 1").fill("2");
+  await page.getByLabel("Duración del bloque 1 (segundos)").fill("2");
   await page.getByLabel("Vueltas").fill("1");
   await page.getByRole("button", { name: "Iniciar circuito" }).click();
   await expect(page.getByRole("status")).toContainText("Cambio", { timeout: 5000 });
@@ -100,8 +101,7 @@ test("Por bloques resume el circuito largo sin truncar los tiempos ejecutados", 
     await page.getByRole("button", { name: "Agregar bloque" }).click();
     await page.locator('input[maxlength="80"]').last().fill(longName);
   }
-  await page.getByLabel("Minutos del bloque 1", { exact: true }).fill("0");
-  await page.getByLabel("Segundos del bloque 1", { exact: true }).fill("3");
+  await page.getByLabel("Duración del bloque 1 (segundos)", { exact: true }).fill("3");
   await page.getByLabel("Vueltas").fill("1");
   await page.getByRole("button", { name: "Iniciar circuito" }).click();
   await page.waitForTimeout(1100);
@@ -116,8 +116,7 @@ test("Por bloques permite revisar el resumen pero bloquea el registro en modo de
   const readOnlyServer = await diaryServer(db.url, false, true, true, true);
   try {
     await openBlockTimer(page, context, readOnlyServer);
-    await page.getByLabel("Minutos del bloque 1").fill("0");
-    await page.getByLabel("Segundos del bloque 1").fill("3");
+    await page.getByLabel("Duración del bloque 1 (segundos)").fill("3");
     await page.getByLabel("Vueltas").fill("1");
     await page.getByRole("button", { name: "Iniciar circuito" }).click();
     await page.waitForTimeout(1100);
