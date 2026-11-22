@@ -56,13 +56,14 @@ test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcia
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByLabel("Duración del bloque 1 (segundos)")).toHaveValue("5");
   await page.getByRole("button", { name: "Iniciar circuito" }).click();
-  const runResults = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
-  expect(runResults.violations).toEqual([]);
   await page.waitForTimeout(1100);
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
   await expect(page.getByRole("button", { name: "Reanudar" })).toBeVisible();
+  const runResults = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
+  expect(runResults.violations).toEqual([]);
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); });
   await page.getByRole("button", { name: "Reanudar" }).click();
+  await page.waitForTimeout(1100);
   await page.getByRole("button", { name: "Terminar y revisar" }).click();
   await expect(page.getByRole("heading", { name: "Circuito parcial" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Registrar en mi diario" })).toBeEnabled();
