@@ -120,4 +120,19 @@
 .blockList { display: grid; gap: 12px; margin: 16px 0; }
 .blockTimerItem { padding: 18px; border: 1px solid #bfcdbf; border-radius: 14px; display: grid; gap: 12px; min-width: 0; }
 .blockTimerItem legend { padding: 0 8px; font-weight: 700; }
+.blockTimerFields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, .7fr); gap: 12px; align-items: end; }
 .fieldError { color: #7b2924; margin: 0; font-size: .9rem; }
+.blockTimer.hiit { box-sizing: border-box; margin: 8px 0; min-height: calc(100dvh - 16px); }
+.blockTimer.hiit .hiitRun { min-height: 0; }
+.blockTimer.hiit .hiitStage { max-width: 100%; overflow-wrap: anywhere; text-wrap: balance; }
+.blockTimer.hiit .hiitAnnouncement { max-width: 52rem; line-height: 1.5; color: #e2e9e0; }
+.blockTimer.hiit > .hiitRun > p:not(.hiitStage, .hiitClock, .hiitRound, .hiitAnnouncement) { color: #e2e9e0; }
+.blockTimer.hiit .hiitRun progress { accent-color: #c2f0b8; }
+.blockTimer.hiit .hiitControls { width: 100%; max-width: 680px; }
+@media(max-width:600px) {
+  .blockTimerFields { grid-template-columns: minmax(0, 1fr) minmax(120px, .8fr); gap: 8px; }
+  .blockTimerItem { padding: 12px; gap: 10px; }
+  .blockTimer.hiit { min-height: calc(100dvh - 16px); padding: 14px 12px calc(12px + env(safe-area-inset-bottom)); border-radius: 18px; }
+  .blockTimer.hiit .hiitRun { padding-inline: 4px; }
+  .blockTimer.hiit .hiitClock { font-size: clamp(5.5rem, 27vw, 15rem); }
+}
