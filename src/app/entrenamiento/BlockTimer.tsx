@@ -7,7 +7,7 @@ import { formatActivityDuration } from "@/lib/training/timing";
 import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import styles from "./training.module.css";
 
-type Props = { active: boolean; timeZone: string; today: string; writable: boolean; activityFormEnabled: boolean; onSaved: (entry: EntryResponse["item"]) => void; onUncertainChange: (uncertain: boolean) => void; onExit: () => void; onBusyChange: (busy: boolean) => void; onSwitchToHiit: () => void };
+type Props = { active: boolean; timeZone: string; today: string; writable: boolean; activityFormEnabled: boolean; onSaved: (entry: EntryResponse["item"]) => void; onUncertainChange: (uncertain: boolean) => void; onExit: () => void; onSwitchToHiit: () => void };
 function formatClock(ms: number) { const seconds = Math.ceil(ms / 1000); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; }
 function tone(context: AudioContext | null, kind: string) {
   if (!context || context.state !== "running") return;
@@ -15,7 +15,7 @@ function tone(context: AudioContext | null, kind: string) {
   oscillator.frequency.value = kind === "finish" ? 880 : kind === "rest" ? 440 : 660; gain.gain.value = .08;
   oscillator.start(); oscillator.stop(context.currentTime + (kind === "finish" ? .32 : .12));
 }
-export default function BlockTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange, onExit, onBusyChange, onSwitchToHiit }: Props) {
+export default function BlockTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange, onExit, onSwitchToHiit }: Props) {
   const [config, setConfig] = useState<BlockTimerConfig>(() => structuredClone(INITIAL_BLOCK_CONFIG));
   const [view, setView] = useState<"setup" | "run" | "summary">("setup"), [display, setDisplay] = useState<BlockSnapshot | null>(null);
   const [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null), [editorError, setEditorError] = useState("");
@@ -24,7 +24,6 @@ export default function BlockTimer({ active, timeZone, today, writable, activity
   useEffect(() => { soundRef.current = sound; }, [sound]);
   useEffect(() => { if (view === "summary") title.current?.focus(); }, [view]);
   useEffect(() => { if (active) activeHref.current = location.href; }, [active]);
-  useEffect(() => { onBusyChange(view !== "setup" || !!editor); }, [view, editor, onBusyChange]);
   useEffect(() => { if (!active && run.current && !registered) { stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setView("setup"); summaryKey.current = null; sessionDate.current = null; } }, [active, registered]);
   function stopTicker() { if (timer.current !== null) window.clearInterval(timer.current); timer.current = null; }
   function releaseWake() { void wake.current?.release().catch(() => {}); wake.current = null; }
@@ -103,6 +102,7 @@ export default function BlockTimer({ active, timeZone, today, writable, activity
     {editorError && <p role="alert" className={styles.error}>{editorError}</p>}
     {editor ? <DiaryEditor key={`blocks-${editor.operationKey}`} target={editor} today={today} activityFormEnabled={activityFormEnabled} onClose={() => { setEditor(null); requestAnimationFrame(() => opener.current?.focus()); }} onSaved={saved} onUncertainChange={uncertainChange} /> : view === "setup" ? <form aria-label="Configuración del circuito" aria-describedby={globalErrors.length ? "block-global-errors" : undefined} onSubmit={event => { event.preventDefault(); start(); }}>
       <h3>Por bloques</h3>
+      <div className={styles.actions}><button type="button" onClick={onSwitchToHiit}>Volver a HIIT</button></div>
       <p className={styles.notice}>Armá tu circuito. Los nombres pueden repetirse; el cambio se inserta entre los bloques que se ejecuten.</p>
       <div className={styles.actions}><button type="button" onClick={() => setConfig(value => ({ ...value, blocks: [...value.blocks, { name: `Ejercicio ${value.blocks.length + 1}`, kind: "work", durationSeconds: 60 }] }))} disabled={config.blocks.length >= 50}>Agregar bloque</button></div>
       <div className={styles.blockList}>
