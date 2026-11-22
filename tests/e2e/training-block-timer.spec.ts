@@ -14,12 +14,23 @@ async function openTimer(page: import("@playwright/test").Page, context: import(
   await context.addCookies(cookies);
   await page.goto(`${targetServer.origin}/entrenamiento?seccion=temporizador`);
   await expect(page.getByRole("heading", { name: "Temporizador" })).toBeVisible();
+}
+
+async function openBlockTimer(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, targetServer = server) {
+  await openTimer(page, context, targetServer);
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByRole("heading", { name: "Temporizador por bloques" })).toBeVisible();
 }
 
 test("Por bloques muestra el circuito inicial y pasa accesibilidad en configuración", async ({ page, context }) => {
   await openTimer(page, context);
+  await expect(page.getByRole("region", { name: "Programas de intervalos" }).getByRole("button")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: /Por bloques.*Circuito editable.*62:50 iniciales/ })).toBeVisible();
+  await page.getByRole("button", { name: "Por bloques" }).click();
+  await expect(page.getByRole("heading", { name: "Temporizador por bloques" })).toBeVisible();
+  await page.getByRole("button", { name: "Volver a HIIT" }).click();
+  await expect(page.getByRole("button", { name: "Iniciar entrenamiento" })).toBeVisible();
+  await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByText("Duración prevista: 62:50")).toBeVisible();
   await expect(page.getByLabel("Omitir el último descanso al finalizar el circuito")).toBeChecked();
   const results = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
@@ -27,7 +38,7 @@ test("Por bloques muestra el circuito inicial y pasa accesibilidad en configurac
 });
 
 test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcial", async ({ page, context }) => {
-  await openTimer(page, context);
+  await openBlockTimer(page, context);
   await page.getByRole("button", { name: "Subir bloque 2" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Nombre", { exact: false }).first()).toHaveValue("Descanso");
@@ -41,7 +52,7 @@ test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcia
   await page.getByLabel("Segundos del bloque 1").fill("0");
   await expect(page.getByRole("button", { name: "Iniciar circuito" })).toBeDisabled();
   await page.getByLabel("Segundos del bloque 1").fill("5");
-  await page.getByRole("button", { name: "HIIT", exact: true }).click();
+  await page.getByRole("button", { name: "Volver a HIIT" }).click();
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByLabel("Segundos del bloque 1")).toHaveValue("5");
   await page.getByRole("button", { name: "Iniciar circuito" }).click();
@@ -59,13 +70,13 @@ test("Por bloques permite ordenar, pausar, reanudar y revisar una sesión parcia
   await page.getByRole("button", { name: "Guardar actividad" }).click();
   await expect(page.getByText("Sesión registrada en el diario.")).toBeVisible();
   await page.getByRole("button", { name: "Cambiar a HIIT" }).click();
-  await expect(page.getByRole("group", { name: "Modo de temporizador" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Iniciar entrenamiento" })).toBeVisible();
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByRole("heading", { name: "Temporizador por bloques" })).toBeVisible();
 });
 
 test("Por bloques permite pausar durante Cambio y retoma el tiempo restante", async ({ page, context }) => {
-  await openTimer(page, context);
+  await openBlockTimer(page, context);
   await page.getByLabel("Minutos del bloque 1").fill("0");
   await page.getByLabel("Segundos del bloque 1").fill("2");
   await page.getByLabel("Vueltas").fill("1");
@@ -82,7 +93,7 @@ test("Por bloques permite pausar durante Cambio y retoma el tiempo restante", as
 });
 
 test("Por bloques resume el circuito largo sin truncar los tiempos ejecutados", async ({ page, context }) => {
-  await openTimer(page, context);
+  await openBlockTimer(page, context);
   const longName = `Ejercicio ${"ficticio ".repeat(8)}`.slice(0, 80);
   await page.locator('input[maxlength="80"]').first().fill(longName);
   for (let count = 7; count < 50; count++) {
@@ -104,7 +115,7 @@ test("Por bloques resume el circuito largo sin truncar los tiempos ejecutados", 
 test("Por bloques permite revisar el resumen pero bloquea el registro en modo de consulta", async ({ page, context }) => {
   const readOnlyServer = await diaryServer(db.url, false, true, true, true);
   try {
-    await openTimer(page, context, readOnlyServer);
+    await openBlockTimer(page, context, readOnlyServer);
     await page.getByLabel("Minutos del bloque 1").fill("0");
     await page.getByLabel("Segundos del bloque 1").fill("3");
     await page.getByLabel("Vueltas").fill("1");

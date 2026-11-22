@@ -298,8 +298,10 @@ manual en dispositivos reales.
 
 ## Temporizador por bloques
 
-El modo «Por bloques» se ofrece junto al HIIT y mantiene configuración y sesión
-separadas. HIIT es el modo predeterminado. El circuito inicial editable propone
+El modo «Por bloques» se ofrece como tercera tarjeta junto a los dos programas
+HIIT, en la misma zona del temporizador. Seleccionarlo abre su configuración;
+desde allí se puede volver a HIIT. HIIT es el modo predeterminado. Ambos modos
+mantienen configuración y sesión separadas. El circuito inicial editable propone
 bici 4:20, descanso 0:40, cuatro ejercicios de 1:00 y descanso 1:30, por seis
 vueltas; los cambios son de 2 s y se omite únicamente el último descanso. Su
 duración prevista es 62:50. Las configuraciones viven en memoria y al recargar se
