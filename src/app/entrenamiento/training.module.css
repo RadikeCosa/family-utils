@@ -141,3 +141,11 @@
 @media(max-height:430px) and (orientation:landscape) {
   .strengthTimer.hiit .hiitStage { font-size:1.3rem; }
 }
+
+.strengthTimer .fieldError { color:#ffd1cb; }
+:global([data-unified-ui="true"]):has(.strengthTimer[data-focus-mode="true"]) > div > header,
+:global([data-unified-ui="true"]):has(.strengthTimer[data-focus-mode="true"]) > a[href="#platform-content"] { display:none!important; }
+.strengthTimer.hiit .hiitControls button { min-width:0; overflow-wrap:anywhere; }
+.strengthTimer.hiit .hiitControls button:last-child { flex-basis:100%; }
+.strengthTimer button:hover:not(:disabled) { background:#2b3b2e; color:var(--timer-ink); }
+.strengthTimer button.primary:hover:not(:disabled) { background:#c6efc2; color:#111b13; }

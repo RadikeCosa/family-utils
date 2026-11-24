@@ -20,13 +20,13 @@ export default function StrengthTimer({ active, timeZone, today, writable, activ
   const [config, setConfig] = useState<StrengthConfig>(() => structuredClone(INITIAL_STRENGTH_CONFIG));
   const [view, setView] = useState<"setup" | "run" | "summary">("setup"), [display, setDisplay] = useState<BlockSnapshot | null>(null);
   const [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null), [editorError, setEditorError] = useState("");
-  const control = useRef<HTMLButtonElement>(null);
+  const control = useRef<HTMLButtonElement>(null), screen = useRef<HTMLDivElement>(null);
   const run = useRef<BlockRun | null>(null), timer = useRef<number | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), soundRef = useRef(sound), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), opener = useRef<HTMLElement | null>(null), uncertain = useRef(false), title = useRef<HTMLHeadingElement>(null), latestPause = useRef<() => void>(() => {}), activeHref = useRef("");
   const errors = validateStrengthConfig(config), phases = useMemo(() => generateStrengthPhases(config), [config]), durations = strengthDurations(config), totalMs = durations.total * 1000, inProgress = view === "run", unsavedSummary = view === "summary" && !registered;
   const breakdown = display && run.current ? strengthBreakdown(run.current.phases, display.elapsedMs) : { warmupMs: 0, exerciseMs: 0 };
   useEffect(() => { soundRef.current = sound; }, [sound]);
-  useEffect(() => { if (view === "run") control.current?.focus(); }, [view, display?.paused]);
-  useEffect(() => { if (view === "summary") title.current?.focus(); }, [view]);
+  useEffect(() => { if (view === "run") control.current?.focus({ preventScroll: true }); }, [view, display?.paused]);
+  useEffect(() => { if (view === "summary") title.current?.focus(); if (view === "run") screen.current?.scrollIntoView({ block: "start" }); }, [view]);
   useEffect(() => { if (active) activeHref.current = location.href; }, [active]);
   useEffect(() => { if (!active && run.current && !registered) { stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setView("setup"); summaryKey.current = null; sessionDate.current = null; } }, [active, registered]);
   function stopTicker() { if (timer.current !== null) window.clearInterval(timer.current); timer.current = null; }
@@ -103,7 +103,7 @@ export default function StrengthTimer({ active, timeZone, today, writable, activ
   if (!active) return null;
   const completed = display?.phase ? `${display.phase.kind === "change" ? "Cambio" : display.phase.name} · ${display.phase.round === 0 ? "Entrada en calor" : `vuelta ${display.phase.round} de ${config.rounds}`}` : "Sesión finalizada";
 
-  return <div className={`${styles.blockTimer} ${styles.strengthTimer} ${view === "run" ? styles.hiit : ""}`} data-testid="strength-timer-screen" data-focus-mode={view === "run" ? "true" : undefined}>
+  return <div ref={screen} className={`${styles.blockTimer} ${styles.strengthTimer} ${view === "run" ? styles.hiit : ""}`} data-testid="strength-timer-screen" data-focus-mode={view === "run" ? "true" : undefined}>
     {editorError && <p role="alert" className={styles.error}>{editorError}</p>}
     {editor ? <DiaryEditor key={`strength-${editor.operationKey}`} target={editor} today={today} activityFormEnabled={activityFormEnabled} onClose={() => { setEditor(null); requestAnimationFrame(() => opener.current?.focus()); }} onSaved={saved} onUncertainChange={uncertainChange} /> : view === "setup" ? <form aria-label="Configuración de Fuerza"  onSubmit={event => { event.preventDefault(); start(); }}>
       <h3>Fuerza</h3>
@@ -127,8 +127,7 @@ export default function StrengthTimer({ active, timeZone, today, writable, activ
       {sound && <button type="button" onClick={() => { const Audio = window.AudioContext; if (Audio) { audio.current ??= new Audio(); void audio.current.resume().then(() => tone(audio.current, "start")); } }}>Probar sonido</button>}
       <button type="submit" className={styles.primary} disabled={errors.length > 0}>Iniciar fuerza</button>
     </form> : view === "run" && display ? <div className={`${styles.hiitRun} ${display.phase?.kind === "work" ? styles["hiit-work"] : display.phase?.kind === "rest" ? styles["hiit-rest"] : styles["hiit-preparation"]}`}>
-      <p className={styles.hiitStage}>{display.phase?.kind === "change" ? "CAMBIO" : display.phase?.kind === "rest" ? "Descanso" : display.phase?.name ?? "Finalizado"}</p>
-      {display.phase?.kind === "change" && <p className={styles.hiitStage}>Preparate: {display.phase.nextName}</p>}
+      <p className={styles.hiitStage}>{display.phase?.kind === "change" ? <>CAMBIO<br /><span>Preparate: {display.phase.nextName}</span></> : display.phase?.kind === "rest" ? "Descanso" : display.phase?.name ?? "Finalizado"}</p>
       {display.phase?.kind !== "change" && <p className={styles.hiitClock} aria-live="off">{formatClock(display.remainingMs)}</p>}
       <p className={styles.hiitRound}>{display.phase?.round === 0 ? "Entrada en calor" : display.phase?.kind === "rest" ? `Descanso · sigue vuelta ${display.phase.round + 1} de ${config.rounds}` : display.phase ? `Vuelta ${display.phase.round} de ${config.rounds}` : "Finalizado"}</p>
       <p className={styles.hiitAnnouncement} role="status" aria-live="polite" aria-atomic="true">{display.paused ? "Pausado · " : ""}{completed}{display.phase?.kind === "change" ? ` · sigue ${display.phase.nextName}` : display.phase?.nextName ? ` · después: ${display.phase.nextName}` : " · fin de sesión"}</p>

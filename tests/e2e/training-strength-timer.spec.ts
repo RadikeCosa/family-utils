@@ -14,8 +14,14 @@ async function open(page: Page, context: BrowserContext, target = server) {
   await expect(page.getByRole("button", { name: /Intervalos 20\/10/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Intervalos 40\/20/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Por bloques/ })).toBeVisible();
-  await page.getByRole("button", { name: /^Fuerza/ }).click();
+  await page.getByRole("button", { name: /^Fuerza/ }).focus();
+  await page.keyboard.press("Enter");
   return profile;
+}
+async function freezeClock(page: Page) {
+  const now = new Date();
+  await page.clock.install({ time: now });
+  await page.clock.pauseAt(new Date(now.getTime() + 1000));
 }
 async function shortConfig(page: Page, rounds = 1, change = 0, rest = 0) {
   await page.getByTestId("strength-timer-screen").getByLabel("Vueltas", { exact: true }).fill(String(rounds));
@@ -36,12 +42,13 @@ test("Fuerza previews stages, validates limits and preserves mobile accessibilit
   await expect(screen.getByText("Hombros · Rotación externa · Izquierdo: 0:30", { exact: true })).toBeVisible();
   await screen.getByText("Ver circuito de una vuelta").click();
   expect((await new AxeBuilder({ page }).include('[data-testid="strength-timer-screen"]').analyze()).violations).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("strength-setup.png"), fullPage: true });
   const start = page.getByRole("button", { name: "Iniciar fuerza" });
   await page.getByTestId("strength-timer-screen").getByLabel("Vueltas", { exact: true }).fill("");
   await expect(start).toBeDisabled();
   await page.getByTestId("strength-timer-screen").getByLabel("Vueltas", { exact: true }).fill("100");
-  await expect(page.getByRole("alert")).toContainText("cuatro horas");
+  await expect(screen.getByRole("alert")).toContainText("cuatro horas");
   await expect(start).toBeDisabled();
   await shortConfig(page);
   await expect(screen.getByText("Duración prevista: 0:37")).toBeVisible();
@@ -57,14 +64,32 @@ test("Fuerza previews stages, validates limits and preserves mobile accessibilit
 test("Fuerza completes, saves a split diary summary once, and repeats original config", async ({ page, context }, info) => {
   const profile = await open(page, context);
   await shortConfig(page);
-  await page.clock.install();
+  await freezeClock(page);
   await page.getByRole("button", { name: "Iniciar fuerza" }).click();
   const screen = page.getByTestId("strength-timer-screen");
   await expect(screen.getByText("Entrada en calor", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pausar", exact: true })).toBeFocused();
   await expect(page.getByLabel("Segundos por articulación", { exact: true })).toBeHidden();
   await page.screenshot({ path: info.outputPath("strength-warmup.png"), fullPage: true });
   await page.clock.runFor(8000);
   await expect(screen.getByText("Hombros · Flexión · Izquierdo", { exact: true })).toBeVisible();
+  const back = screen.getByRole("button", { name: "Descartar y volver a temporizadores", exact: true });
+  expect(await back.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await back.hover();
+  const contrast = await back.evaluate(element => {
+    const luminance = (color: string) => {
+      const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(value => {
+        const channel = value / 255;
+        return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+      });
+      return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+    };
+    const style = getComputedStyle(element), foreground = luminance(style.color), background = luminance(style.backgroundColor);
+    return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+  });
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
+  await page.mouse.move(0, 0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("strength-exercise.png"), fullPage: true });
   await page.clock.runFor(30000);
   await expect(page.getByRole("heading", { name: "Fuerza completa" })).toBeVisible();
@@ -85,21 +110,29 @@ test("Fuerza completes, saves a split diary summary once, and repeats original c
   expect(attempts).toHaveLength(2);
   expect(attempts[0]).toBe(attempts[1]);
   await expect(page.getByText("Sesión registrada en el diario.")).toBeVisible();
-  expect((await db.pool.query("SELECT count(*)::int AS n FROM training_entries WHERE owner_member_id=$1", [profile.id])).rows[0].n).toBe(1);
+  const stored = await db.pool.query("SELECT result FROM training_entries WHERE owner_member_id=$1", [profile.id]);
+  expect(stored.rows).toHaveLength(1);
+  expect(stored.rows[0].result.durationSeconds).toBe(37);
 });
 test("Fuerza pauses hidden at change boundary, resumes change and rest without consuming pauses", async ({ page, context }, info) => {
   await open(page, context);
   await shortConfig(page, 2, 1, 5);
-  await page.clock.install();
+  await freezeClock(page);
   await page.getByRole("button", { name: "Iniciar fuerza" }).click();
   await page.clock.runFor(1000);
   const screen = page.getByTestId("strength-timer-screen");
-  await expect(screen.getByText("CAMBIO", { exact: true })).toBeVisible();
+  await expect(screen.locator("p[class*=hiitStage]")).toContainText("CAMBIO");
   await expect(screen.locator('p[class*="hiitClock"]')).toHaveCount(0);
+  await expect(screen.locator("p[class*=hiitStage]")).toHaveCount(1);
+  if (info.project.name !== "diary-desktop") {
+    await page.setViewportSize({ width: 667, height: 375 });
+    await page.screenshot({ path: info.outputPath("strength-change-landscape.png"), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
   await expect(page.getByRole("button", { name: "Reanudar" })).toBeVisible();
   await page.clock.runFor(10000);
-  await expect(screen.getByText("CAMBIO", { exact: true })).toBeVisible();
+  await expect(screen.locator("p[class*=hiitStage]")).toContainText("CAMBIO");
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); });
   await page.getByRole("button", { name: "Reanudar" }).click();
   await page.clock.runFor(1000);
@@ -122,7 +155,7 @@ test("Fuerza permits partial warmup review but not saving in read-only mode", as
   const readOnly = await diaryServer(db.url, false, true, true, true);
   try {
     await open(page, context, readOnly);
-    await page.clock.install();
+    await freezeClock(page);
     await page.getByRole("button", { name: "Iniciar fuerza" }).click();
     await page.clock.runFor(1200);
     await page.getByRole("button", { name: "Terminar y revisar" }).click();
