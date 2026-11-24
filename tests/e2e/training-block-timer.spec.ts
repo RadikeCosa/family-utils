@@ -25,13 +25,16 @@ async function openBlockTimer(page: import("@playwright/test").Page, context: im
 test("Por bloques muestra el circuito inicial y pasa accesibilidad en configuración", async ({ page, context }) => {
   await openTimer(page, context);
   await expect(page.getByRole("region", { name: "Programas de intervalos" }).getByRole("button")).toHaveCount(3);
-  await expect(page.getByRole("button", { name: /Por bloques.*Circuito editable.*62:50 iniciales/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Por bloques.*Circuito editable.*63:30 iniciales/ })).toBeVisible();
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByRole("heading", { name: "Temporizador por bloques" })).toBeVisible();
   await page.getByRole("button", { name: "Volver a HIIT" }).click();
   await expect(page.getByRole("button", { name: "Iniciar entrenamiento" })).toBeVisible();
   await page.getByRole("button", { name: "Por bloques" }).click();
-  await expect(page.getByText("Duración prevista: 62:50")).toBeVisible();
+  await expect(page.getByText("Duración prevista: 63:30")).toBeVisible();
+  await expect(page.getByLabel("Cambio (segundos)")).toHaveValue("3");
+  await page.getByRole("button", { name: "Agregar bloque" }).click();
+  await expect(page.getByLabel("Duración del bloque 8 (segundos)")).toHaveValue("300");
   await expect(page.getByLabel("Duración del bloque 1 (segundos)")).toHaveValue("260");
   await expect(page.getByLabel("Omitir el último descanso al finalizar el circuito")).toBeChecked();
   const results = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
@@ -82,12 +85,13 @@ test("Por bloques permite pausar durante Cambio y retoma el tiempo restante", as
   await page.getByLabel("Duración del bloque 1 (segundos)").fill("2");
   await page.getByLabel("Vueltas").fill("1");
   await page.getByRole("button", { name: "Iniciar circuito" }).click();
-  await expect(page.getByRole("status")).toContainText("Cambio", { timeout: 5000 });
+  await expect(page.getByText("CAMBIO", { exact: true })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("p[class*=hiitClock]")).toHaveCount(0);
   await page.getByRole("button", { name: "Pausar" }).click();
   await expect(page.getByRole("status")).toContainText("Pausado · Cambio");
-  const remaining = await page.locator("p[class*=hiitClock]").textContent();
   await page.waitForTimeout(1100);
-  await expect(page.locator("p[class*=hiitClock]")).toHaveText(remaining!);
+  await expect(page.getByText("CAMBIO", { exact: true })).toBeVisible();
+  await expect(page.locator("p[class*=hiitClock]")).toHaveCount(0);
   await page.getByRole("button", { name: "Reanudar" }).click();
   await expect(page.getByRole("status")).toContainText("Descanso", { timeout: 5000 });
   await page.getByRole("button", { name: "Terminar y revisar" }).click();
