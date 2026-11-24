@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/gallery/reconcile",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

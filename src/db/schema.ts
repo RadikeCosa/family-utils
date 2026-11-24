@@ -97,6 +97,7 @@ export const accessMethodEnum = pgEnum("access_method", ["google", "code"]);
 export const mealTypeEnum = pgEnum("meal_type", MEAL_TYPES);
 export const mealAttendanceStatusEnum = pgEnum("meal_attendance_status", ["present", "absent"]);
 export const sportsEventKindEnum = pgEnum("sports_event_kind", ["football_match", "ufc_card"]);
+export const galleryDrawingStatusEnum = pgEnum("gallery_drawing_status", ["pending", "processing", "ready", "failed", "archived"]);
 
 export const families = pgTable("families", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -106,6 +107,7 @@ export const families = pgTable("families", {
   menusRevision: bigint("menus_revision", { mode: "number" }).notNull().default(0),
   shoppingRevision: bigint("shopping_revision", { mode: "number" }).notNull().default(0),
   libraryRevision: bigint("library_revision", { mode: "number" }).notNull().default(0),
+  galleryRevision: bigint("gallery_revision", { mode: "number" }).notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -1070,4 +1072,74 @@ export const trainingDiaryOperations = pgTable("training_diary_operations", {
   foreignKey({ columns: [t.entryId, t.ownerMemberId, t.familyId], foreignColumns: [trainingEntries.id, trainingEntries.ownerMemberId, trainingEntries.familyId] }).onDelete("restrict"),
   uniqueIndex("training_diary_operation_unique").on(t.ownerMemberId, t.operationKey),
   check("training_diary_operation_hash", sql`${t.hash} ~ '^[0-9a-f]{64}$'`),
+]);
+
+// Gallery metadata only. Private object paths never leave server handlers.
+export const galleryDrawings = pgTable("gallery_drawings", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), authorMemberId: uuid("author_member_id").notNull(),
+  status: galleryDrawingStatusEnum("status").notNull().default("pending"), originalName: varchar("original_name", { length: 255 }).notNull(),
+  originalSha256: varchar("original_sha256", { length: 64 }), originalBytes: bigint("original_bytes", { mode: "number" }).notNull(),
+  pendingPath: text("pending_path"),
+  sourceMimeType: varchar("source_mime_type", { length: 32 }).notNull(), width: integer("width"), height: integer("height"),
+  displayPath: text("display_path"), thumbnailPath: text("thumbnail_path"), displayBytes: bigint("display_bytes", { mode: "number" }),
+  thumbnailBytes: bigint("thumbnail_bytes", { mode: "number" }), version: integer("version").notNull().default(1),
+  archivedAt: timestamp("archived_at", { withTimezone: true }), createdAt: createdAt(), updatedAt: updatedAt(),
+}, t => [
+  foreignKey({ columns: [t.authorMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }).onDelete("cascade"),
+  uniqueIndex("gallery_drawings_id_family_author_unique").on(t.id, t.familyId, t.authorMemberId),
+  uniqueIndex("gallery_drawings_family_hash_unique").on(t.familyId, t.originalSha256).where(sql`${t.originalSha256} IS NOT NULL`),
+  index("gallery_drawings_author_page_idx").on(t.familyId, t.authorMemberId, t.createdAt.desc(), t.id.desc()),
+  check("gallery_drawings_hash_format", sql`${t.originalSha256} IS NULL OR ${t.originalSha256} ~ '^[0-9a-f]{64}$'`),
+  check("gallery_drawings_input_bytes", sql`${t.originalBytes} > 0 AND ${t.originalBytes} <= 26214400`),
+  check("gallery_drawings_mime", sql`${t.sourceMimeType} IN ('image/png','image/jpeg')`),
+  check("gallery_drawings_dimensions", sql`(${t.width} IS NULL AND ${t.height} IS NULL) OR (${t.width} BETWEEN 1 AND 40000000 AND ${t.height} BETWEEN 1 AND 40000000 AND ${t.width}::bigint * ${t.height} <= 40000000)`),
+  check("gallery_drawings_derived_paths", sql`(${t.status} <> 'ready' OR (${t.displayPath} IS NOT NULL AND ${t.thumbnailPath} IS NOT NULL AND ${t.displayBytes} > 0 AND ${t.thumbnailBytes} > 0 AND ${t.width} IS NOT NULL AND ${t.height} IS NOT NULL))`),
+  check("gallery_drawings_version", sql`${t.version} > 0`),
+]);
+
+export const galleryCollections = pgTable("gallery_collections", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), ownerMemberId: uuid("owner_member_id").notNull(),
+  title: varchar("title", { length: 120 }).notNull(), description: varchar("description", { length: 500 }).notNull().default(""),
+  version: integer("version").notNull().default(1), archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+}, t => [
+  foreignKey({ columns: [t.ownerMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }).onDelete("cascade"),
+  uniqueIndex("gallery_collections_id_family_owner_unique").on(t.id, t.familyId, t.ownerMemberId),
+  index("gallery_collections_owner_page_idx").on(t.familyId, t.ownerMemberId, t.updatedAt.desc(), t.id.desc()),
+  check("gallery_collections_title_nonempty", sql`length(btrim(${t.title})) BETWEEN 1 AND 120`),
+  check("gallery_collections_description_length", sql`length(${t.description}) <= 500`),
+  check("gallery_collections_version", sql`${t.version} > 0`),
+]);
+
+export const galleryCollectionDrawings = pgTable("gallery_collection_drawings", {
+  familyId: uuid("family_id").notNull(), ownerMemberId: uuid("owner_member_id").notNull(),
+  collectionId: uuid("collection_id").notNull(), drawingId: uuid("drawing_id").notNull(), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.collectionId, t.familyId, t.ownerMemberId], foreignColumns: [galleryCollections.id, galleryCollections.familyId, galleryCollections.ownerMemberId] }).onDelete("cascade"),
+  foreignKey({ columns: [t.drawingId, t.familyId, t.ownerMemberId], foreignColumns: [galleryDrawings.id, galleryDrawings.familyId, galleryDrawings.authorMemberId] }).onDelete("cascade"),
+  uniqueIndex("gallery_collection_drawings_unique").on(t.collectionId, t.drawingId),
+  index("gallery_collection_drawings_page_idx").on(t.collectionId, t.createdAt, t.drawingId),
+]);
+
+export const galleryInvitations = pgTable("gallery_invitations", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), ownerMemberId: uuid("owner_member_id").notNull(),
+  collectionId: uuid("collection_id").notNull(), createdByMemberId: uuid("created_by_member_id").notNull(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  redeemedAt: timestamp("redeemed_at", { withTimezone: true }), revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.collectionId, t.familyId, t.ownerMemberId], foreignColumns: [galleryCollections.id, galleryCollections.familyId, galleryCollections.ownerMemberId] }).onDelete("cascade"),
+  foreignKey({ columns: [t.createdByMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }).onDelete("cascade"),
+  uniqueIndex("gallery_invitations_id_family_collection_unique").on(t.id, t.familyId, t.collectionId),
+  index("gallery_invitations_owner_active_idx").on(t.familyId, t.ownerMemberId, t.createdAt.desc()),
+  check("gallery_invitations_token_hash", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+]);
+
+export const galleryGuestSessions = pgTable("gallery_guest_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), collectionId: uuid("collection_id").notNull(),
+  invitationId: uuid("invitation_id").notNull(), sessionHash: varchar("session_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.invitationId, t.familyId, t.collectionId], foreignColumns: [galleryInvitations.id, galleryInvitations.familyId, galleryInvitations.collectionId] }).onDelete("cascade"),
+  index("gallery_guest_sessions_invitation_idx").on(t.invitationId, t.expiresAt),
+  check("gallery_guest_sessions_hash", sql`${t.sessionHash} ~ '^[0-9a-f]{64}$'`),
 ]);

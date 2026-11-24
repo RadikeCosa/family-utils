@@ -83,6 +83,13 @@ test("catalog order and disabled capabilities", () => {
   );
   assert.equal(validDestination("/recetas/a", reduced), null);
 });
+test("gallery navigation is present only when its capability is enabled", () => {
+  const base = { recipes: false, library: false, sports: false, champions: false, training: false };
+  assert.equal(appCatalog(base).some(app => app.id === "gallery"), false);
+  const gallery = appCatalog({ ...base, gallery: true }).find(app => app.id === "gallery");
+  assert.equal(gallery?.href, "/galeria");
+  assert.equal(gallery?.sections[0]?.href, "/galeria");
+});
 test("training sidebar highlights the active diary, templates, or HIIT section", () => {
   const withHiit = appCatalog({
     recipes: false,

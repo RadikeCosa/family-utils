@@ -4,6 +4,7 @@ import Experience from "@/components/platform/Experience";
 import { recipesEnabled } from "@/lib/recipes/config";
 import Link from "next/link";
 import { libraryEnabled } from "@/lib/library/config";
+import { galleryEnabled } from "@/lib/gallery/config";
 import { trainingEnabled } from "@/lib/training/config";
 import { sportsEnabled } from "@/lib/sports/config";
 export const dynamic = "force-dynamic";
@@ -50,6 +51,12 @@ function Home() {
             <span className={`${styles.appIcon} ${styles.lavender}`} aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/></svg></span>
             <span className={styles.cardTitle}>Cinemateca familiar</span>
             <span className={styles.cardCopy}>Películas para descubrir, valorar y recordar en familia.</span>
+            <span className={styles.cardArrow}>Explorar <span aria-hidden="true">→</span></span>
+          </Link>}
+          {galleryEnabled() && <Link className={styles.appCard} href="/galeria" aria-label="Abrir Galería familiar">
+            <span className={`${styles.appIcon} ${styles.peach}`} aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></span>
+            <span className={styles.cardTitle}>Galería familiar</span>
+            <span className={styles.cardCopy}>Dibujos para guardar y compartir en familia.</span>
             <span className={styles.cardArrow}>Explorar <span aria-hidden="true">→</span></span>
           </Link>}
           {sportsEnabled() && <Link className={styles.appCard} href="/deportes" aria-label="Abrir Deportes">

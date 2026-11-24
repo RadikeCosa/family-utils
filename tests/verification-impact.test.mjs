@@ -21,7 +21,7 @@ test("task changes select dependent consumers transitively", () => {
 
 test("shared changes and unknown paths select every domain", () => {
   assert.equal(select(["src/db/schema.ts"]).mode, "full");
-  assert.deepEqual(select(["new-unmapped-area/file.ts"]).groups, ["acceso", "cinemateca", "cocina", "comidas", "deportes", "entrenamiento", "plataforma", "tasks"]);
+  assert.deepEqual(select(["new-unmapped-area/file.ts"]).groups, ["acceso", "cinemateca", "cocina", "comidas", "deportes", "entrenamiento", "galeria", "plataforma", "tasks"]);
 });
 
 test("interface changes add shared accessibility and unified UI suites", () => {
