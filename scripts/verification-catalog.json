@@ -25,6 +25,13 @@
       "routeTests": ["tests/library-routes.integration.mjs"],
       "browser": [{"kind":"default","files":["tests/e2e/library.spec.ts"]}]
     },
+    "galeria": {
+      "paths": ["src/app/galeria/", "src/app/api/gallery/", "src/app/api/cron/gallery/", "src/lib/gallery/", "vercel.json"],
+      "dependsOn": [],
+      "nodeTests": ["src/lib/gallery/rules.test.ts", "tests/postgres-gallery.integration.test.mjs"],
+      "routeTests": ["tests/gallery-routes.integration.mjs"],
+      "browser": []
+    },
     "cocina": {
       "paths": ["src/app/cocina/", "src/lib/kitchen/"],
       "dependsOn": [],
@@ -62,7 +69,7 @@
     },
     "plataforma": {
       "paths": ["src/app/page.tsx", "src/app/familia/", "src/app/api/families/"],
-      "dependsOn": ["cinemateca", "comidas", "deportes", "entrenamiento"],
+      "dependsOn": ["cinemateca", "comidas", "deportes", "entrenamiento", "galeria"],
       "nodeTests": [],
       "routeTests": [],
       "browser": []

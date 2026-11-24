@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getMemberContext } from "@/lib/auth/context";
 import { recipesEnabled } from "@/lib/recipes/config";
 import { libraryEnabled } from "@/lib/library/config";
+import { galleryEnabled } from "@/lib/gallery/config";
 import { diaryTransitioned } from "@/lib/training/diary-state";
 import { trainingEnabled, trainingHiitEnabled } from "@/lib/training/config";
 import { sportsEnabled, championsEnabled } from "@/lib/sports/config";
@@ -39,6 +40,7 @@ export default async function Experience({
   const apps = appCatalog({
     recipes: recipesEnabled(),
     library: libraryEnabled(),
+    gallery: galleryEnabled(),
     sports: sportsEnabled(),
     champions: championsEnabled(),
     training: trainingEnabled(),

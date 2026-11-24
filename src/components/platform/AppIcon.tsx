@@ -6,6 +6,7 @@ const paths: Record<AppId, string> = {
   recipes: "M4 3h13a3 3 0 0 1 3 3v15H7a3 3 0 0 1-3-3Zm3 0v18m4-13h5m-5 5h5",
   shopping: "m3 3 2 2 3 12h11l2-9H6m4 13h.01M18 21h.01",
   library: "M3 3h18v18H3Zm4 0v18M17 3v18M3 8h4m-4 8h4M17 8h4m-4 8h4",
+  gallery: "M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z",
   sports:
     "M8 3h8v8a4 4 0 0 1-8 0Zm0 2H3v3a5 5 0 0 0 5 5m8-8h5v3a5 5 0 0 1-5 5m-4 2v6m-4 0h8",
   training: "M3 9v6m3-9v12m12-12v12m3-9v6M6 12h12",

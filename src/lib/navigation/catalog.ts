@@ -5,6 +5,7 @@ export type AppId =
   | "recipes"
   | "shopping"
   | "library"
+  | "gallery"
   | "sports"
   | "training"
   | "kitchen"
@@ -20,6 +21,7 @@ export type AppDefinition = {
 export type Capabilities = {
   recipes: boolean;
   library: boolean;
+  gallery?: boolean;
   sports: boolean;
   champions: boolean;
   training: boolean;
@@ -86,6 +88,15 @@ export function appCatalog(c: Capabilities): AppDefinition[] {
             ],
           },
         ]
+      : []),
+    ...(c.gallery
+      ? [{
+          id: "gallery" as const,
+          name: "Galería",
+          href: "/galeria",
+          accent: "peach" as const,
+          sections: [{ label: "Dibujos", href: "/galeria" }],
+        }]
       : []),
     ...(c.sports
       ? [
