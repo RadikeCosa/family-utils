@@ -4,10 +4,10 @@ export type BlockKind = "work" | "rest";
 export type BlockDefinition = { name: string; kind: BlockKind; durationSeconds: number };
 export type BlockTimerConfig = { blocks: BlockDefinition[]; rounds: number; changeSeconds: number; omitFinalRest: boolean };
 export type BlockPhaseKind = BlockKind | "change";
-export type BlockPhase = { kind: BlockPhaseKind; durationMs: number; round: number; blockIndex: number; name: string; nextName: string | null };
+export type BlockPhase = { kind: BlockPhaseKind; durationMs: number; round: number; blockIndex: number; name: string; nextName: string | null; stage?: "warmup" | "exercise" | "rest"; group?: string; movement?: string; side?: "Derecho" | "Izquierdo" };
 export type BlockValidation = { field: string; message: string };
 export type BlockSnapshot = { phase: BlockPhase | null; phaseIndex: number; phaseElapsedMs: number; remainingMs: number; elapsedMs: number; totalMs: number; workMs: number; restMs: number; changeMs: number; pausedMs: number; firstWorkAt: number | null; paused: boolean; complete: boolean; sounds: string[] };
-export type BlockRun = { config: BlockTimerConfig; phases: BlockPhase[]; elapsedMs: number; lastSampleMono: number; anchorMono: number | null; anchorElapsedMs: number; lastSoundPhaseIndex: number | null; paused: boolean; complete: boolean; workMs: number; restMs: number; changeMs: number; pausedMs: number; pausedAtMono: number | null; firstWorkAt: number | null };
+export type BlockRun = { soundChanges?: boolean; config: BlockTimerConfig; phases: BlockPhase[]; elapsedMs: number; lastSampleMono: number; anchorMono: number | null; anchorElapsedMs: number; lastSoundPhaseIndex: number | null; paused: boolean; complete: boolean; workMs: number; restMs: number; changeMs: number; pausedMs: number; pausedAtMono: number | null; firstWorkAt: number | null };
 
 export const INITIAL_BLOCK_CONFIG: BlockTimerConfig = {
   blocks: [
@@ -76,7 +76,11 @@ function snapshot(run: BlockRun, sounds: string[] = []): BlockSnapshot {
 export function createBlockRun(config: BlockTimerConfig, monotonicNow: number): BlockRun {
   const errors = validateBlockTimer(config);
   if (errors.length) throw new Error(errors[0].message);
-  return { config: structuredClone(config), phases: generateBlockPhases(config), elapsedMs: 0, lastSampleMono: monotonicNow, anchorMono: monotonicNow, anchorElapsedMs: 0, lastSoundPhaseIndex: null, paused: false, complete: false, workMs: 0, restMs: 0, changeMs: 0, pausedMs: 0, pausedAtMono: null, firstWorkAt: null };
+  return createPhaseRun(config, generateBlockPhases(config), monotonicNow);
+}
+
+export function createPhaseRun(config: BlockTimerConfig, phases: BlockPhase[], monotonicNow: number, soundChanges = false): BlockRun {
+  return { soundChanges, config: structuredClone(config), phases, elapsedMs: 0, lastSampleMono: monotonicNow, anchorMono: monotonicNow, anchorElapsedMs: 0, lastSoundPhaseIndex: null, paused: false, complete: false, workMs: 0, restMs: 0, changeMs: 0, pausedMs: 0, pausedAtMono: null, firstWorkAt: null };
 }
 
 function accrue(run: BlockRun, nextElapsed: number, monotonicNow: number, wallNow: number) {
@@ -112,12 +116,12 @@ export function tickBlockRun(run: BlockRun, monotonicNow: number, wallNow: numbe
   const current = snapshot(run);
   const sounds: string[] = [];
   if (run.lastSoundPhaseIndex === null && current.phase) {
-    if (current.phase.kind !== "change") sounds.push(current.phase.kind === "rest" ? "rest" : "start");
+    if (current.phase.kind !== "change" || run.soundChanges) sounds.push(current.phase.kind === "rest" || current.phase.kind === "change" ? "rest" : "start");
     run.lastSoundPhaseIndex = current.phaseIndex;
   } else if (current.phase && current.phaseIndex > (run.lastSoundPhaseIndex ?? before.phaseIndex)) {
     for (let index = (run.lastSoundPhaseIndex ?? before.phaseIndex) + 1; index <= current.phaseIndex; index++) {
       const entered = run.phases[index];
-      if (entered && entered.kind !== "change") sounds.push(entered.kind === "rest" ? "rest" : "start");
+      if (entered && (entered.kind !== "change" || run.soundChanges)) sounds.push(entered.kind === "rest" || entered.kind === "change" ? "rest" : "start");
     }
     run.lastSoundPhaseIndex = current.phaseIndex;
   }
@@ -130,6 +134,8 @@ export function tickBlockRun(run: BlockRun, monotonicNow: number, wallNow: numbe
     const newRemaining = phase.durationMs - Math.max(0, Math.min(nextElapsed, phaseStart + phase.durationMs) - phaseStart);
     for (const seconds of [3, 2, 1]) if (oldRemaining > seconds * 1000 && newRemaining <= seconds * 1000) sounds.push(`count-${seconds}`);
   }
+  if (run.soundChanges && current.complete) return snapshot(run, ["finish"]);
+  if (run.soundChanges && current.phaseIndex !== before.phaseIndex && current.phase) return snapshot(run, [current.phase.kind === "work" ? "start" : "rest"]);
   return snapshot(run, [...new Set(sounds)]);
 }
 

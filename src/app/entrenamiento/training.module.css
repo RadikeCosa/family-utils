@@ -136,3 +136,8 @@
   .blockTimer.hiit .hiitRun { padding-inline: 4px; }
   .blockTimer.hiit .hiitClock { font-size: clamp(5.5rem, 27vw, 15rem); }
 }
+
+.strengthTimer.hiit .hiitStage { font-size:clamp(1.5rem,6vw,2.5rem); letter-spacing:.02em; line-height:1.2; }
+@media(max-height:430px) and (orientation:landscape) {
+  .strengthTimer.hiit .hiitStage { font-size:1.3rem; }
+}

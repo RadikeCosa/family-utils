@@ -274,7 +274,7 @@ transición del diario. Puede ejecutarse en modo de consulta; el guardado sigue
 requiriendo `TRAINING_DIARY_ENABLED=true`. No cambia el esquema ni crea endpoints. Admite
 preparación 0–3600 s, trabajo 1–3600 s, descanso 0–3600 s y 1–100 rondas; la
 duración total, incluida preparación y sin el descanso final, no supera cuatro
-horas. Incluye presets editables 20/10 × 8 y 40/20 × 8. La duración visible usa
+horas. La tarjeta HIIT ofrece el preset editable 40/20 × 8; Fuerza reemplaza la tarjeta 20/10. El motor conserva compatibilidad con configuraciones 20/10. La duración visible usa
 mm:ss e incluye la preparación configurada: 20/10 dura 4:00 y 40/20 dura 7:50.
 La preparación y la ausencia de descanso final se explicitan también en las
 configuraciones personalizadas. Durante la sesión, el modo foco oculta navegación
@@ -298,8 +298,8 @@ manual en dispositivos reales.
 
 ## Temporizador por bloques
 
-El modo «Por bloques» se ofrece como tercera tarjeta junto a los dos programas
-HIIT, en la misma zona del temporizador. Seleccionarlo abre su configuración;
+El modo «Por bloques» se ofrece como tercera tarjeta junto a Fuerza y al programa
+HIIT 40/20, en la misma zona del temporizador. Seleccionarlo abre su configuración;
 desde allí se puede volver a HIIT. HIIT es el modo predeterminado. Ambos modos
 mantienen configuración y sesión separadas. El circuito inicial editable propone
 bici 4:20, descanso 0:40, cuatro ejercicios de 1:00 y descanso 1:30, por seis
@@ -330,3 +330,51 @@ La sesión y su clave de operación permanecen en memoria para reintentos; no se
 guardan plantillas ni configuraciones entre recargas. El modo de consulta permite
 ejecutar y revisar, pero no registrar en el diario.
 
+
+## Temporizador guiado de fuerza
+
+Fuerza reemplaza la tarjeta 20/10 y conserva 40/20 y Por bloques. No añade
+persistencia, API, esquema ni permisos. Calentamiento y circuito usan el reloj
+monotónico compartido; solo Fuerza añade sonido al entrar en Cambio. La sesión
+y configuración viven en memoria. Repetir usa la misma configuración terminada;
+los campos no se ofrecen durante ejecución ni pausa. Ocultar la app o un salto
+superior a 2000 ms pausa; reanudar es manual.
+
+Configuración (enteros, mínimo–máximo; inicial): vueltas 1–100; 3,
+segundos por articulación 1–3600; 15, duración por lado 1–3600; 30,
+cambios dentro del grupo 0–60; 3, cambios entre grupos 0–60; 5,
+descanso entre vueltas 0–3600; 60. Vacíos y valores inválidos bloquean inicio.
+Vista previa y botón validan además el total máximo de cuatro horas, con mensaje
+visible. Cero omite la fase. Una vuelta no tiene descanso; con descanso cero,
+las vueltas se encadenan sin transición adicional.
+
+Calentamiento único: hombros, codos, muñecas, cadera, rodillas, tobillos,
+sin separar lados. Sus seis transiciones (incluida salida a abdominales) usan
+cambios entre grupos. Duración: 6 × segundos por articulación + 6 × cambio largo.
+Cada vuelta: abdominales una sola vez; hombros (flexión, extensión, aducción,
+abducción, rotación interna, rotación externa); brazos (bíceps, tríceps);
+cadera (flexión, extensión, aducción, abducción); rodillas (flexión, extensión);
+tobillos (flexión plantar). Cada movimiento salvo abdominales se hace derecho
+y luego izquierdo antes de pasar al siguiente. Hay 31 bloques activos,
+25 cambios internos y 5 cambios entre grupos por vuelta. Descanso entre vueltas
+reemplaza todo cambio; no hay descanso ni cambio final.
+
+Por defecto: calentamiento y salida 2:00; cada vuelta 17:10; dos descansos de
+1:00; total 55:30. Vista previa resume etapas y permite expandir una sola vuelta.
+Cartel grande con movimiento y lado, reloj (oculto en Cambio), etapa, vuelta
+y siguiente ejercicio. Sonido opcional: 660 Hz corto al entrar en actividad,
+440 Hz corto al entrar en cambio o descanso; cuenta de 3/2/1 con tono corto
+solo en actividad o descanso de más de 3 s; 880 Hz largo al finalizar. Sin cuenta
+sonora en cambios ni señales para fases omitidas. En una frontera solo suena la
+fase entrante; al finalizar, solo el tono final. Reutiliza el aviso de audio no
+disponible y permite continuar visualmente.
+
+El resumen editable «Entrenamiento de fuerza» separa calentamiento, ejercicios,
+descansos, cambios y pausas ejecutados. Por decisión deliberada el diario suma
+calentamiento + ejercicios + descansos entre vueltas, excluyendo cambios y pausas.
+El calentamiento aporta 1:30 registrado de 2:00 planificados; una sesión completa
+aporta 50:00 de 55:30, con 5:30 de cambios excluidos. El resumen explica la
+diferencia. Requiere un segundo activo (también calentamiento), usa fecha civil
+familiar de la primera actividad y conserva la clave de operación en reintentos.
+El modo de consulta ejecuta y revisa sin registrar. Audio, Wake Lock y suficiencia
+de los cambios de 3 s quedan sujetos a prueba manual en dispositivo real.
