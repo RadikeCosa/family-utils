@@ -6,8 +6,8 @@ import { formatActivityDuration } from "@/lib/training/timing";
 import DiaryEditor, { type DiaryEditorTarget } from "./DiaryEditor";
 import styles from "./training.module.css";
 
-const INITIAL: HiitConfig = { preparationSeconds: 10, workSeconds: 20, restSeconds: 10, rounds: 8 };
-type Props = { active: boolean; timeZone: string; today: string; writable: boolean; activityFormEnabled: boolean; onSaved: (entry: EntryResponse["item"]) => void; onUncertainChange: (uncertain: boolean) => void; onSelectBlocks: () => void };
+const INITIAL: HiitConfig = { preparationSeconds: 10, workSeconds: 40, restSeconds: 20, rounds: 8 };
+type Props = { active: boolean; timeZone: string; today: string; writable: boolean; activityFormEnabled: boolean; onSaved: (entry: EntryResponse["item"]) => void; onUncertainChange: (uncertain: boolean) => void; onSelectStrength: () => void; onSelectBlocks: () => void };
 function formatClock(ms: number) { const seconds = Math.ceil(ms / 1000); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; }
 function tone(context: AudioContext | null, kind: string) {
   if (!context || context.state !== "running") return;
@@ -15,7 +15,7 @@ function tone(context: AudioContext | null, kind: string) {
   oscillator.frequency.value = kind === "finish" ? 880 : kind === "rest" ? 440 : 660; gain.gain.value = .08;
   oscillator.start(); oscillator.stop(context.currentTime + (kind === "finish" ? .32 : .12));
 }
-export default function HiitTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange, onSelectBlocks }: Props) {
+export default function HiitTimer({ active, timeZone, today, writable, activityFormEnabled, onSaved, onUncertainChange, onSelectBlocks, onSelectStrength }: Props) {
   const [config, setConfig] = useState<HiitConfig>(INITIAL), [view, setView] = useState<"setup" | "run" | "summary">("setup");
   const [display, setDisplay] = useState<HiitSnapshot | null>(null), [sound, setSound] = useState(true), [capability, setCapability] = useState(""), [error, setError] = useState(""), [editor, setEditor] = useState<DiaryEditorTarget | null>(null), [registered, setRegistered] = useState<{ id: string; date: string } | null>(null), [focusMode, setFocusMode] = useState(true);
   const run = useRef<HiitRun | null>(null), audio = useRef<AudioContext | null>(null), wake = useRef<WakeLockSentinel | null>(null), timer = useRef<number | null>(null), summaryKey = useRef<string | null>(null), sessionDate = useRef<string | null>(null), editorOpener = useRef<HTMLElement | null>(null), titleRef = useRef<HTMLHeadingElement>(null), startRef = useRef<HTMLButtonElement>(null), pauseControl = useRef<HTMLButtonElement>(null), focusControl = useRef<HTMLButtonElement>(null), pauseRef = useRef<() => void>(() => {}), activeHref = useRef(""), soundRef = useRef(sound), uncertainRef = useRef(false);
@@ -104,8 +104,9 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
     {editor ? <DiaryEditor key={`hiit-${editor.operationKey ?? "new"}`} target={editor} today={today} activityFormEnabled={activityFormEnabled} onClose={() => { setEditor(null); requestAnimationFrame(() => editorOpener.current?.focus()); }} onSaved={saved} onUncertainChange={handleUncertainChange} /> : view === "setup" ? <>
       <div className={styles.hiitSetup}>
         <section className={styles.hiitPrograms} aria-label="Programas de intervalos">
-          {HIIT_PRESETS.map((preset, index) => <button type="button" key={preset.name} aria-pressed={!!currentPreset && currentPreset.name === preset.name} className={`${styles.hiitPreset} ${currentPreset?.name === preset.name ? styles.hiitPresetSelected : ""}`} onClick={() => setConfig({ ...preset.config })}>
-            <strong>{index === 0 ? "Intervalos 20/10" : "Intervalos 40/20"}</strong>
+          <button type="button" className={styles.hiitPreset} onClick={onSelectStrength}><strong>Fuerza</strong><span>Entrada en calor · 3 vueltas · 30 s por lado</span><span>55:30 iniciales</span></button>
+          {HIIT_PRESETS.filter(preset => preset.config.workSeconds !== 20).map((preset) => <button type="button" key={preset.name} aria-pressed={!!currentPreset && currentPreset.name === preset.name} className={`${styles.hiitPreset} ${currentPreset?.name === preset.name ? styles.hiitPresetSelected : ""}`} onClick={() => setConfig({ ...preset.config })}>
+            <strong>Intervalos 40/20</strong>
             <span>{preset.config.workSeconds} s de trabajo · {preset.config.restSeconds} s de descanso</span>
             <span>8 rondas · {formatClock(hiitTotalMs(preset.config))} en total</span>
           </button>)}

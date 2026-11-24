@@ -18,8 +18,8 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.goto(`${server.origin}/entrenamiento?seccion=temporizador`);
   await expect(page.getByRole("heading", { name: "Temporizador" })).toBeVisible();
   await expect(page.locator('a[href="/entrenamiento?seccion=temporizador"][aria-current="page"]')).not.toHaveCount(0);
-  await page.getByRole("button", { name: /Intervalos 20\/10/ }).click();
-  await expect(page.locator('[aria-label="Duración prevista 4:00"]')).toBeVisible();
+  await page.getByRole("button", { name: /Intervalos 40\/20/ }).click();
+  await expect(page.locator('[aria-label="Duración prevista 7:50"]')).toBeVisible();
   await expect(page.getByText("Incluye 0:10 de preparación. Sin descanso al terminar.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Iniciar entrenamiento" })).toBeInViewport();
   if (isMobile) await page.screenshot({ path: `${visualDir}/setup-${testInfo.project.name}.png` });
@@ -33,7 +33,7 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.getByRole("button", { name: /Intervalos 40\/20/ }).click();
   await expect(page.locator('[aria-label="Duración prevista 7:50"]')).toBeVisible();
   await expect(page.getByText("Incluye 0:10 de preparación. Sin descanso al terminar.")).toBeVisible();
-  await page.getByRole("button", { name: /Intervalos 20\/10/ }).click();
+  await page.getByRole("button", { name: /Intervalos 40\/20/ }).click();
   await page.getByText("Personalizar tiempos").click();
   await page.getByLabel("Preparación (segundos)").fill("0");
   await page.getByLabel("Trabajo (segundos)").fill("4");
@@ -68,7 +68,7 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.getByLabel("Trabajo (segundos)").fill("4");
   await page.getByLabel("Rondas").fill("1");
   await expect(startButton).toBeEnabled();
-  await page.clock.pauseAt(new Date());
+  await page.clock.pauseAt(new Date(Date.now() + 1_000));
   await page.getByRole("button", { name: "Iniciar entrenamiento" }).click();
   await expect(page.locator('[data-focus-mode="true"]')).toBeVisible();
   await page.clock.runFor(100);
