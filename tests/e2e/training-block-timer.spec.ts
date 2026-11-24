@@ -33,10 +33,10 @@ test("Por bloques muestra el circuito inicial y pasa accesibilidad en configurac
   await page.getByRole("button", { name: "Por bloques" }).click();
   await expect(page.getByText("Duración prevista: 63:30")).toBeVisible();
   await expect(page.getByLabel("Cambio (segundos)")).toHaveValue("3");
-  await page.getByRole("button", { name: "Agregar bloque" }).click();
-  await expect(page.getByLabel("Duración del bloque 8 (segundos)")).toHaveValue("300");
   await expect(page.getByLabel("Duración del bloque 1 (segundos)")).toHaveValue("260");
   await expect(page.getByLabel("Omitir el último descanso al finalizar el circuito")).toBeChecked();
+  await page.getByRole("button", { name: "Agregar bloque" }).click();
+  await expect(page.getByLabel("Duración del bloque 8 (segundos)")).toHaveValue("300");
   const results = await new AxeBuilder({ page }).include('[data-testid="block-timer-screen"]').analyze();
   expect(results.violations).toEqual([]);
 });
