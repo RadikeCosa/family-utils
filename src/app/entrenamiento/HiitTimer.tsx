@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { EntryResponse } from "@/lib/training/diary-client";
 import { createHiitRun, finishHiit, HIIT_PRESETS, hiitCanRegister, hiitCivilDate, hiitTotalMs, pauseHiit, resumeHiit, tickHiit, validateHiitConfig, type HiitConfig, type HiitRun, type HiitSnapshot } from "@/lib/training/hiit";
 import { formatActivityDuration } from "@/lib/training/timing";
@@ -23,7 +23,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
   const configError = validateHiitConfig(config), duration = hiitTotalMs(config);
   const timerPaused = display?.paused ?? null;
   useEffect(() => { if (view === "summary") titleRef.current?.focus(); }, [view]);
-  useEffect(() => { if (view === "run" && timerPaused !== null) requestAnimationFrame(() => pauseControl.current?.focus()); }, [view, timerPaused]);
+  useLayoutEffect(() => { if (view === "run" && timerPaused !== null) pauseControl.current?.focus(); }, [view, timerPaused]);
   useEffect(() => { soundRef.current = sound; }, [sound]);
   useEffect(() => { if (!active && run.current && !registered) { stopTicker(); releaseWake(); run.current = null; setDisplay(null); setEditor(null); setView("setup"); summaryKey.current = null; } }, [active, registered]);
   useEffect(() => { if (active) activeHref.current = location.href; }, [active]);
@@ -39,7 +39,6 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
     const now = Date.now();
     try { run.current = createHiitRun(config, now); } catch (failure) { setError((failure as Error).message); return; }
     setError(""); setRegistered(null); sessionDate.current = null; summaryKey.current = null; setDisplay(null); setFocusMode(true); setView("run");
-    requestAnimationFrame(() => pauseControl.current?.focus());
     const Audio = window.AudioContext;
     if (Audio) { audio.current ??= new Audio(); void audio.current.resume().then(() => play("start")).catch(() => setCapability("El sonido no está disponible; podés seguir con la pantalla.")); }
     else setCapability("Este navegador no ofrece avisos sonoros.");
