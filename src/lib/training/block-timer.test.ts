@@ -7,7 +7,7 @@ function config(overrides: Partial<BlockTimerConfig> = {}): BlockTimerConfig {
 }
 
 test("circuito inicial suma 67:30 con el descanso final omitido y cambios de 3 segundos", () => {
-  assert.equal(generateBlockPhases(INITIAL_BLOCK_CONFIG).reduce((sum, phase) => sum + phase.durationMs, 0), 63 * 60_000 + 30_000);
+  assert.equal(generateBlockPhases(INITIAL_BLOCK_CONFIG).reduce((sum, phase) => sum + phase.durationMs, 0), 67 * 60_000 + 30_000);
   assert.equal(INITIAL_BLOCK_CONFIG.changeSeconds, 3);
   assert.ok(generateBlockPhases(INITIAL_BLOCK_CONFIG).filter(phase => phase.kind === "change").every(phase => phase.durationMs === 3000));
 });
