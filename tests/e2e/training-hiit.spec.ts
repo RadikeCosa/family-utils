@@ -10,6 +10,8 @@ test("HIIT timer previews a preset, records a completed short session and protec
   const visualDir = process.env.HIIT_VISUAL_QA_DIR ?? "test-results/hiit-visual";
   await mkdir(visualDir, { recursive: true });
   await db.pool.query("SELECT public.training_diary_transition()");
+  const clockStart = new Date();
+  await page.clock.install({ time: clockStart });
   const profile = await diaryProfile(server, "Alex", db.pool);
   const cookies = profile.cookie.split("; ").map(item => { const [name, ...rest] = item.split("="); return { name, value: rest.join("="), url: server.origin }; });
   await context.addCookies(cookies);
@@ -66,8 +68,10 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.getByLabel("Trabajo (segundos)").fill("4");
   await page.getByLabel("Rondas").fill("1");
   await expect(startButton).toBeEnabled();
+  await page.clock.pauseAt(new Date());
   await page.getByRole("button", { name: "Iniciar entrenamiento" }).click();
   await expect(page.locator('[data-focus-mode="true"]')).toBeVisible();
+  await page.clock.runFor(100);
   await expect(page.getByRole("button", { name: "Pausar" })).toBeFocused();
   if (isMobile) await expect(page.getByRole("navigation", { name: "Navegación de la página" })).toBeHidden();
   else await expect(page.getByRole("navigation", { name: "Aplicaciones" })).toBeHidden();
@@ -91,8 +95,12 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.getByRole("button", { name: "Volver al modo foco" }).click();
   await expect(page.locator('[data-focus-mode="true"]')).toBeVisible();
   await page.getByRole("button", { name: "Pausar" }).click();
+  await expect(page.getByRole("button", { name: "Reanudar" })).toBeVisible();
+  await page.clock.runFor(100);
   await expect(page.getByRole("button", { name: "Reanudar" })).toBeFocused();
   await page.getByRole("button", { name: "Reanudar" }).click();
+  await expect(page.getByRole("button", { name: "Pausar" })).toBeVisible();
+  await page.clock.runFor(4_000);
   await expect(page.getByRole("heading", { name: "Entrenamiento completo" })).toBeVisible({ timeout: 10000 });
   await page.getByRole("button", { name: "Registrar en mi diario" }).click();
   await expect(page.getByLabel("Duración (minutos, opcional)")).toHaveValue("1");

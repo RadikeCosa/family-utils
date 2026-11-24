@@ -41,6 +41,7 @@ abandonadas y credenciales vencidas, y retira originales temporales que quedaron
 tras procesar correctamente un dibujo.
 
 La bandera `GALLERY_ENABLED` queda apagada por defecto y no reemplaza permisos
-del servidor. El respaldo cifrado debe cubrir tablas, índices, restricciones,
-nombres originales, hashes e invitaciones. Recuperación: apagar la bandera;
-conservar las migraciones aditivas.
+del servidor. La migración 0070 concede lectura al rol de respaldo cifrado para
+las tablas de Galería; el trabajo diario usa `pg_dump` completo y verifica una
+restauración en PostgreSQL 18. Recuperación: apagar la bandera; conservar las
+migraciones aditivas.

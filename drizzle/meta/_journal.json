@@ -421,6 +421,13 @@
       "when": 1795129850866,
       "tag": "0069_gallery_core",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795539423830,
+      "tag": "0070_gallery_backup_reader",
+      "breakpoints": true
     }
   ]
 }
