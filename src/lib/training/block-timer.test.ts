@@ -6,8 +6,10 @@ function config(overrides: Partial<BlockTimerConfig> = {}): BlockTimerConfig {
   return { blocks: [{ name: "Uno", kind: "work", durationSeconds: 10 }, { name: "Pausa", kind: "rest", durationSeconds: 5 }], rounds: 1, changeSeconds: 2, omitFinalRest: false, ...overrides };
 }
 
-test("circuito inicial suma 62:50 con el descanso final omitido", () => {
-  assert.equal(generateBlockPhases(INITIAL_BLOCK_CONFIG).reduce((sum, phase) => sum + phase.durationMs, 0), 62 * 60_000 + 50_000);
+test("circuito inicial suma 63:30 con el descanso final omitido y cambios de 3 segundos", () => {
+  assert.equal(generateBlockPhases(INITIAL_BLOCK_CONFIG).reduce((sum, phase) => sum + phase.durationMs, 0), 63 * 60_000 + 30_000);
+  assert.equal(INITIAL_BLOCK_CONFIG.changeSeconds, 3);
+  assert.ok(generateBlockPhases(INITIAL_BLOCK_CONFIG).filter(phase => phase.kind === "change").every(phase => phase.durationMs === 3000));
 });
 test("una vuelta, cambio cero y omisión aplicada solo al descanso final", () => {
   assert.equal(generateBlockPhases(config({ rounds: 1, changeSeconds: 0 })).reduce((sum, p) => sum + p.durationMs, 0), 15_000);
