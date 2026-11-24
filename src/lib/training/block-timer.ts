@@ -18,7 +18,7 @@ export const INITIAL_BLOCK_CONFIG: BlockTimerConfig = {
     { name: "Ejercicio 3", kind: "work", durationSeconds: 60 },
     { name: "Ejercicio 4", kind: "work", durationSeconds: 60 },
     { name: "Descanso", kind: "rest", durationSeconds: 90 },
-  ], rounds: 6, changeSeconds: 2, omitFinalRest: true,
+  ], rounds: 6, changeSeconds: 3, omitFinalRest: true,
 };
 
 export function generateBlockPhases(config: BlockTimerConfig): BlockPhase[] {
