@@ -11,7 +11,7 @@ export type BlockRun = { config: BlockTimerConfig; phases: BlockPhase[]; elapsed
 
 export const INITIAL_BLOCK_CONFIG: BlockTimerConfig = {
   blocks: [
-    { name: "Bici", kind: "work", durationSeconds: 260 },
+    { name: "Bici", kind: "work", durationSeconds: 300 },
     { name: "Descanso", kind: "rest", durationSeconds: 40 },
     { name: "Ejercicio 1", kind: "work", durationSeconds: 60 },
     { name: "Ejercicio 2", kind: "work", durationSeconds: 60 },

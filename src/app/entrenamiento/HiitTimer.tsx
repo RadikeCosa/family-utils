@@ -112,7 +112,7 @@ export default function HiitTimer({ active, timeZone, today, writable, activityF
           <button type="button" className={styles.hiitPreset} onClick={onSelectBlocks}>
             <strong>Por bloques</strong>
             <span>Circuito editable · 6 vueltas</span>
-            <span>63:30 iniciales</span>
+            <span>67:30 iniciales</span>
           </button>
         </section>
         <button ref={startRef} type="button" className={styles.primary} disabled={!!configError} onClick={start}>Iniciar entrenamiento</button>
