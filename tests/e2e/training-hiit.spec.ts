@@ -70,8 +70,8 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await expect(startButton).toBeEnabled();
   await page.clock.pauseAt(new Date());
   await page.getByRole("button", { name: "Iniciar entrenamiento" }).click();
-  await page.clock.runFor(100);
   await expect(page.locator('[data-focus-mode="true"]')).toBeVisible();
+  await page.clock.runFor(100);
   await expect(page.getByRole("button", { name: "Pausar" })).toBeFocused();
   if (isMobile) await expect(page.getByRole("navigation", { name: "Navegación de la página" })).toBeHidden();
   else await expect(page.getByRole("navigation", { name: "Aplicaciones" })).toBeHidden();
@@ -95,6 +95,8 @@ test("HIIT timer previews a preset, records a completed short session and protec
   await page.getByRole("button", { name: "Volver al modo foco" }).click();
   await expect(page.locator('[data-focus-mode="true"]')).toBeVisible();
   await page.getByRole("button", { name: "Pausar" }).click();
+  await expect(page.getByRole("button", { name: "Reanudar" })).toBeVisible();
+  await page.clock.runFor(100);
   await expect(page.getByRole("button", { name: "Reanudar" })).toBeFocused();
   await page.getByRole("button", { name: "Reanudar" }).click();
   await expect(page.getByRole("button", { name: "Pausar" })).toBeVisible();
