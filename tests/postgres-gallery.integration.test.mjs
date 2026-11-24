@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import pg from "pg";
 
 const connectionString = process.env.FAMILY_UTILS_TEST_DATABASE_URL;
@@ -48,6 +49,27 @@ test("gallery schema isolates authorship, family rows, hashes, and private invit
       [familyId, collectionId, invitationId, "d".repeat(64)],
     );
     await expectSqlFailure(client, "INSERT INTO gallery_guest_sessions(family_id,collection_id,invitation_id,session_hash,expires_at) VALUES($1,$2,$3,$4,now()+interval '7 days')", [otherFamilyId, collectionId, invitationId, "e".repeat(64)], "23503");
+  } finally {
+    await client.query("ROLLBACK");
+    await client.end();
+  }
+});
+
+test("gallery tables are readable by the encrypted-backup role", { skip: !connectionString, timeout: 30_000 }, async () => {
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    await client.query("BEGIN");
+    const exists = (await client.query("SELECT 1 FROM pg_roles WHERE rolname='family_utils_backup_reader'")).rowCount > 0;
+    if (!exists) await client.query("CREATE ROLE family_utils_backup_reader");
+    const migration = await readFile(new URL("../drizzle/0070_gallery_backup_reader.sql", import.meta.url), "utf8");
+    await client.query(migration);
+    const privileges = await client.query(`
+      SELECT table_name, has_table_privilege('family_utils_backup_reader', format('public.%I', table_name), 'SELECT') AS can_read
+      FROM unnest(ARRAY['gallery_drawings','gallery_collections','gallery_collection_drawings','gallery_invitations','gallery_guest_sessions']) AS table_name
+    `);
+    assert.equal(privileges.rowCount, 5);
+    assert.ok(privileges.rows.every(row => row.can_read), "backup role must read every Gallery table");
   } finally {
     await client.query("ROLLBACK");
     await client.end();
