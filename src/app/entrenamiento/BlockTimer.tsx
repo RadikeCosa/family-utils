@@ -135,7 +135,7 @@ export default function BlockTimer({ active, timeZone, today, writable, activity
       <button type="submit" className={styles.primary} disabled={errors.length > 0}>Iniciar circuito</button>
     </form> : view === "run" && display ? <div className={`${styles.hiitRun} ${display.phase?.kind === "work" ? styles["hiit-work"] : display.phase?.kind === "rest" ? styles["hiit-rest"] : styles["hiit-preparation"]}`}>
       <p className={styles.hiitStage}>{display.phase?.kind === "change" ? "CAMBIO" : display.phase?.kind === "rest" ? "Descanso" : display.phase?.name ?? "Finalizado"}</p>
-      {display.phase?.kind !== "change" && <p className={styles.hiitClock} aria-live="off">{formatClock(display.remainingMs)}</p>
+      {display.phase?.kind !== "change" && <p className={styles.hiitClock} aria-live="off">{formatClock(display.remainingMs)}</p>}
       <p className={styles.hiitRound}>{display.phase ? `Vuelta ${display.phase.round} de ${config.rounds}` : "Finalizado"}</p>
       <p className={styles.hiitAnnouncement} role="status" aria-live="polite" aria-atomic="true">{display.paused ? "Pausado · " : ""}{completed}{display.phase?.kind === "change" ? ` · sigue ${display.phase.nextName}` : display.phase?.nextName ? ` · después: ${display.phase.nextName}` : " · fin de sesión"}</p>
       <progress max={display.totalMs} value={display.elapsedMs} aria-label="Progreso del circuito" />
