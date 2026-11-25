@@ -11,7 +11,7 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
     contentType: "application/json",
     body: JSON.stringify({ ok: true, shareId: "share-test", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
   }));
-  await page.route("**/api/gallery/public/session", route => route.fulfill({
+  await page.route("**/api/gallery/public/session**", route => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ shareId: "share-test", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
@@ -79,7 +79,7 @@ test("a display image finishing after revocation cannot repopulate the public vi
     status: 200, contentType: "application/json",
     body: JSON.stringify({ ok: true, shareId: "share-revoked", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
   }));
-  await page.route("**/api/gallery/public/session", route => route.fulfill({
+  await page.route("**/api/gallery/public/session**", route => route.fulfill({
     status: 410, contentType: "application/json", body: JSON.stringify({ error: "LINK_UNAVAILABLE" }),
   }));
   await page.route("**/api/gallery/public/shares/share-revoked", route => route.fulfill({
