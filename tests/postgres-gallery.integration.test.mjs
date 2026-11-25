@@ -105,6 +105,10 @@ test("timed shares enforce family scoped snapshots and sessions", { skip: !conne
       "INSERT INTO gallery_drawings(family_id,author_member_id,original_name,original_sha256,original_bytes,source_mime_type) VALUES($1,$2,'fake.png',$3,100,'image/png') RETURNING id",
       [familyId, memberId, "f".repeat(64)],
     )).rows[0].id;
+    const otherDrawingId = (await client.query(
+      "INSERT INTO gallery_drawings(family_id,author_member_id,original_name,original_sha256,original_bytes,source_mime_type) VALUES($1,$2,'other-fake.png',$3,100,'image/png') RETURNING id",
+      [otherFamilyId, otherMemberId, "9".repeat(64)],
+    )).rows[0].id;
     const shareId = (await client.query(
       "INSERT INTO gallery_shares(family_id,created_by_member_id,token_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour') RETURNING id",
       [familyId, memberId, "1".repeat(64)],
@@ -119,7 +123,7 @@ test("timed shares enforce family scoped snapshots and sessions", { skip: !conne
     );
     await expectSqlFailure(client,
       "INSERT INTO gallery_share_drawings(share_id,family_id,author_member_id,drawing_id,position) VALUES($1,$2,$3,$4,1)",
-      [shareId, otherFamilyId, otherMemberId, drawingId], "23503");
+      [shareId, otherFamilyId, otherMemberId, otherDrawingId], "23503");
     await expectSqlFailure(client,
       "INSERT INTO gallery_share_sessions(family_id,share_id,session_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",
       [otherFamilyId, shareId, "3".repeat(64)], "23503");
