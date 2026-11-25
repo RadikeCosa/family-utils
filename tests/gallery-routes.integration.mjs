@@ -198,6 +198,35 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     const expiredPage = await request({ cookie: expiringCookie }, `/api/gallery/public/shares/${expiringShare.body.id}`);
     assert.equal(expiredPage.status, 410);
     assert.equal(expiredPage.body.error, revokedPage.body.error, "expired and revoked links are indistinguishable");
+
+    const paginationDrawings = await Promise.all(Array.from({ length: 22 }, (_, index) => drawing(owner.id, String(index + 4).padStart(64, "0"))));
+    const paginatedShare = await request(owner, "/api/gallery/shares", "POST", {});
+    assert.equal(paginatedShare.status, 201);
+    const paginatedToken = new URLSearchParams(new URL(paginatedShare.body.url).hash.slice(1)).get("token");
+    const paginatedEntry = await request(null, "/api/gallery/public/enter", "POST", { token: paginatedToken });
+    assert.equal(paginatedEntry.status, 200);
+    const paginatedCookie = paginatedEntry.response.headers.getSetCookie().find(value => value.startsWith("fu_gallery_session_dev="))?.split(";", 1)[0];
+    assert.ok(paginatedCookie);
+    const paginatedGuest = { cookie: paginatedCookie };
+    await delay(250);
+    const firstPage = await request(paginatedGuest, `/api/gallery/public/shares/${paginatedShare.body.id}`);
+    assert.equal(firstPage.status, 200);
+    assert.equal(firstPage.body.drawings.length, 24);
+    assert.ok(firstPage.body.nextCursor);
+
+    const revokeTransaction = await pool.connect();
+    try {
+      await revokeTransaction.query("BEGIN");
+      await revokeTransaction.query("UPDATE gallery_shares SET revoked_at=now() WHERE id=$1", [paginatedShare.body.id]);
+      const pendingPage = request(paginatedGuest, `/api/gallery/public/shares/${paginatedShare.body.id}?cursor=${firstPage.body.nextCursor}`);
+      await delay(300);
+      await revokeTransaction.query("COMMIT");
+      assert.equal((await pendingPage).status, 410, "a page racing with revocation cannot return drawings after revocation commits");
+    } catch (error) {
+      await revokeTransaction.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally { revokeTransaction.release(); }
+    await pool.query("DELETE FROM gallery_drawings WHERE id=ANY($1::uuid[])", [paginationDrawings]);
   } finally {
     server.kill();
     if (families.length) await pool.query("DELETE FROM families WHERE id=ANY($1::uuid[])", [families]);
