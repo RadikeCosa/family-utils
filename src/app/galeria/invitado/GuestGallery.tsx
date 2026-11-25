@@ -74,6 +74,19 @@ export default function GuestGallery() {
       }
       if (!response.ok) throw new Error("El acceso venció o fue revocado.");
       const objectUrl = URL.createObjectURL(await response.blob());
+      if (key.endsWith(":display")) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const image = new window.Image();
+            image.onload = () => resolve();
+            image.onerror = () => reject(new Error("No se pudo decodificar el dibujo."));
+            image.src = objectUrl;
+          });
+        } catch (error) {
+          URL.revokeObjectURL(objectUrl);
+          throw error;
+        }
+      }
       objectUrls.current.set(key, objectUrl);
       setImageUrls(current => ({ ...current, [key]: objectUrl }));
       await new Promise(resolve => setTimeout(resolve, 220));
