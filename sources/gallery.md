@@ -18,6 +18,12 @@ Archivar un dibujo lo oculta en todos los accesos. Retirarlo de una colección s
 
 Las invitaciones anteriores conservan sus reglas (24 horas para canje y siete días de sesión), se muestran como “invitación anterior” y se pueden revocar en la gestión. No se convierten ni extienden.
 
+## Visor de dibujos y archivado
+
+El visor presenta la imagen completa, centrada y con su proporción preservada. La navegación accesible queda debajo de un área de imagen estable en las vistas familiares, compartidas y de invitación. Escape cierra el diálogo, que devuelve el foco al dibujo que lo abrió; las flechas izquierda y derecha navegan entre dibujos y se ignoran en campos editables o con modificadores.
+
+El autor o un administrador pueden archivar desde el detalle tras confirmar que se ocultará de la Galería y de sus accesos compartidos. La operación existente actualiza listados y colecciones, invalida las inclusiones de enlaces y hace que las rutas de imagen rechacen dibujos archivados. Archivar no borra el original ni agrega detección automática de dibujos repetidos.
+
 ## Datos, auditoría y límites
 
 Las tablas nuevas son `gallery_shares`, `gallery_share_drawings` y `gallery_share_sessions`, con claves compuestas que preservan la familia. No guardamos nombre de visitante, IP cruda, agente del navegador ni historial de imágenes. Los eventos mínimos de creación y revocación se escriben en `audit_events` junto con la acción, sin tokens, cookies, URLs secretas ni hashes en auditoría o logs. La auditoría se conserva 90 días; sesiones vencidas o revocadas y enlaces terminales con sus inclusiones se purgan después de 30 días.
