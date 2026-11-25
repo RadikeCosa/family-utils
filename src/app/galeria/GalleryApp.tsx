@@ -15,10 +15,11 @@ type GalleryItem = {
   displayUrl: string;
   thumbnailUrl: string;
 };
-type CollectionItem = { id: string; ownerMemberId: string; title: string; description: string; version: number; drawingCount: number; activeInvitationCount: number };
+type CollectionItem = { id: string; ownerMemberId: string; title: string; description: string; version: number; drawingCount: number; activeInvitationCount: number; coverUrls: string[] };
 type InviteItem = { id: string; createdAt: string; expiresAt: string; redeemedAt: string | null; revokedAt: string | null };
+type ShareItem = { id: string; collectionId: string | null; collectionTitle: string | null; createdAt: string; expiresAt: string; revokedAt: string | null; active: boolean; activeSessions: number; totalDrawings: number; activeDrawings: number };
 
-export default function GalleryApp({ currentMemberId, canManageAll }: { currentMemberId: string; canManageAll: boolean }) {
+export default function GalleryApp({ currentMemberId, canManageAll, canShareTemporarily }: { currentMemberId: string; canManageAll: boolean; canShareTemporarily: boolean }) {
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [collections, setCollections] = useState<CollectionItem[]>([]);
   const [openCollection, setOpenCollection] = useState<{ collection: CollectionItem; drawings: GalleryItem[] } | null>(null);
@@ -33,9 +34,13 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
   const [editingTitle, setEditingTitle] = useState("");
   const [editingDescription, setEditingDescription] = useState("");
   const [shareLink, setShareLink] = useState("");
+  const [shares, setShares] = useState<ShareItem[]>([]);
+  const [shareDuration, setShareDuration] = useState<"1h" | "24h" | "7d">("24h");
+  const [shareExpiryPreview, setShareExpiryPreview] = useState<Date | null>(null);
   const [invitationView, setInvitationView] = useState<{ collectionId: string; items: InviteItem[] } | null>(null);
-  const [sharePreview, setSharePreview] = useState<{ collection: CollectionItem; drawings: GalleryItem[] } | null>(null);
+  const [sharePreview, setSharePreview] = useState<{ collection: CollectionItem | null; drawings: GalleryItem[]; scopeTitle: string } | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const dialogOpener = useRef<HTMLElement | null>(null);
 
   const refresh = useCallback(async () => {
     const [response, collectionResponse] = await Promise.all([
@@ -45,6 +50,21 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
     const data = await response.json() as { items: GalleryItem[] };
     const collectionData = await collectionResponse.json() as { collections: CollectionItem[] };
     setItems(data.items); setCollections(collectionData.collections);
+  }, []);
+
+  const loadCollection = useCallback(async (collectionId: string, navigate = false) => {
+    const response = await fetch(`/api/gallery/collections/${collectionId}`, { cache: "no-store" });
+    if (!response.ok) { setMessage("No se pudo abrir la colección."); return false; }
+    const data = await response.json() as { collection: CollectionItem; drawings: GalleryItem[] };
+    setOpenCollection(data);
+    if (navigate) {
+      const url = new URL(window.location.href); url.searchParams.set("coleccion", collectionId);
+      window.history.pushState({ galleryCollection: collectionId }, "", url);
+    }
+    setEditingTitle(data.collection.title);
+    setEditingDescription(data.collection.description);
+    setEditingCollection(false);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -60,11 +80,24 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
     return () => { active = false; };
   }, []);
 
+  useEffect(() => { if (canShareTemporarily) void refreshShares().catch(() => undefined); }, [canShareTemporarily]);
+
+  useEffect(() => {
+    const openFromUrl = () => {
+      const collectionId = new URLSearchParams(window.location.search).get("coleccion");
+      if (!collectionId) { setOpenCollection(null); return; }
+      if (collections.some(collection => collection.id === collectionId)) void loadCollection(collectionId);
+    };
+    window.addEventListener("popstate", openFromUrl);
+    openFromUrl();
+    return () => window.removeEventListener("popstate", openFromUrl);
+  }, [collections, loadCollection]);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (selected && !dialog.open) dialog.showModal();
-    if (!selected && dialog.open) dialog.close();
+    if (!selected && dialog.open) { dialog.close(); dialogOpener.current?.focus(); dialogOpener.current = null; }
   }, [selected]);
 
   async function startUpload(file: File) {
@@ -87,6 +120,19 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
       const result = await finalize.json().catch(() => ({})) as { error?: string };
       throw new Error(result.error === "QUOTA_EXCEEDED" ? "No hay espacio suficiente para guardar este dibujo." : "No se pudo procesar un dibujo.");
     }
+  }
+
+  function openDrawing(item: GalleryItem, opener: HTMLElement) {
+    dialogOpener.current = opener;
+    setSelected(item);
+  }
+
+  function moveFamilyDrawing(direction: -1 | 1) {
+    if (!selected) return;
+    const visible = openCollection?.drawings ?? items;
+    const index = visible.findIndex(item => item.id === selected.id);
+    const next = visible[index + direction];
+    if (next) setSelected(next);
   }
 
   async function handleFiles(files: FileList | null) {
@@ -129,14 +175,14 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
     setCollectionTitle(""); setCollectionDescription(""); await refresh(); setMessage("Colección creada.");
   }
 
-  async function showCollection(collection: CollectionItem) {
-    const response = await fetch(`/api/gallery/collections/${collection.id}`, { cache: "no-store" });
-    if (!response.ok) { setMessage("No se pudo abrir la colección."); return; }
-    const data = await response.json() as { collection: CollectionItem; drawings: GalleryItem[] };
-    setOpenCollection(data);
-    setEditingTitle(data.collection.title);
-    setEditingDescription(data.collection.description);
-    setEditingCollection(false);
+  async function showCollection(collection: CollectionItem, navigate = true) {
+    await loadCollection(collection.id, navigate);
+  }
+
+  function closeCollection() {
+    setOpenCollection(null);
+    const url = new URL(window.location.href); url.searchParams.delete("coleccion");
+    window.history.pushState({}, "", url);
   }
 
   async function saveCollection(event: React.FormEvent<HTMLFormElement>) {
@@ -153,30 +199,56 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
     }
     if (!response.ok) { setMessage("No se pudieron guardar los cambios."); return; }
     setEditingCollection(false);
-    await refresh(); await showCollection(openCollection.collection); setMessage("Colección actualizada.");
+    await refresh(); await showCollection(openCollection.collection, false); setMessage("Colección actualizada.");
   }
 
   async function showSharePreview(collection: CollectionItem) {
     const response = await fetch(`/api/gallery/collections/${collection.id}`, { cache: "no-store" });
     if (!response.ok) { setMessage("No se pudo preparar la vista previa."); return; }
-    setSharePreview(await response.json() as { collection: CollectionItem; drawings: GalleryItem[] });
+    const result = await response.json() as { collection: CollectionItem; drawings: GalleryItem[] };
+    setShareExpiryPreview(new Date(Date.now() + shareDurationMs(shareDuration)));
+    setSharePreview({ ...result, scopeTitle: result.collection.title });
   }
 
-  async function invite(collection: CollectionItem) {
-    const send = (confirmReissue = false) => fetch(`/api/gallery/collections/${collection.id}/invitations`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmReissue }), cache: "no-store",
+  async function showFamilySharePreview() {
+    if (items.length > 200) { setMessage("La galería supera el máximo de 200 dibujos por enlace. Elegí una colección o revisá el límite antes de compartir."); return; }
+    setShareExpiryPreview(new Date(Date.now() + shareDurationMs(shareDuration)));
+    setSharePreview({ collection: null, drawings: items, scopeTitle: "Galería familiar" });
+  }
+
+  function shareDurationMs(duration: "1h" | "24h" | "7d") {
+    return duration === "1h" ? 60 * 60_000 : duration === "7d" ? 7 * 24 * 60 * 60_000 : 24 * 60 * 60_000;
+  }
+
+  async function refreshShares() {
+    const response = await fetch("/api/gallery/shares", { cache: "no-store" });
+    if (!response.ok) throw new Error("No se pudieron cargar los enlaces.");
+    const data = await response.json() as { shares: ShareItem[] };
+    setShares(data.shares);
+  }
+
+  async function createShare() {
+    if (!sharePreview) return;
+    const response = await fetch("/api/gallery/shares", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collectionId: sharePreview.collection?.id ?? null, duration: shareDuration }), cache: "no-store",
     });
-    let response = await send();
-    if (response.status === 409) {
-      if (!window.confirm("Crear un enlace nuevo revocará el enlace anterior y cualquier visita activa. ¿Continuar?")) return;
-      response = await send(true);
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      setMessage(result.error === "SELECTION_LIMIT" ? "La selección supera el máximo de 200 dibujos; no se compartió una parte." : result.error === "SHARE_LIMIT" ? "Ya hay 20 enlaces activos. Revocá uno o esperá a que venza." : "No se pudo crear el enlace.");
+      return;
     }
-    if (!response.ok) { setMessage("No se pudo crear el enlace privado."); return; }
-    const result = await response.json() as { url: string };
-    setShareLink(result.url);
-    setSharePreview(null);
-    try { await navigator.clipboard.writeText(result.url); setMessage("Enlace privado copiado. Vence en 24 horas y solo puede usarse una vez."); }
-    catch { setMessage("Enlace creado. Copialo desde el campo de invitación."); }
+    const result = await response.json() as { id: string; url: string; expiresAt: string; drawingCount: number };
+    setShareLink(result.url); setSharePreview(null);
+    await refreshShares();
+    try { await navigator.clipboard.writeText(result.url); setMessage("Enlace copiado."); }
+    catch { setMessage("Enlace creado. Copialo desde el campo privado."); }
+  }
+
+  async function revokeShare(shareId: string) {
+    const response = await fetch(`/api/gallery/shares/${shareId}`, { method: "DELETE" });
+    if (!response.ok) { setMessage("No se pudo revocar el enlace."); return; }
+    await refreshShares(); setMessage("Enlace revocado; el acceso quedó cerrado.");
   }
 
   async function addDrawingToCollection(item: GalleryItem, collectionId: string) {
@@ -185,7 +257,7 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
       await fetch(`/api/gallery/collections/${collectionId}/drawings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add", drawingIds: [item.id], confirmExposure: true }) });
     }
     await refresh();
-    if (openCollection) await showCollection(openCollection.collection);
+    if (openCollection) await showCollection(openCollection.collection, false);
     setMessage("Colección actualizada.");
   }
 
@@ -196,14 +268,14 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
       body: JSON.stringify({ action: "remove", drawingIds: [item.id] }),
     });
     if (!response.ok) { setMessage("No se pudo quitar el dibujo de la colección."); return; }
-    setSelected(null); await refresh(); await showCollection(openCollection.collection); setMessage("Dibujo quitado de la colección.");
+    setSelected(null); await refresh(); await showCollection(openCollection.collection, false); setMessage("Dibujo quitado de la colección.");
   }
 
   async function archiveCollection(collection: CollectionItem) {
     if (!window.confirm("Archivar la colección revocará sus enlaces y visitas activas. ¿Continuar?")) return;
     const response = await fetch(`/api/gallery/collections/${collection.id}`, { method: "DELETE" });
     if (!response.ok) { setMessage("No se pudo archivar la colección."); return; }
-    setOpenCollection(null); setShareLink(""); await refresh(); setMessage("Colección archivada.");
+    setOpenCollection(null); setShareLink(""); const url = new URL(window.location.href); url.searchParams.delete("coleccion"); window.history.replaceState({}, "", url); await refresh(); setMessage("Colección archivada.");
   }
 
   async function showInvitations(collection: CollectionItem) {
@@ -247,22 +319,32 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
         </form>}
         {shareLink && shareLink !== "new" && <label className={styles.shareField}>Enlace privado<input readOnly value={shareLink} onFocus={event => event.currentTarget.select()} /></label>}
         <div className={styles.collectionList}>{collections.map(collection => <article className={styles.collectionCard} key={collection.id}>
-          <button type="button" className={styles.collectionOpen} onClick={() => void showCollection(collection)}><strong>{collection.title}</strong><span>{collection.drawingCount} dibujos · {collection.activeInvitationCount} invitaciones activas</span></button>
-          <button type="button" className={styles.archive} onClick={() => void showInvitations(collection)}>Invitaciones</button>
-          <button type="button" className={styles.archive} onClick={() => void showSharePreview(collection)}>Invitar</button>
+          <button type="button" className={styles.collectionOpen} onClick={() => void showCollection(collection)}><span className={styles.collectionCover}>{collection.coverUrls.map(url => <Image key={url} src={url} alt="" width={96} height={72} unoptimized />)}</span><span className={styles.collectionCopy}><strong>{collection.title}</strong><span>{collection.drawingCount} dibujos · {collection.activeInvitationCount} invitaciones anteriores activas</span></span></button>
+          <div className={styles.collectionActions}><button type="button" className={styles.archive} onClick={() => void showInvitations(collection)}>Invitaciones anteriores</button>{canShareTemporarily && <button type="button" className={styles.archive} onClick={() => void showSharePreview(collection)}>Compartir colección</button>}</div>
         </article>)}</div>
+        {canShareTemporarily && <>
+        <div className={styles.collectionHeading}><h2>Enlaces temporales</h2><button type="button" className={styles.archive} onClick={() => void showFamilySharePreview()}>Compartir galería</button></div>
+        <button type="button" className={styles.archive} onClick={() => void refreshShares()}>Actualizar enlaces</button>
+        {shareLink && <label className={styles.shareField}>Enlace privado<input readOnly value={shareLink} onFocus={event => event.currentTarget.select()} /></label>}
+        {shares.length > 0 && <div className={styles.shareRows} aria-label="Enlaces temporales">
+          {shares.map(share => <article className={styles.shareRow} key={share.id}><div><strong>{share.collectionTitle ?? "Galería familiar"}</strong><span>{share.active ? "Activo" : share.revokedAt ? "Revocado" : "Vencido o sin dibujos"} · {share.activeDrawings}/{share.totalDrawings} dibujos · {share.activeSessions} visitas · vence {new Date(share.expiresAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}</span></div>{share.active && <button type="button" className={styles.archive} onClick={() => void revokeShare(share.id)}>Revocar</button>}</article>)}
+        </div>}
+        </>}
         {sharePreview && <section className={styles.sharePreview} aria-labelledby="share-preview-title">
           <p className={styles.eyebrow}>VISTA PREVIA PARA LA PERSONA INVITADA</p>
-          <h3 id="share-preview-title">{sharePreview.collection.title}</h3>
-          {sharePreview.collection.description && <p>{sharePreview.collection.description}</p>}
+          <h3 id="share-preview-title">{sharePreview.scopeTitle}</h3>
+          {sharePreview.collection?.description && <p>{sharePreview.collection.description}</p>}
           <div className={styles.previewGrid}>{sharePreview.drawings.slice(0, 6).map(drawing => <Image key={drawing.id} src={drawing.thumbnailUrl} alt="" width={384} height={384} unoptimized />)}</div>
-          <p>{sharePreview.drawings.length} dibujos · enlace de un solo uso · acceso durante siete días</p>
-          <button type="button" className={styles.uploadButton} onClick={() => void invite(sharePreview.collection)}>Crear invitación</button>
+          <p>{sharePreview.drawings.length} dibujos · vence {shareExpiryPreview?.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}. Cualquiera con este enlace puede ver estos dibujos hasta que venza o se revoque. Las imágenes pueden guardarse o capturarse.</p>
+          <div className={styles.durationChoices} role="radiogroup" aria-label="Duración del enlace">
+            {([["1h", "1 hora"], ["24h", "24 horas"], ["7d", "7 días"]] as const).map(([value, label]) => <label key={value}><input type="radio" name="share-duration" value={value} checked={shareDuration === value} onChange={() => { setShareDuration(value); setShareExpiryPreview(new Date(Date.now() + shareDurationMs(value))); }} />{label}</label>)}
+          </div>
+          <button type="button" className={styles.uploadButton} onClick={() => void createShare()}>Crear enlace</button>
           <button type="button" className={styles.archive} onClick={() => setSharePreview(null)}>Cancelar</button>
         </section>}
         {invitationView && <section className={styles.invitationList} aria-label="Invitaciones activas">
-          <h3>Invitaciones activas</h3>
-          {invitationView.items.length === 0 ? <p>No hay invitaciones activas.</p> : invitationView.items.map((invitation, index) => <div className={styles.invitationRow} key={invitation.id}>
+          <h3>Invitaciones anteriores</h3>
+          {invitationView.items.length === 0 ? <p>No hay invitaciones anteriores.</p> : invitationView.items.map((invitation, index) => <div className={styles.invitationRow} key={invitation.id}>
             <span>Invitación {index + 1} · {invitation.redeemedAt ? "canjeada" : "pendiente"} · vence {new Date(invitation.expiresAt).toLocaleString()}</span>
             <button type="button" className={styles.archive} onClick={() => void revokeInvitation(invitationView.collectionId, invitation.id)}>Revocar</button>
           </div>)}
@@ -272,16 +354,16 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
         <div className={styles.collectionHeading}><div><h2>{openCollection.collection.title}</h2><p>{openCollection.collection.description}</p></div>
           <button type="button" className={styles.archive} onClick={() => setEditingCollection(value => !value)}>{editingCollection ? "Cancelar edición" : "Editar colección"}</button>
           <button type="button" className={styles.archive} onClick={() => void archiveCollection(openCollection.collection)}>Archivar colección</button>
-          <button type="button" className={styles.archive} onClick={() => setOpenCollection(null)}>Cerrar colección</button>
+          <button type="button" className={styles.archive} onClick={closeCollection}>Volver a Galería</button>
         </div>
         {editingCollection && <form className={styles.collectionForm} onSubmit={event => void saveCollection(event)}>
           <label>Nombre <input value={editingTitle} onChange={event => setEditingTitle(event.target.value)} maxLength={120} required /></label>
           <label>Descripción <input value={editingDescription} onChange={event => setEditingDescription(event.target.value)} maxLength={500} /></label>
           <button type="submit" className={styles.uploadButton}>Guardar cambios</button>
         </form>}
-        <div className={styles.grid}>{openCollection.drawings.map((item, index) => <button className={styles.card} type="button" key={item.id} onClick={() => setSelected(item)} aria-label={`Abrir dibujo ${index + 1}`}><Image src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" width={384} height={384} unoptimized /></button>)}</div>
+        <div className={styles.grid}>{openCollection.drawings.map((item, index) => <button className={styles.card} type="button" key={item.id} onClick={event => openDrawing(item, event.currentTarget)} aria-label={`Abrir dibujo ${index + 1}`}><Image src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" width={384} height={384} unoptimized /></button>)}</div>
       </section>}
-      {loading ? <p className={styles.empty}>Cargando dibujos…</p> : items.length === 0 ? (
+      {!openCollection && (loading ? <p className={styles.empty}>Cargando dibujos…</p> : items.length === 0 ? (
         <section className={styles.emptyState}>
           <div className={styles.emptyArt} aria-hidden="true">✳</div>
           <h2>La galería empieza acá</h2>
@@ -289,15 +371,18 @@ export default function GalleryApp({ currentMemberId, canManageAll }: { currentM
         </section>
       ) : (
         <section className={styles.grid} aria-label="Dibujos de la familia">
-          {items.map((item, index) => <button className={styles.card} type="button" key={item.id} onClick={() => setSelected(item)} aria-label={`Abrir dibujo ${index + 1}`}>
+          {items.map((item, index) => <button className={styles.card} type="button" key={item.id} onClick={event => openDrawing(item, event.currentTarget)} aria-label={`Abrir dibujo ${index + 1}`}>
             <Image src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" width={384} height={384} unoptimized />
           </button>)}
         </section>
-      )}
+      ))}
       <dialog ref={dialogRef} className={styles.dialog} aria-label="Detalle del dibujo" onCancel={event => { event.preventDefault(); setSelected(null); }} onClick={event => { if (event.target === dialogRef.current) setSelected(null); }}>
         {selected && <div className={styles.detail}>
           <button className={styles.close} type="button" onClick={() => setSelected(null)} aria-label="Cerrar dibujo">×</button>
+          <button type="button" className={styles.viewerPrev} onClick={() => moveFamilyDrawing(-1)} disabled={(openCollection?.drawings ?? items).findIndex(item => item.id === selected.id) <= 0} aria-label="Dibujo anterior">‹</button>
           <Image src={selected.displayUrl} alt="Dibujo familiar ampliado" width={selected.width} height={selected.height} unoptimized />
+          <button type="button" className={styles.viewerNext} onClick={() => moveFamilyDrawing(1)} disabled={(openCollection?.drawings ?? items).findIndex(item => item.id === selected.id) >= (openCollection?.drawings ?? items).length - 1} aria-label="Dibujo siguiente">›</button>
+          <p aria-live="polite">Dibujo {(openCollection?.drawings ?? items).findIndex(item => item.id === selected.id) + 1} de {(openCollection?.drawings ?? items).length}</p>
           {(canManageAll || selected.authorMemberId === currentMemberId) && <button className={styles.archive} type="button" onClick={() => void archive(selected)}>Archivar dibujo</button>}
           {collections.filter(collection => collection.ownerMemberId === selected.authorMemberId).length > 0 && <label className={styles.collectionPicker}>Agregar a colección
             <select defaultValue="" onChange={event => { if (event.currentTarget.value) void addDrawingToCollection(selected, event.currentTarget.value); }}><option value="">Elegir colección…</option>
