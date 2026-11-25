@@ -245,7 +245,11 @@ test("a failed shared image stays in the viewer and can be retried", async ({ pa
   }));
   await page.route("**/api/gallery/public/shares/share-retry/images/**", route => {
     const variant = new URL(route.request().url()).searchParams.get("variant");
-    if (variant === "display" && ++displayAttempts <= 4) return route.fulfill({ status: 503, body: "temporary failure" });
+    if (variant === "display") {
+      displayAttempts += 1;
+      if (displayAttempts === 1) return route.fulfill({ status: 503, body: "temporary failure" });
+      if (displayAttempts === 2) return route.fulfill({ status: 200, contentType: "image/png", body: "not a decodable image" });
+    }
     return route.fulfill({ status: 200, contentType: "image/png", body: image });
   });
 
@@ -257,6 +261,8 @@ test("a failed shared image stays in the viewer and can be retried", async ({ pa
   await expect(dialog.getByRole("button", { name: "Dibujo anterior" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Dibujo siguiente" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Cerrar dibujo" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Reintentar carga" }).click();
+  await expect(dialog.getByRole("status").filter({ hasText: "No se pudo cargar el dibujo." })).toBeVisible({ timeout: 15_000 });
   await dialog.getByRole("button", { name: "Reintentar carga" }).click();
   await expect(dialog.getByRole("img")).toBeVisible();
   await expect(dialog.getByRole("status").filter({ hasText: "No se pudo cargar el dibujo." })).toHaveCount(0);
