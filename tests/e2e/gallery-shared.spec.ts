@@ -247,8 +247,8 @@ test("a failed shared image stays in the viewer and can be retried", async ({ pa
     const variant = new URL(route.request().url()).searchParams.get("variant");
     if (variant === "display") {
       displayAttempts += 1;
-      if (displayAttempts === 1) return route.fulfill({ status: 503, body: "temporary failure" });
-      if (displayAttempts === 2) return route.fulfill({ status: 200, contentType: "image/png", body: "not a decodable image" });
+      if (displayAttempts <= 4) return route.fulfill({ status: 503, body: "temporary failure" });
+      if (displayAttempts === 5) return route.fulfill({ status: 200, contentType: "image/png", body: "not a decodable image" });
     }
     return route.fulfill({ status: 200, contentType: "image/png", body: image });
   });
@@ -268,4 +268,31 @@ test("a failed shared image stays in the viewer and can be retried", async ({ pa
   await expect(dialog.getByRole("status").filter({ hasText: "No se pudo cargar el dibujo." })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
+});
+
+test("a guest viewer exposes retry after a downloaded image cannot be decoded", async ({ page }) => {
+  let displayAttempts = 0;
+  const image = await png(80, 120, { r: 0, g: 0, b: 0, alpha: 0 }, "#52745c");
+  await page.route("**/api/gallery/guest/collection", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ collection: { title: "Colección invitada de prueba", description: "" }, drawings: [{
+      id: "guest-drawing", width: 80, height: 120, version: 1,
+      thumbnailUrl: "/api/gallery/guest/images/guest-drawing?variant=thumbnail&v=1",
+      displayUrl: "/api/gallery/guest/images/guest-drawing?variant=display&v=1",
+    }] }),
+  }));
+  await page.route("**/api/gallery/guest/images/**", route => {
+    const variant = new URL(route.request().url()).searchParams.get("variant");
+    if (variant === "display" && ++displayAttempts === 1) return route.fulfill({ status: 200, contentType: "image/png", body: "not a decodable image" });
+    return route.fulfill({ status: 200, contentType: "image/png", body: image });
+  });
+
+  await page.goto("/galeria/invitado");
+  await page.getByRole("button", { name: "Abrir dibujo 1" }).click();
+  const dialog = page.getByRole("dialog", { name: "Dibujo compartido" });
+  await expect(dialog.getByRole("status").filter({ hasText: "No se pudo cargar el dibujo." })).toBeVisible({ timeout: 15_000 });
+  await dialog.getByRole("button", { name: "Reintentar carga" }).click();
+  await expect(dialog.getByRole("img")).toBeVisible();
+  await expect(dialog.getByRole("status").filter({ hasText: "No se pudo cargar el dibujo." })).toHaveCount(0);
+  expect(displayAttempts).toBe(2);
 });
