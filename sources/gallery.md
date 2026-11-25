@@ -26,7 +26,7 @@ El canje limita a 10 intentos por IP cada 10 minutos y 5 por token por minuto, c
 
 ## Imágenes y recuperación
 
-Sketchbook o Drive conservan originales. Blob guarda derivados privados; un dump de PostgreSQL conserva referencias, no los bytes de las imágenes. Esta entrega acepta el riesgo de no tener respaldo independiente de Blob. Verificar los derivados disponibles antes de publicar y registrar en una issue el trabajo futuro de copia y recuperación independiente.
+Sketchbook o Drive conservan originales. Blob guarda derivados privados; un dump de PostgreSQL conserva referencias, no los bytes de las imágenes. Esta entrega acepta el riesgo de no tener respaldo independiente de Blob. Verificar los derivados disponibles antes de publicar y dar seguimiento al trabajo futuro de copia y recuperación independiente en la [issue #105](https://github.com/RadikeCosa/family-utils/issues/105).
 
 El respaldo PostgreSQL incluye las cinco tablas de Galería existentes, las tres tablas nuevas y `audit_events` para conservar sus eventos correspondientes. El rol de respaldo recibe lectura de estas tablas mediante migraciones. El procedimiento de restauración empieza con la Galería apagada y sin exposición pública, invalida credenciales antiguas y nuevas y comprueba el saneamiento antes de habilitarla. Un dump anterior a una revocación no contiene esa revocación; una restauración arbitraria fuera del procedimiento no garantiza impedir la reactivación.
 

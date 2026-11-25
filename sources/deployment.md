@@ -146,7 +146,7 @@ compatible con el esquema aditivo. Si no está disponible, apagar
 `GALLERY_SHARES_ENABLED`; `GALLERY_ENABLED` queda como corte general. Revocar
 credenciales afectadas. Un dump recupera datos PostgreSQL, no bytes de Blob ni
 bytes que un visitante ya recibió. La entrega acepta la falta de respaldo Blob
-independiente y mantiene una issue para resolverla después.
+independiente y mantiene la issue [#105](https://github.com/RadikeCosa/family-utils/issues/105) para resolverla después.
 
 ## Autorización, ejecución y recuperación
 
