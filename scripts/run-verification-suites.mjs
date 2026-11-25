@@ -27,7 +27,7 @@ function addSuite(name, result, counts = {}) {
   if (status !== "passed" || (counts.skipped ?? 0) > 0) report.ok = false;
   console.log(`${status === "passed" ? "PASS" : "FAIL"} ${name} (${result.durationMs} ms)`);
   for (const failure of counts.failures?.slice(0, 15) ?? []) {
-    console.error(`  ${failure.project}: ${failure.title} — ${failure.message}`);
+    console.error(`  ${failure.project ?? "TAP"}: ${failure.title} — ${failure.message}`);
   }
   if ((counts.failures?.length ?? 0) > 15) console.error(`  … y ${counts.failures.length - 15} fallos más (ver JSON).`);
   if (result.status !== 0 && result.stderr) process.stderr.write(result.stderr);
@@ -47,8 +47,19 @@ export function parseTap(output) {
     if (!failedTest) continue;
     const detail = [];
     for (let j = i + 1; j < lines.length && !/^(?:not ok \d+ - |ok \d+ - |1\.\.)/.test(lines[j]); j++) {
-      const match = lines[j].match(/^\s+(?:error|message):\s*(.+)$/);
-      if (match) detail.push(match[1].replace(/^['"]|['"]$/g, ""));
+      const match = lines[j].match(/^(\s+)(?:error|message):\s*(.*)$/);
+      if (!match) continue;
+      const value = match[2].replace(/^['"]|['"]$/g, "");
+      if (["|", "|-", ">", ">-"].includes(value)) {
+        const keyIndent = match[1].length;
+        const body = [];
+        for (let k = j + 1; k < lines.length; k++) {
+          const contentIndent = lines[k].match(/^(\s*)\S/);
+          if (contentIndent && contentIndent[1].length <= keyIndent) break;
+          if (lines[k].trim()) body.push(lines[k].slice(keyIndent + 2));
+        }
+        if (body.length) detail.push(body.join("\n"));
+      } else if (value) detail.push(value);
     }
     failures.push({ title: failedTest[1], message: detail[0]?.slice(0, 300) ?? "Prueba TAP fallida." });
   }
