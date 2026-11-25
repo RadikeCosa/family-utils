@@ -186,8 +186,10 @@ export default function SharedGallery() {
         signal.addEventListener("abort", () => { window.clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
       });
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      lastImageRequestAt.current = Date.now();
       const response = await fetchWithRetries(url, signal);
+      // Pace from completion so request processing time cannot squeeze the
+      // server's global 200 ms interval below its limit.
+      lastImageRequestAt.current = Date.now();
       if (response?.status === 429) { setPaused(true); throw new Error("Se alcanzó el límite de solicitudes. Esperá un momento y reintentá."); }
       if (!response?.ok) return null;
       return URL.createObjectURL(await response.blob());

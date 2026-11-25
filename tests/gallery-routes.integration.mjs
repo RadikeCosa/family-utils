@@ -267,8 +267,8 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     assert.equal(visitedDrawings.length, 200);
     for (const [index, item] of visitedDrawings.entries()) {
       await delay(Math.max(0, lastReadStartedAt + 220 - Date.now()));
-      lastReadStartedAt = Date.now();
       const thumbnail = await request(paginatedGuest, item.thumbnailUrl);
+      lastReadStartedAt = Date.now();
       assert.notEqual(thumbnail.status, 429, `normal lazy thumbnail ${index + 1}/200 must not be rate limited`);
       if (Date.now() - lastRevalidatedAt >= 30_000) {
         const sessionCheck = await request(paginatedGuest, "/api/gallery/public/session");
