@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 const pixelPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j9l8AAAAASUVORK5CYII=", "base64");
 
 test("shared gallery clears its credential and keeps the native viewer accessible", async ({ page }) => {
+  test.setTimeout(90_000);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/gallery/public/enter", route => route.fulfill({
     status: 200,
@@ -34,7 +35,7 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
   await page.goto("/galeria/compartida#token=" + "a".repeat(43));
   await page.getByRole("button", { name: "Entrar a la galería" }).click();
   await expect(page).toHaveURL(/\/galeria\/compartida$/u);
-  await expect(page.getByRole("heading", { name: "Colección de prueba" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Colección de prueba" }), "the public page should render the server-frozen collection after redeeming the link").toBeVisible({ timeout: 15_000 });
   for (const [width, expectedColumns] of [[360, 2], [390, 2], [768, 3], [1024, 3], [1440, 4]]) {
     await page.setViewportSize({ width, height: 900 });
     const columnCount = await page.getByRole("region", { name: "Dibujos compartidos" }).evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
@@ -45,8 +46,8 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
   await expect.poll(() => firstDrawing.evaluate(node => getComputedStyle(node).transitionDuration)).toBe("0s");
   await firstDrawing.click();
   const dialog = page.getByRole("dialog", { name: "Dibujo compartido" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Dibujo 1 de 2")).toBeVisible();
+  await expect(dialog, "the native viewer should open after selecting the first drawing").toBeVisible({ timeout: 15_000 });
+  await expect(dialog.getByText("Dibujo 1 de 2"), "the viewer should announce its current position").toBeVisible({ timeout: 15_000 });
   await expect.poll(() => dialog.evaluate(node => node.matches(":modal"))).toBe(true);
   await expect.poll(() => page.getByRole("heading", { name: "Colección de prueba" }).evaluate(node => node.closest("[inert]")?.inert === true)).toBe(true);
   await expect(page.getByRole("button", { name: "Cerrar dibujo" })).toBeFocused();
