@@ -34,7 +34,7 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
 
   await page.goto("/galeria/compartida#token=" + "a".repeat(43));
   await page.getByRole("button", { name: "Entrar a la galería" }).click();
-  await expect(page).toHaveURL(/\/galeria\/compartida$/u);
+  await expect(page).toHaveURL(/\/galeria\/compartida\?shareId=share-test$/u);
   await expect(page.getByRole("heading", { name: "Colección de prueba" }), "the public page should render the server-frozen collection after redeeming the link").toBeVisible({ timeout: 15_000 });
   for (const [width, expectedColumns] of [[360, 2], [390, 2], [768, 3], [1024, 3], [1440, 4]]) {
     await page.setViewportSize({ width, height: 900 });

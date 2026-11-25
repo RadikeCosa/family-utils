@@ -31,12 +31,16 @@ function readCookie(header: string | null, name: string) {
   try { return decodeURIComponent(entry.slice(name.length + 1)); } catch { return null; }
 }
 
-function publicSessionToken(request: Request) {
-  const secureToken = readCookie(request.headers.get("cookie"), "__Host-fu_gallery_session");
+function publicSessionToken(request: Request, shareId?: string) {
+  const cookies = request.headers.get("cookie");
+  const suffix = shareId ? `_${shareId}` : "";
+  const secureToken = readCookie(cookies, `__Host-fu_gallery_session${suffix}`)
+    ?? (shareId ? readCookie(cookies, "__Host-fu_gallery_session") : null);
   if (secureToken) return secureToken;
   const url = new URL(request.url);
   const localHttp = url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
-  return localHttp ? readCookie(request.headers.get("cookie"), "fu_gallery_session_dev") : null;
+  return localHttp ? readCookie(cookies, `fu_gallery_session_dev${suffix}`)
+    ?? (shareId ? readCookie(cookies, "fu_gallery_session_dev") : null) : null;
 }
 
 export async function limitPublicEntry(request: Request, tokenHash?: string) {
@@ -47,8 +51,8 @@ export async function limitPublicEntry(request: Request, tokenHash?: string) {
   return true;
 }
 
-export async function authorizePublicSession(request: Request, options: { countRequest?: boolean; countInterval?: boolean } = {}) {
-  const token = publicSessionToken(request);
+export async function authorizePublicSession(request: Request, options: { countRequest?: boolean; countInterval?: boolean; shareId?: string } = {}) {
+  const token = publicSessionToken(request, options.shareId);
   const tokenHash = token && validGalleryCredential(token) ? galleryCredentialHash(token) : null;
   const ip = ipAddress(request) ?? "unknown";
   const ipHash = galleryCredentialHash(ip);
@@ -86,7 +90,7 @@ export async function authorizePublicSession(request: Request, options: { countR
 }
 
 export async function revalidatePublicSession(request: Request, expectedShareId: string, expectedDrawingId?: string) {
-  const token = publicSessionToken(request);
+  const token = publicSessionToken(request, expectedShareId);
   if (!token || !validGalleryCredential(token)) return null;
   const sessionHash = galleryCredentialHash(token);
   return getDb().transaction(async tx => {

@@ -14,10 +14,10 @@ const unavailable = () => NextResponse.json({ error: "LINK_UNAVAILABLE" }, { sta
 export async function GET(request: Request, context: { params: Promise<{ shareId: string }> }) {
   if (!gallerySharesEnabled()) return new NextResponse(null, { status: 404, headers });
   try {
-    const access = await authorizePublicSession(request);
+    const { shareId } = await context.params;
+    const access = await authorizePublicSession(request, { shareId });
     if (access.kind === "rate-limited") return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { ...headers, "Retry-After": String(access.retryAfter) } });
     if (access.kind !== "authorized") return unavailable();
-    const { shareId } = await context.params;
     if (!UUID_PATTERN.test(shareId) || access.shareId !== shareId) return unavailable();
     const cursorValue = new URL(request.url).searchParams.get("cursor");
     const after = cursorValue === null ? -1 : Number(cursorValue);

@@ -11,7 +11,8 @@ export async function GET(request: Request) {
   try {
     // Revalidation is already bounded by per-IP, per-session, and global
     // counters. It must not collide with the 200 ms content/image queue.
-    const access = await authorizePublicSession(request, { countInterval: false });
+    const shareId = new URL(request.url).searchParams.get("shareId") ?? undefined;
+    const access = await authorizePublicSession(request, { countInterval: false, shareId });
     if (access.kind === "rate-limited") return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { ...headers, "Retry-After": String(access.retryAfter) } });
     if (access.kind !== "authorized") return NextResponse.json({ error: "LINK_UNAVAILABLE" }, { status: 410, headers });
     return NextResponse.json({ shareId: access.shareId, expiresAt: access.expiresAt.toISOString(), serverNow: galleryNow().toISOString() }, { headers });
