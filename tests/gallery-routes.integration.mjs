@@ -237,6 +237,7 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
       }
     }
 
+    await delay(250);
     const revokeTransaction = await pool.connect();
     try {
       await revokeTransaction.query("BEGIN");
