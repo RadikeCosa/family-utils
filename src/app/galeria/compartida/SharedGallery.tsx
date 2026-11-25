@@ -258,6 +258,7 @@ export default function SharedGallery() {
   }
 
   async function openDrawing(drawing: SharedDrawing, button: HTMLButtonElement) {
+    const generation = generationRef.current;
     selectedOpener.current = button;
     selectedImageController.current?.abort();
     if (displayUrl) URL.revokeObjectURL(displayUrl);
@@ -267,7 +268,8 @@ export default function SharedGallery() {
     activeRequests.current.add(controller);
     try {
       const url = await loadImage(drawing.displayUrl, controller.signal);
-      if (url) setDisplayUrl(url);
+      if (url && !controller.signal.aborted && generation === generationRef.current) setDisplayUrl(url);
+      else if (url) URL.revokeObjectURL(url);
     } catch { if (!controller.signal.aborted) setMessage("No se pudo cargar el dibujo. Podés volver a intentarlo."); }
     finally { activeRequests.current.delete(controller); }
   }
@@ -289,11 +291,16 @@ export default function SharedGallery() {
       next = page?.drawings[0] ?? undefined;
     }
     if (next) {
+      const generation = generationRef.current;
       selectedImageController.current?.abort();
       if (displayUrl) URL.revokeObjectURL(displayUrl);
       setSelected(next); setDisplayUrl(null);
       const controller = new AbortController(); selectedImageController.current = controller;
-      void loadImage(next.displayUrl, controller.signal).then(url => { if (!controller.signal.aborted && url) setDisplayUrl(url); }).catch(() => undefined);
+      void loadImage(next.displayUrl, controller.signal).then(url => {
+        if (!url) return;
+        if (!controller.signal.aborted && generation === generationRef.current) setDisplayUrl(url);
+        else URL.revokeObjectURL(url);
+      }).catch(() => undefined);
     }
   };
 

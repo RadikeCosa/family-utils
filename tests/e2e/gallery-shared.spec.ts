@@ -67,3 +67,51 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
   await expect(dialog).not.toBeVisible();
   await expect(firstDrawing).toBeFocused();
 });
+
+test("a display image finishing after revocation cannot repopulate the public viewer", async ({ page }) => {
+  let releaseDisplay!: () => void;
+  let markDisplayStarted!: () => void;
+  const displayHeld = new Promise<void>(resolve => { releaseDisplay = resolve; });
+  const displayStarted = new Promise<void>(resolve => { markDisplayStarted = resolve; });
+
+  await page.route("**/api/gallery/public/enter", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ok: true, shareId: "share-revoked", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
+  }));
+  await page.route("**/api/gallery/public/session", route => route.fulfill({
+    status: 410, contentType: "application/json", body: JSON.stringify({ error: "LINK_UNAVAILABLE" }),
+  }));
+  await page.route("**/api/gallery/public/shares/share-revoked", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      share: { title: "PRUEBA revocada", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() },
+      total: 1, nextCursor: null,
+      drawings: [{ id: "drawing-revoked", width: 1, height: 1, version: 1, position: 0,
+        thumbnailUrl: "/api/gallery/public/shares/share-revoked/images/drawing-revoked?variant=thumbnail",
+        displayUrl: "/api/gallery/public/shares/share-revoked/images/drawing-revoked?variant=display" }],
+    }),
+  }));
+  await page.route("**/api/gallery/public/shares/share-revoked/images/**", async route => {
+    if (new URL(route.request().url()).searchParams.get("variant") === "display") {
+      markDisplayStarted();
+      await displayHeld;
+    }
+    try { await route.fulfill({ status: 200, contentType: "image/png", body: pixelPng }); }
+    catch { /* The browser may cancel the in-flight response after the 410. */ }
+  });
+
+  await page.goto("/galeria/compartida#token=" + "b".repeat(43));
+  await page.getByRole("button", { name: "Entrar a la galería" }).click();
+  const firstDrawing = page.getByRole("button", { name: "Abrir dibujo 1" });
+  await firstDrawing.click();
+  const dialog = page.getByRole("dialog", { name: "Dibujo compartido" });
+  await expect(dialog).toBeVisible();
+  await displayStarted;
+
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByRole("heading", { name: "Una galería para mirar" })).toBeVisible();
+  await expect(dialog).not.toBeVisible();
+  releaseDisplay();
+  await expect(page.getByRole("region", { name: "Dibujos compartidos" })).not.toBeAttached();
+  await expect.poll(() => page.locator("img").count()).toBe(0);
+});
