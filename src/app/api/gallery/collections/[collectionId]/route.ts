@@ -51,6 +51,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ colle
     return NextResponse.json({ error: "INVALID" }, { status: 400 });
   }
   const result = await getDb().transaction(async tx => {
+    await tx.select({ id: families.id }).from(families).where(eq(families.id, actor.familyId)).for("update").limit(1);
     const [collection] = await tx.select().from(galleryCollections).where(and(
       eq(galleryCollections.id, collectionId), eq(galleryCollections.familyId, actor.familyId), isNull(galleryCollections.archivedAt),
     )).for("update").limit(1);
@@ -80,6 +81,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ coll
   if (!actor) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const { collectionId } = await context.params;
   const result = await getDb().transaction(async tx => {
+    await tx.select({ id: families.id }).from(families).where(eq(families.id, actor.familyId)).for("update").limit(1);
     const [collection] = await tx.select().from(galleryCollections).where(and(
       eq(galleryCollections.id, collectionId), eq(galleryCollections.familyId, actor.familyId), isNull(galleryCollections.archivedAt),
     )).for("update").limit(1);

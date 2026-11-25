@@ -60,6 +60,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ drawi
   if ((archived && drawing.status !== "ready") || (!archived && drawing.status !== "archived")) return NextResponse.json({ error: "CONFLICT" }, { status: 409 });
   await getDb().transaction(async (tx) => {
     const now = galleryNow();
+    await tx.select({ id: families.id }).from(families).where(eq(families.id, actor.familyId)).for("update").limit(1);
     await tx.update(galleryDrawings).set({
       status: archived ? "archived" : "ready",
       archivedAt: archived ? now : null,

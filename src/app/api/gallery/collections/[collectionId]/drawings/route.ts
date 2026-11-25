@@ -27,6 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ collec
   }
 
   const result = await getDb().transaction(async tx => {
+    await tx.select({ id: families.id }).from(families).where(eq(families.id, actor.familyId)).for("update").limit(1);
     const [collection] = await tx.select().from(galleryCollections).where(and(
       eq(galleryCollections.id, collectionId), eq(galleryCollections.familyId, actor.familyId), isNull(galleryCollections.archivedAt),
     )).for("update").limit(1);
