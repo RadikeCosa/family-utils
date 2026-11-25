@@ -199,7 +199,47 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     assert.equal(expiredPage.status, 410);
     assert.equal(expiredPage.body.error, revokedPage.body.error, "expired and revoked links are indistinguishable");
 
-    const paginationDrawings = await Promise.all(Array.from({ length: 197 }, (_, index) => drawing(owner.id, String(index + 4).padStart(64, "0"))));
+    const collectionLock = await pool.connect();
+    let collectionRaceShare, collectionRemoveResult;
+    try {
+      await collectionLock.query("BEGIN");
+      await collectionLock.query("SELECT id FROM gallery_collections WHERE id=$1 FOR UPDATE", [collectionId]);
+      const createCollectionShare = request(owner, "/api/gallery/shares", "POST", { collectionId, duration: "1h" });
+      await delay(100);
+      const removeCollectionDrawing = request(owner, `/api/gallery/collections/${collectionId}/drawings`, "POST", { action: "remove", drawingIds: [ownedDrawing] });
+      await delay(100);
+      await collectionLock.query("COMMIT");
+      [collectionRaceShare, collectionRemoveResult] = await Promise.all([createCollectionShare, removeCollectionDrawing]);
+      assert.equal(collectionRaceShare.status, 201, "collection sharing serializes with a concurrent removal");
+      assert.equal(collectionRemoveResult.status, 200);
+    } catch (error) {
+      await collectionLock.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally { collectionLock.release(); }
+    assert.ok((await pool.query("SELECT invalidated_at FROM gallery_share_drawings WHERE share_id=$1 AND drawing_id=$2", [collectionRaceShare.body.id, ownedDrawing])).rows[0]?.invalidated_at,
+      "a drawing removed during share creation is permanently invalidated in that snapshot");
+
+    const drawingLock = await pool.connect();
+    let familyRaceShare, archiveResult;
+    try {
+      await drawingLock.query("BEGIN");
+      await drawingLock.query("SELECT id FROM gallery_drawings WHERE id=$1 FOR UPDATE", [secondOwnedDrawing]);
+      const createFamilyShare = request(owner, "/api/gallery/shares", "POST", { duration: "1h" });
+      await delay(100);
+      const archiveDrawing = request(owner, `/api/gallery/drawings/${secondOwnedDrawing}`, "PATCH", { archived: true });
+      await delay(100);
+      await drawingLock.query("COMMIT");
+      [familyRaceShare, archiveResult] = await Promise.all([createFamilyShare, archiveDrawing]);
+      assert.equal(familyRaceShare.status, 201, "whole-gallery sharing serializes with a concurrent archive");
+      assert.equal(archiveResult.status, 200);
+    } catch (error) {
+      await drawingLock.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally { drawingLock.release(); }
+    assert.ok((await pool.query("SELECT invalidated_at FROM gallery_share_drawings WHERE share_id=$1 AND drawing_id=$2", [familyRaceShare.body.id, secondOwnedDrawing])).rows[0]?.invalidated_at,
+      "an archived drawing is permanently invalidated in a concurrently created family snapshot");
+
+    const paginationDrawings = await Promise.all(Array.from({ length: 198 }, (_, index) => drawing(owner.id, String(index + 4).padStart(64, "0"))));
     const paginatedShare = await request(owner, "/api/gallery/shares", "POST", {});
     assert.equal(paginatedShare.status, 201);
     const paginatedToken = new URLSearchParams(new URL(paginatedShare.body.url).hash.slice(1)).get("token");
