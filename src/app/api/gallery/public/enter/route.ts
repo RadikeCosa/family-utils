@@ -40,7 +40,9 @@ export async function POST(request: Request) {
     });
     if (!result) return unavailable();
     const secure = new URL(request.url).protocol === "https:";
-    const cookieName = secure ? "__Host-fu_gallery_session" : "fu_gallery_session_dev";
+    const cookieName = secure
+      ? `__Host-fu_gallery_session_${result.shareId}`
+      : `fu_gallery_session_dev_${result.shareId}`;
     const response = NextResponse.json({ ok: true, shareId: result.shareId, expiresAt: result.expiresAt.toISOString(), serverNow: result.serverNow.toISOString() }, {
       headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
     });

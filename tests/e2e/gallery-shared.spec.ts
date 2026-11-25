@@ -11,7 +11,7 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
     contentType: "application/json",
     body: JSON.stringify({ ok: true, shareId: "share-test", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
   }));
-  await page.route("**/api/gallery/public/session", route => route.fulfill({
+  await page.route("**/api/gallery/public/session**", route => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ shareId: "share-test", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
@@ -34,7 +34,7 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
 
   await page.goto("/galeria/compartida#token=" + "a".repeat(43));
   await page.getByRole("button", { name: "Entrar a la galería" }).click();
-  await expect(page).toHaveURL(/\/galeria\/compartida$/u);
+  await expect(page).toHaveURL(/\/galeria\/compartida\?shareId=share-test$/u);
   await expect(page.getByRole("heading", { name: "Colección de prueba" }), "the public page should render the server-frozen collection after redeeming the link").toBeVisible({ timeout: 15_000 });
   for (const [width, expectedColumns] of [[360, 2], [390, 2], [768, 3], [1024, 3], [1440, 4]]) {
     await page.setViewportSize({ width, height: 900 });
@@ -79,7 +79,7 @@ test("a display image finishing after revocation cannot repopulate the public vi
     status: 200, contentType: "application/json",
     body: JSON.stringify({ ok: true, shareId: "share-revoked", expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(), serverNow: new Date().toISOString() }),
   }));
-  await page.route("**/api/gallery/public/session", route => route.fulfill({
+  await page.route("**/api/gallery/public/session**", route => route.fulfill({
     status: 410, contentType: "application/json", body: JSON.stringify({ error: "LINK_UNAVAILABLE" }),
   }));
   await page.route("**/api/gallery/public/shares/share-revoked", route => route.fulfill({

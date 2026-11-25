@@ -155,7 +155,7 @@ export default function SharedGallery() {
   const revalidate = useCallback(async () => {
     const generation = generationRef.current;
     try {
-      const response = await fetchWithRetries("/api/gallery/public/session");
+      const response = await fetchWithRetries(`/api/gallery/public/session?shareId=${encodeURIComponent(shareId ?? "")}`);
       if (!response?.ok) {
         if (response && response.status !== 410) throw new Error("La visita está pausada por un problema de conexión.");
         return;
@@ -204,7 +204,9 @@ export default function SharedGallery() {
     tokenRef.current = token;
     if (!token) {
       void (async () => {
-        const response = await fetch("/api/gallery/public/session", { cache: "no-store", credentials: "include" });
+        const requestedShareId = new URLSearchParams(window.location.search).get("shareId");
+        const sessionPath = requestedShareId ? `/api/gallery/public/session?shareId=${encodeURIComponent(requestedShareId)}` : "/api/gallery/public/session";
+        const response = await fetch(sessionPath, { cache: "no-store", credentials: "include" });
         if (response.status === 410) { setExpired(true); setMessage("Este enlace venció o fue revocado."); return; }
         if (!response.ok) { setMessage("No se pudo comprobar el acceso. Probá de nuevo."); return; }
         const session = await response.json() as { shareId: string };
@@ -246,7 +248,10 @@ export default function SharedGallery() {
       if (!response.ok) { setMessage(response.status === 429 ? "Se alcanzó el límite de intentos. Esperá un momento y reintentá." : "No se pudo abrir el enlace. Revisá tu conexión y reintentá."); return; }
       const session = await response.json() as { shareId: string };
       tokenRef.current = null;
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.hash = "";
+      cleanUrl.searchParams.set("shareId", session.shareId);
+      window.history.replaceState(null, "", `${cleanUrl.pathname}${cleanUrl.search}`);
       setExpired(false);
       await loadPage(session.shareId, null);
     } catch { setMessage("No se pudo abrir el enlace. Revisá tu conexión y reintentá."); }

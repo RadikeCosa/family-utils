@@ -148,7 +148,7 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     const entered = await request(null, "/api/gallery/public/enter", "POST", { token: collectionToken });
     assert.equal(entered.status, 200);
     assert.equal(entered.body.shareId, collectionShare.body.id);
-    const sessionCookie = entered.response.headers.getSetCookie().find(value => value.startsWith("fu_gallery_session_dev="));
+    const sessionCookie = entered.response.headers.getSetCookie().find(value => value.startsWith(`fu_gallery_session_dev_${collectionShare.body.id}=`));
     assert.ok(sessionCookie);
     assert.match(sessionCookie, /HttpOnly/iu);
     assert.match(sessionCookie, /SameSite=Lax/iu);
@@ -165,6 +165,21 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     assert.equal(publicPage.response.headers.get("referrer-policy"), "no-referrer");
     await delay(250);
     assert.equal((await request(publicGuest, `/api/gallery/public/shares/${randomUUID()}`)).status, 410, "a session cannot enumerate another share ID");
+
+    const independentShare = await request(owner, "/api/gallery/shares", "POST", { collectionId, duration: "1h" });
+    assert.equal(independentShare.status, 201);
+    const independentToken = new URLSearchParams(new URL(independentShare.body.url).hash.slice(1)).get("token");
+    const independentEntry = await request(null, "/api/gallery/public/enter", "POST", { token: independentToken });
+    assert.equal(independentEntry.status, 200);
+    const independentCookie = independentEntry.response.headers.getSetCookie().find(value => value.startsWith(`fu_gallery_session_dev_${independentShare.body.id}=`))?.split(";", 1)[0];
+    assert.ok(independentCookie);
+    const bothGuests = { cookie: `${publicGuest.cookie}; ${independentCookie}` };
+    await delay(250);
+    assert.equal((await request(bothGuests, `/api/gallery/public/session?shareId=${collectionShare.body.id}`)).body.shareId, collectionShare.body.id,
+      "each share selects its own session cookie when several visits coexist");
+    await delay(250);
+    assert.equal((await request(bothGuests, `/api/gallery/public/session?shareId=${independentShare.body.id}`)).body.shareId, independentShare.body.id,
+      "opening another share does not replace the first share's authorization");
 
     const beforeDefaultShare = Date.now();
     const familyShare = await request(other, "/api/gallery/shares", "POST", {});
@@ -192,7 +207,7 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     assert.equal(expiringShare.status, 201);
     const expiringToken = new URLSearchParams(new URL(expiringShare.body.url).hash.slice(1)).get("token");
     const expiringSession = await request(null, "/api/gallery/public/enter", "POST", { token: expiringToken });
-    const expiringCookie = expiringSession.response.headers.getSetCookie().find(value => value.startsWith("fu_gallery_session_dev="))?.split(";", 1)[0];
+    const expiringCookie = expiringSession.response.headers.getSetCookie().find(value => value.startsWith(`fu_gallery_session_dev_${expiringShare.body.id}=`))?.split(";", 1)[0];
     await pool.query("UPDATE gallery_shares SET expires_at=now()-interval '1 second' WHERE id=$1", [expiringShare.body.id]);
     await delay(250);
     const expiredPage = await request({ cookie: expiringCookie }, `/api/gallery/public/shares/${expiringShare.body.id}`);
@@ -245,7 +260,7 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     const paginatedToken = new URLSearchParams(new URL(paginatedShare.body.url).hash.slice(1)).get("token");
     const paginatedEntry = await request(null, "/api/gallery/public/enter", "POST", { token: paginatedToken });
     assert.equal(paginatedEntry.status, 200);
-    const paginatedCookie = paginatedEntry.response.headers.getSetCookie().find(value => value.startsWith("fu_gallery_session_dev="))?.split(";", 1)[0];
+    const paginatedCookie = paginatedEntry.response.headers.getSetCookie().find(value => value.startsWith(`fu_gallery_session_dev_${paginatedShare.body.id}=`))?.split(";", 1)[0];
     assert.ok(paginatedCookie);
     const paginatedGuest = { cookie: paginatedCookie };
     await delay(250);
@@ -271,7 +286,7 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
       lastReadStartedAt = Date.now();
       assert.notEqual(thumbnail.status, 429, `normal lazy thumbnail ${index + 1}/200 must not be rate limited`);
       if (Date.now() - lastRevalidatedAt >= 30_000) {
-        const sessionCheck = await request(paginatedGuest, "/api/gallery/public/session");
+        const sessionCheck = await request(paginatedGuest, `/api/gallery/public/session?shareId=${paginatedShare.body.id}`);
         assert.equal(sessionCheck.status, 200, "30-second session revalidation stays below public rate limits");
         lastRevalidatedAt = Date.now();
       }

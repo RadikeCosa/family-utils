@@ -14,10 +14,10 @@ const unavailable = () => new NextResponse(null, { status: 410, headers });
 export async function GET(request: Request, context: { params: Promise<{ shareId: string; drawingId: string }> }) {
   if (!gallerySharesEnabled()) return new NextResponse(null, { status: 404, headers });
   try {
-    const access = await authorizePublicSession(request);
+    const { shareId, drawingId } = await context.params;
+    const access = await authorizePublicSession(request, { shareId });
     if (access.kind === "rate-limited") return new NextResponse(null, { status: 429, headers: { ...headers, "Retry-After": String(access.retryAfter) } });
     if (access.kind !== "authorized") return unavailable();
-    const { shareId, drawingId } = await context.params;
     if (!UUID_PATTERN.test(shareId) || !UUID_PATTERN.test(drawingId) || access.shareId !== shareId) return unavailable();
     const variant = new URL(request.url).searchParams.get("variant");
     if (variant !== "display" && variant !== "thumbnail") return unavailable();
