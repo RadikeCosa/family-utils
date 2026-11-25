@@ -32,6 +32,8 @@ export default defineConfig({
       GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
       BETTER_AUTH_URL: baseURL,
       LIBRARY_ENABLED: "true",
+      GALLERY_ENABLED: "true",
+      GALLERY_SHARES_ENABLED: "true",
       TRAINING_ENABLED: "true",
       TRAINING_OPTIONAL_METRICS_ENABLED: "true",
       TRAINING_OPTIONAL_METRICS_FORM_ENABLED: "true",

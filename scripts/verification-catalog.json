@@ -30,7 +30,7 @@
       "dependsOn": [],
       "nodeTests": ["src/lib/gallery/rules.test.ts", "tests/postgres-gallery.integration.test.mjs"],
       "routeTests": ["tests/gallery-routes.integration.mjs"],
-      "browser": []
+      "browser": [{"kind":"default","files":["tests/e2e/gallery-shared.spec.ts"]}]
     },
     "cocina": {
       "paths": ["src/app/cocina/", "src/lib/kitchen/"],

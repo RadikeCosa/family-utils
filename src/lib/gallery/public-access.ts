@@ -32,8 +32,11 @@ function readCookie(header: string | null, name: string) {
 }
 
 function publicSessionToken(request: Request) {
-  return readCookie(request.headers.get("cookie"), "__Host-fu_gallery_session")
-    ?? (process.env.NODE_ENV === "development" ? readCookie(request.headers.get("cookie"), "fu_gallery_session_dev") : null);
+  const secureToken = readCookie(request.headers.get("cookie"), "__Host-fu_gallery_session");
+  if (secureToken) return secureToken;
+  const url = new URL(request.url);
+  const localHttp = url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
+  return localHttp ? readCookie(request.headers.get("cookie"), "fu_gallery_session_dev") : null;
 }
 
 export async function limitPublicEntry(request: Request, tokenHash?: string) {
@@ -44,7 +47,7 @@ export async function limitPublicEntry(request: Request, tokenHash?: string) {
   return true;
 }
 
-export async function authorizePublicSession(request: Request, options: { countRequest?: boolean } = {}) {
+export async function authorizePublicSession(request: Request, options: { countRequest?: boolean; countInterval?: boolean } = {}) {
   const token = publicSessionToken(request);
   const tokenHash = token && validGalleryCredential(token) ? galleryCredentialHash(token) : null;
   const ip = ipAddress(request) ?? "unknown";
@@ -77,7 +80,7 @@ export async function authorizePublicSession(request: Request, options: { countR
 
   if (options.countRequest !== false && (!await consumeGalleryRateLimit(`public-read-session-${row.sessionId}`, GALLERY_PUBLIC_SESSION_REQUESTS_PER_MINUTE, 60_000)
     || !await consumeGalleryRateLimit("public-read-global", 300, 60_000)
-    || !await consumeGalleryInterval("public-read-global", 200))) return { kind: "rate-limited" as const, retryAfter: 1 };
+    || (options.countInterval !== false && !await consumeGalleryInterval("public-read-global", 200)))) return { kind: "rate-limited" as const, retryAfter: 1 };
 
   return { kind: "authorized" as const, sessionId: row.sessionId, shareId: row.shareId, familyId: row.familyId, expiresAt: row.shareExpiresAt };
 }

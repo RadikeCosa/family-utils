@@ -24,6 +24,20 @@ not ok 2 - assertion regression
   assert.equal(parseTap("# tests 0\n# pass 0\n# fail 0\n"), null);
 });
 
+test("TAP summaries retain multiline assertion messages", () => {
+  const report = parseTap(`# tests 1
+# pass 0
+# fail 1
+not ok 1 - multiline assertion
+  ---
+  error: |-
+    AssertionError: expected the route to succeed
+      at TestContext.<anonymous> (tests/example.test.mjs:10:2)
+  ...
+`);
+  assert.equal(report.failures[0].message, "AssertionError: expected the route to succeed\n  at TestContext.<anonymous> (tests/example.test.mjs:10:2)");
+});
+
 test("Playwright reports count and identify failures without accepting skipped tests", () => {
   const report = {
     suites: [{
