@@ -148,6 +148,26 @@ credenciales afectadas. Un dump recupera datos PostgreSQL, no bytes de Blob ni
 bytes que un visitante ya recibió. La entrega acepta la falta de respaldo Blob
 independiente y mantiene la issue [#105](https://github.com/RadikeCosa/family-utils/issues/105) para resolverla después.
 
+El PR 5 de la entrega mantiene `GALLERY_SHARES_ENABLED` apagada en el primer
+despliegue de producción. Verificar Preview con la bandera apagada y encendida,
+incluidos los enlaces de Galería completa solo con datos ficticios. Después de
+confirmar el despliegue de producción, activar la bandera mediante una nueva
+versión del mismo SHA. El humo productivo crea exclusivamente una colección
+`PRUEBA` y dibujos ficticios: un enlace de una hora se abre en otro navegador,
+se revoca y devuelve `410`; un enlace independiente permanece accesible hasta
+su vencimiento natural de una hora, comprobado también desde una sesión abierta.
+Limpiar a continuación solo los registros y objetos de prueba, conservando los
+eventos mínimos de auditoría. No apagar `GALLERY_ENABLED` en producción para
+probar `404`; hacer esa comprobación en Preview.
+
+Registrar en evidencia privada el SHA, destinos de Vercel y Neon, respaldos,
+migraciones, activación, resultado del humo y limpieza, sin incluir credenciales
+ni datos familiares. El cierre requiere los cinco PRs integrados, despliegue
+listo y habilitado, expiración real comprobada, contrato e índice actualizados,
+issue de seguimiento y ramas/worktrees de esta entrega eliminados. Cada merge a
+`main` es publicación de producción; por eso, aplicar y verificar las
+migraciones aditivas de un PR antes de integrarlo.
+
 ## Autorización, ejecución y recuperación
 
 La autorización de una entrega enumera por separado, en este orden:

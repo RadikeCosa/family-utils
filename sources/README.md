@@ -19,7 +19,7 @@ contradicen, explicitar la diferencia y acordar cualquier cambio de producto.
 | Entrenamiento | [Diario, contrato 3](training-diary.md) | [Contrato anterior](training.md); conservar compatibilidad y transición explícita |
 | Navegación y presentación | [Experiencia unificada](unified-experience.md) | Activación, sistema visual y recorridos compartidos |
 | Deportes | [Funcionamiento y UX/UI](deportes-ux-ui.md) | [Alcance implementado](deportes-plan.md), [entregas](deportes-entregas.md) |
-| Galería cálida y enlaces temporales | [Galería cálida y enlaces temporales](gallery.md) | Experiencia, permisos, enlaces temporales, privacidad y recuperación |
+| Galería cálida y enlaces temporales | [Galería cálida y enlaces temporales](gallery.md) | Experiencia, permisos, enlaces temporales, privacidad, recuperación y [publicación](deployment.md#publicacion-de-galeria-con-enlaces-temporales) |
 | River | [Formación y resultado](river-matchday.md) | [Clausura 2026](river-clausura-2026.md), reglas específicas de esa temporada |
 | Champions | [Índice Champions](champions/README.md) | [Tabla y agenda](champions/2026-10-20-tabla-y-agenda.md), alcance fechado |
 | UFC | [Base documentada como publicada](ufc/base-publicada.md) | [Puntajes e integración](ufc/puntajes-pendientes.md), confirmar pendientes contra código y pruebas |
