@@ -2,9 +2,10 @@ import { get } from "@vercel/blob";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { families, galleryDrawings } from "@/db/schema";
+import { families, galleryDrawings, galleryShareDrawings } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { galleryEnabled } from "@/lib/gallery/config";
+import { galleryNow } from "@/lib/gallery/clock";
 import { canManageGallery } from "@/lib/gallery/rules";
 
 export const runtime = "nodejs";
@@ -58,13 +59,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ drawi
   const archived = (body as { archived: boolean }).archived;
   if ((archived && drawing.status !== "ready") || (!archived && drawing.status !== "archived")) return NextResponse.json({ error: "CONFLICT" }, { status: 409 });
   await getDb().transaction(async (tx) => {
+    const now = galleryNow();
     await tx.update(galleryDrawings).set({
       status: archived ? "archived" : "ready",
-      archivedAt: archived ? new Date() : null,
+      archivedAt: archived ? now : null,
       version: sql`${galleryDrawings.version} + 1`,
-      updatedAt: new Date(),
+      updatedAt: now,
     }).where(eq(galleryDrawings.id, drawing.id));
-    await tx.update(families).set({ galleryRevision: sql`${families.galleryRevision} + 1`, updatedAt: new Date() }).where(eq(families.id, actor.familyId));
+    if (archived) await tx.update(galleryShareDrawings).set({ invalidatedAt: now }).where(and(
+      eq(galleryShareDrawings.drawingId, drawing.id), isNull(galleryShareDrawings.invalidatedAt),
+    ));
+    await tx.update(families).set({ galleryRevision: sql`${families.galleryRevision} + 1`, updatedAt: now }).where(eq(families.id, actor.familyId));
   });
   return NextResponse.json({ drawingId, archived }, { headers: { "Cache-Control": "private, no-store" } });
 }

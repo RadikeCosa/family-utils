@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     eq(galleryDrawings.familyId, actor.familyId),
     eq(galleryDrawings.status, "ready"),
     isNull(galleryDrawings.archivedAt),
-  )).orderBy(desc(galleryDrawings.createdAt), desc(galleryDrawings.id)).limit(200);
+  )).orderBy(desc(galleryDrawings.createdAt), desc(galleryDrawings.id));
   return NextResponse.json({ items: rows.map(row => ({
     ...row,
     displayUrl: `/api/gallery/drawings/${row.id}?variant=display&v=${row.version}`,

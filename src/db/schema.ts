@@ -1143,3 +1143,39 @@ export const galleryGuestSessions = pgTable("gallery_guest_sessions", {
   index("gallery_guest_sessions_invitation_idx").on(t.invitationId, t.expiresAt),
   check("gallery_guest_sessions_hash", sql`${t.sessionHash} ~ '^[0-9a-f]{64}$'`),
 ]);
+
+export const galleryShares = pgTable("gallery_shares", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(),
+  createdByMemberId: uuid("created_by_member_id").notNull(), collectionId: uuid("collection_id"), collectionOwnerMemberId: uuid("collection_owner_member_id"),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.createdByMemberId, t.familyId], foreignColumns: [members.id, members.familyId] }).onDelete("cascade"),
+  foreignKey({ columns: [t.collectionId, t.familyId, t.collectionOwnerMemberId], foreignColumns: [galleryCollections.id, galleryCollections.familyId, galleryCollections.ownerMemberId] }).onDelete("cascade"),
+  uniqueIndex("gallery_shares_id_family_unique").on(t.id, t.familyId),
+  index("gallery_shares_family_created_idx").on(t.familyId, t.createdAt.desc()),
+  check("gallery_shares_scope_owner", sql`(${t.collectionId} IS NULL AND ${t.collectionOwnerMemberId} IS NULL) OR (${t.collectionId} IS NOT NULL AND ${t.collectionOwnerMemberId} IS NOT NULL)`),
+  check("gallery_shares_token_hash", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+]);
+
+export const galleryShareDrawings = pgTable("gallery_share_drawings", {
+  shareId: uuid("share_id").notNull(), familyId: uuid("family_id").notNull(), authorMemberId: uuid("author_member_id").notNull(), drawingId: uuid("drawing_id").notNull(),
+  position: integer("position").notNull(), invalidatedAt: timestamp("invalidated_at", { withTimezone: true }), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.shareId, t.familyId], foreignColumns: [galleryShares.id, galleryShares.familyId] }).onDelete("cascade"),
+  foreignKey({ columns: [t.drawingId, t.familyId, t.authorMemberId], foreignColumns: [galleryDrawings.id, galleryDrawings.familyId, galleryDrawings.authorMemberId] }).onDelete("cascade"),
+  uniqueIndex("gallery_share_drawings_unique").on(t.shareId, t.drawingId),
+  uniqueIndex("gallery_share_drawings_position_unique").on(t.shareId, t.position),
+  index("gallery_share_drawings_page_idx").on(t.shareId, t.position, t.drawingId),
+  check("gallery_share_drawings_position", sql`${t.position} >= 0`),
+]);
+
+export const galleryShareSessions = pgTable("gallery_share_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(), familyId: uuid("family_id").notNull(), shareId: uuid("share_id").notNull(),
+  sessionHash: varchar("session_hash", { length: 64 }).notNull().unique(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: createdAt(),
+}, t => [
+  foreignKey({ columns: [t.shareId, t.familyId], foreignColumns: [galleryShares.id, galleryShares.familyId] }).onDelete("cascade"),
+  index("gallery_share_sessions_share_idx").on(t.shareId, t.expiresAt),
+  check("gallery_share_sessions_hash", sql`${t.sessionHash} ~ '^[0-9a-f]{64}$'`),
+]);

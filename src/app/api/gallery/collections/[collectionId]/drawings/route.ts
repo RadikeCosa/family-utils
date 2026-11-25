@@ -1,10 +1,11 @@
 import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { families, galleryCollections, galleryCollectionDrawings, galleryDrawings, galleryGuestSessions, galleryInvitations } from "@/db/schema";
+import { families, galleryCollections, galleryCollectionDrawings, galleryDrawings, galleryGuestSessions, galleryInvitations, galleryShareDrawings, galleryShares } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { galleryEnabled } from "@/lib/gallery/config";
 import { canManageGallery, GALLERY_MAX_COLLECTION_ITEMS, UUID_PATTERN } from "@/lib/gallery/rules";
+import { galleryNow } from "@/lib/gallery/clock";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ collec
       eq(galleryCollections.id, collectionId), eq(galleryCollections.familyId, actor.familyId), isNull(galleryCollections.archivedAt),
     )).for("update").limit(1);
     if (!collection || !canManageGallery(actor.role, actor.memberId, collection.ownerMemberId)) return { error: "NOT_FOUND" as const };
-    const now = new Date();
+    const now = galleryNow();
 
     if (input.action === "add") {
       const drawings = await tx.select({ id: galleryDrawings.id }).from(galleryDrawings).where(and(
@@ -61,6 +62,13 @@ export async function POST(request: Request, context: { params: Promise<{ collec
         familyId: actor.familyId, ownerMemberId: collection.ownerMemberId, collectionId, drawingId,
       }))).onConflictDoNothing();
     } else {
+      const linkedShares = await tx.select({ id: galleryShares.id }).from(galleryShares).where(and(
+        eq(galleryShares.collectionId, collectionId), isNull(galleryShares.revokedAt),
+      ));
+      if (linkedShares.length) await tx.update(galleryShareDrawings).set({ invalidatedAt: now }).where(and(
+        inArray(galleryShareDrawings.shareId, linkedShares.map(row => row.id)),
+        inArray(galleryShareDrawings.drawingId, drawingIds as string[]), isNull(galleryShareDrawings.invalidatedAt),
+      ));
       await tx.delete(galleryCollectionDrawings).where(and(
         eq(galleryCollectionDrawings.collectionId, collectionId), inArray(galleryCollectionDrawings.drawingId, drawingIds as string[]),
       ));

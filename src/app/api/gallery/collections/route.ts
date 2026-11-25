@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { galleryCollections, galleryCollectionDrawings, galleryDrawings, galleryGuestSessions, galleryInvitations } from "@/db/schema";
@@ -35,7 +35,22 @@ export async function GET(request: Request) {
     .where(and(eq(galleryCollections.familyId, actor.familyId), isNull(galleryCollections.archivedAt)))
     .groupBy(galleryCollections.id)
     .orderBy(desc(galleryCollections.updatedAt), desc(galleryCollections.id));
-  return NextResponse.json({ collections: rows.filter(row => canManageGallery(actor.role, actor.memberId, row.ownerMemberId)) }, {
+  const collections = rows.filter(row => canManageGallery(actor.role, actor.memberId, row.ownerMemberId));
+  const covers = collections.length ? await getDb().select({
+    collectionId: galleryCollectionDrawings.collectionId,
+    drawingId: galleryDrawings.id,
+    version: galleryDrawings.version,
+  }).from(galleryCollectionDrawings)
+    .innerJoin(galleryDrawings, and(eq(galleryDrawings.id, galleryCollectionDrawings.drawingId), eq(galleryDrawings.familyId, galleryCollectionDrawings.familyId), eq(galleryDrawings.status, "ready"), isNull(galleryDrawings.archivedAt)))
+    .where(inArray(galleryCollectionDrawings.collectionId, collections.map(item => item.id)))
+    .orderBy(asc(galleryCollectionDrawings.createdAt), asc(galleryCollectionDrawings.drawingId)) : [];
+  const coverMap = new Map<string, string[]>();
+  for (const cover of covers) {
+    const urls = coverMap.get(cover.collectionId) ?? [];
+    if (urls.length < 3) urls.push(`/api/gallery/drawings/${cover.drawingId}?variant=thumbnail&v=${cover.version}`);
+    coverMap.set(cover.collectionId, urls);
+  }
+  return NextResponse.json({ collections: collections.map(collection => ({ ...collection, coverUrls: coverMap.get(collection.id) ?? [] })) }, {
     headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" },
   });
 }

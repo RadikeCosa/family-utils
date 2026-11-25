@@ -1,9 +1,10 @@
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { families, galleryCollections, galleryCollectionDrawings, galleryDrawings, galleryGuestSessions, galleryInvitations } from "@/db/schema";
+import { auditEvents, families, galleryCollections, galleryCollectionDrawings, galleryDrawings, galleryGuestSessions, galleryInvitations, galleryShareSessions, galleryShares } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
 import { galleryEnabled } from "@/lib/gallery/config";
+import { galleryNow } from "@/lib/gallery/clock";
 import { canManageGallery } from "@/lib/gallery/rules";
 
 export const runtime = "nodejs";
@@ -58,7 +59,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ colle
       eq(galleryInvitations.collectionId, collectionId), isNull(galleryInvitations.revokedAt),
       or(
         and(isNull(galleryInvitations.redeemedAt), gt(galleryInvitations.expiresAt, new Date())),
-        and(gt(galleryGuestSessions.expiresAt, new Date()), isNull(galleryGuestSessions.revokedAt)),
+        and(gt(galleryGuestSessions.expiresAt, galleryNow()), isNull(galleryGuestSessions.revokedAt)),
       ),
     )).limit(1);
     if (active && input.confirmExposure !== true) return { error: "CONFIRM_EXPOSURE" as const };
@@ -83,10 +84,22 @@ export async function DELETE(request: Request, context: { params: Promise<{ coll
       eq(galleryCollections.id, collectionId), eq(galleryCollections.familyId, actor.familyId), isNull(galleryCollections.archivedAt),
     )).for("update").limit(1);
     if (!collection || !canManageGallery(actor.role, actor.memberId, collection.ownerMemberId)) return false;
-    const now = new Date();
+    const now = galleryNow();
     await tx.update(galleryCollections).set({ archivedAt: now, version: sql`${galleryCollections.version} + 1`, updatedAt: now }).where(eq(galleryCollections.id, collectionId));
     await tx.update(galleryInvitations).set({ revokedAt: now }).where(and(eq(galleryInvitations.collectionId, collectionId), isNull(galleryInvitations.revokedAt)));
     await tx.update(galleryGuestSessions).set({ revokedAt: now }).where(and(eq(galleryGuestSessions.collectionId, collectionId), isNull(galleryGuestSessions.revokedAt)));
+    const linkedShares = await tx.select({ id: galleryShares.id, familyId: galleryShares.familyId }).from(galleryShares).where(and(
+      eq(galleryShares.collectionId, collectionId), isNull(galleryShares.revokedAt),
+    ));
+    if (linkedShares.length) {
+      await tx.update(galleryShares).set({ revokedAt: now }).where(and(
+        eq(galleryShares.collectionId, collectionId), isNull(galleryShares.revokedAt),
+      ));
+      for (const share of linkedShares) {
+        await tx.update(galleryShareSessions).set({ revokedAt: now }).where(and(eq(galleryShareSessions.shareId, share.id), isNull(galleryShareSessions.revokedAt)));
+        await tx.insert(auditEvents).values({ familyId: share.familyId, actorMemberId: actor.memberId, entityType: "gallery_share", entityId: share.id, action: "revoked", after: { scope: "collection", reason: "collection_archived" } });
+      }
+    }
     await tx.update(families).set({ galleryRevision: sql`${families.galleryRevision} + 1`, updatedAt: now }).where(eq(families.id, actor.familyId));
     return true;
   });
