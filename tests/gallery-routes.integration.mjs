@@ -199,7 +199,7 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     assert.equal(expiredPage.status, 410);
     assert.equal(expiredPage.body.error, revokedPage.body.error, "expired and revoked links are indistinguishable");
 
-    const paginationDrawings = await Promise.all(Array.from({ length: 22 }, (_, index) => drawing(owner.id, String(index + 4).padStart(64, "0"))));
+    const paginationDrawings = await Promise.all(Array.from({ length: 197 }, (_, index) => drawing(owner.id, String(index + 4).padStart(64, "0"))));
     const paginatedShare = await request(owner, "/api/gallery/shares", "POST", {});
     assert.equal(paginatedShare.status, 201);
     const paginatedToken = new URLSearchParams(new URL(paginatedShare.body.url).hash.slice(1)).get("token");
@@ -213,6 +213,29 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     assert.equal(firstPage.status, 200);
     assert.equal(firstPage.body.drawings.length, 24);
     assert.ok(firstPage.body.nextCursor);
+
+    let page = firstPage.body, pageCursor = page.nextCursor, visitedDrawings = [...page.drawings], lastReadStartedAt = Date.now(), lastRevalidatedAt = Date.now();
+    while (pageCursor) {
+      await delay(Math.max(0, lastReadStartedAt + 220 - Date.now()));
+      lastReadStartedAt = Date.now();
+      const nextPage = await request(paginatedGuest, `/api/gallery/public/shares/${paginatedShare.body.id}?cursor=${pageCursor}`);
+      assert.equal(nextPage.status, 200, "normal pagination over 200 drawings stays below public rate limits");
+      page = nextPage.body;
+      pageCursor = page.nextCursor;
+      visitedDrawings.push(...page.drawings);
+    }
+    assert.equal(visitedDrawings.length, 200);
+    for (const [index, item] of visitedDrawings.entries()) {
+      await delay(Math.max(0, lastReadStartedAt + 220 - Date.now()));
+      lastReadStartedAt = Date.now();
+      const thumbnail = await request(paginatedGuest, item.thumbnailUrl);
+      assert.notEqual(thumbnail.status, 429, `normal lazy thumbnail ${index + 1}/200 must not be rate limited`);
+      if (Date.now() - lastRevalidatedAt >= 30_000) {
+        const sessionCheck = await request(paginatedGuest, "/api/gallery/public/session");
+        assert.equal(sessionCheck.status, 200, "30-second session revalidation stays below public rate limits");
+        lastRevalidatedAt = Date.now();
+      }
+    }
 
     const revokeTransaction = await pool.connect();
     try {
