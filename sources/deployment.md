@@ -117,6 +117,37 @@ SHAs. `code` falla ante cualquier cambio en `drizzle/`, `drizzle-deferred/` o
 borrarse ni renombrarse. La ausencia de historial o de prueba no equivale a un
 resultado aprobado.
 
+## Publicación de Galería con enlaces temporales
+
+Cada merge a `main` despliega automáticamente a producción. Las migraciones de
+cada PR de Galería son aditivas y se aplican en producción antes del merge, para
+que ninguna versión desplegada dependa de tablas que todavía no existen. Antes
+de cada aplicación se verifica el destino y se conserva respaldo recuperable.
+
+Los enlaces nuevos tienen una puerta independiente `GALLERY_SHARES_ENABLED`,
+apagada por defecto, además de `GALLERY_ENABLED`. Esto permite integrar los PRs
+sin exponer la funcionalidad mientras la Galería existente sigue activa. En
+Preview se comprueban ambas posiciones de la puerta; no se apaga `GALLERY_ENABLED`
+en producción solo para probar el `404`.
+El alcance de Galería completa se prueba solo en Preview con datos ficticios.
+Si se decide probar ese alcance en producción, requiere una decisión explícita,
+un enlace de una hora y un aviso de que incluirá dibujos familiares reales.
+
+Antes de migrar producción se obtiene un dump y un snapshot/rama de Neon y se
+ensayan las migraciones pendientes en una rama temporal con datos ficticios.
+Migrar primero; desplegar después. El smoke productivo usa únicamente una
+colección `PRUEBA` con dibujos ficticios: crear enlace de una hora, abrir desde
+otro navegador, revocar y confirmar `410`; otro enlace espera una hora completa
+para comprobar el vencimiento natural. Limpiar registros y objetos `PRUEBA` al
+final, conservando los eventos mínimos de auditoría.
+
+La reversión preferida es rollback instantáneo de Vercel al despliegue previo,
+compatible con el esquema aditivo. Si no está disponible, apagar
+`GALLERY_SHARES_ENABLED`; `GALLERY_ENABLED` queda como corte general. Revocar
+credenciales afectadas. Un dump recupera datos PostgreSQL, no bytes de Blob ni
+bytes que un visitante ya recibió. La entrega acepta la falta de respaldo Blob
+independiente y mantiene la issue [#105](https://github.com/RadikeCosa/family-utils/issues/105) para resolverla después.
+
 ## Autorización, ejecución y recuperación
 
 La autorización de una entrega enumera por separado, en este orden:

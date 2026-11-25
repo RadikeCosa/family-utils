@@ -2,7 +2,8 @@ import { del } from "@vercel/blob";
 import { and, eq, gt, lt, or, isNull, notExists, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { authRateLimit, galleryDrawings, galleryGuestSessions, galleryInvitations } from "@/db/schema";
+import { auditEvents, authRateLimit, galleryDrawings, galleryGuestSessions, galleryInvitations, galleryShareSessions, galleryShares } from "@/db/schema";
+import { GALLERY_SHARE_AUDIT_RETENTION_MS, GALLERY_SHARE_PURGE_AFTER_MS } from "@/lib/gallery/rules";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,17 @@ export async function GET(request: Request) {
     or(isNull(galleryInvitations.redeemedAt), notExists(db.select({ id: galleryGuestSessions.id }).from(galleryGuestSessions).where(and(
       eq(galleryGuestSessions.invitationId, galleryInvitations.id), isNull(galleryGuestSessions.revokedAt), gt(galleryGuestSessions.expiresAt, now),
     )))),
+  ));
+  const terminalCutoff = new Date(now.getTime() - GALLERY_SHARE_PURGE_AFTER_MS);
+  await db.delete(galleryShareSessions).where(and(
+    or(lt(galleryShareSessions.expiresAt, terminalCutoff), lt(galleryShareSessions.revokedAt, terminalCutoff)),
+  ));
+  await db.delete(galleryShares).where(or(
+    lt(galleryShares.expiresAt, terminalCutoff), lt(galleryShares.revokedAt, terminalCutoff),
+  ));
+  await db.delete(auditEvents).where(and(
+    eq(auditEvents.entityType, "gallery_share"),
+    lt(auditEvents.createdAt, new Date(now.getTime() - GALLERY_SHARE_AUDIT_RETENTION_MS)),
   ));
   const rateCutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000;
   await db.delete(authRateLimit).where(and(sql`${authRateLimit.key} LIKE 'gallery:%'`, lt(authRateLimit.lastRequest, rateCutoff)));
