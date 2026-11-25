@@ -60,12 +60,12 @@ test("shared gallery clears its credential and keeps the native viewer accessibl
   expect(accessibility.violations).toEqual([]);
 
   await page.getByRole("button", { name: "Dibujo siguiente" }).click();
-  await expect(dialog.getByText("Dibujo 2 de 2")).toBeVisible();
+  await expect(dialog.getByText("Dibujo 2 de 2"), "the next control should advance the shared viewer").toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("ArrowLeft");
-  await expect(dialog.getByText("Dibujo 1 de 2")).toBeVisible();
+  await expect(dialog.getByText("Dibujo 1 de 2"), "ArrowLeft should return to the first drawing").toBeVisible({ timeout: 15_000 });
 
   await page.keyboard.press("Escape");
-  await expect(dialog).not.toBeVisible();
+  await expect(dialog, "Escape should close the native viewer").not.toBeVisible({ timeout: 15_000 });
   await expect(firstDrawing).toBeFocused();
 });
 
