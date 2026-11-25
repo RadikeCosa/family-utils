@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./gallery.module.css";
+import { useViewerScrollLock } from "./useViewerScrollLock";
 
 type GalleryItem = {
   id: string;
@@ -24,6 +25,9 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
   const [collections, setCollections] = useState<CollectionItem[]>([]);
   const [openCollection, setOpenCollection] = useState<{ collection: CollectionItem; drawings: GalleryItem[] } | null>(null);
   const [selected, setSelected] = useState<GalleryItem | null>(null);
+  const [selectedImageFailed, setSelectedImageFailed] = useState(false);
+  const [imageAttempt, setImageAttempt] = useState(0);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState("");
@@ -41,6 +45,8 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
   const [sharePreview, setSharePreview] = useState<{ collection: CollectionItem | null; drawings: GalleryItem[]; scopeTitle: string } | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const dialogOpener = useRef<HTMLElement | null>(null);
+  const viewerOpen = selected !== null;
+  useViewerScrollLock(viewerOpen);
 
   const refresh = useCallback(async () => {
     const [response, collectionResponse] = await Promise.all([
@@ -97,7 +103,12 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (selected && !dialog.open) dialog.showModal();
-    if (!selected && dialog.open) { dialog.close(); dialogOpener.current?.focus(); dialogOpener.current = null; }
+    if (!selected && dialog.open) {
+      dialog.close();
+      if (dialogOpener.current?.isConnected) dialogOpener.current.focus();
+      else document.querySelector<HTMLElement>("[data-gallery-focus-fallback]")?.focus();
+      dialogOpener.current = null;
+    }
   }, [selected]);
 
   async function startUpload(file: File) {
@@ -124,15 +135,17 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
 
   function openDrawing(item: GalleryItem, opener: HTMLElement) {
     dialogOpener.current = opener;
+    setSelectedImageFailed(false);
+    setImageAttempt(0);
     setSelected(item);
   }
 
   function moveFamilyDrawing(direction: -1 | 1) {
-    if (!selected) return;
+    if (!selected || archivingId) return;
     const visible = openCollection?.drawings ?? items;
     const index = visible.findIndex(item => item.id === selected.id);
     const next = visible[index + direction];
-    if (next) setSelected(next);
+    if (next) { setSelectedImageFailed(false); setImageAttempt(0); setSelected(next); }
   }
 
   async function handleFiles(files: FileList | null) {
@@ -157,15 +170,42 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
   }
 
   async function archive(item: GalleryItem) {
-    const response = await fetch(`/api/gallery/drawings/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archived: true }),
-    });
-    if (!response.ok) { setMessage("No se pudo archivar el dibujo."); return; }
-    setSelected(null);
-    await refresh();
-    setMessage("Dibujo archivado.");
+    if (archivingId || !window.confirm("Archivar este dibujo lo ocultará de la Galería, las colecciones y los enlaces compartidos. ¿Querés continuar?")) return;
+    setArchivingId(item.id);
+    const collectionId = openCollection?.collection.id;
+    let completed = false;
+    try {
+      const response = await fetch(`/api/gallery/drawings/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+        cache: "no-store",
+      });
+      let alreadyArchived = false;
+      if (response.status === 409) {
+        const latest = await fetch("/api/gallery", { cache: "no-store" });
+        if (latest.ok) {
+          const current = await latest.json() as { items: GalleryItem[] };
+          alreadyArchived = !current.items.some(drawing => drawing.id === item.id);
+        }
+        if (!alreadyArchived) throw new Error("No se pudo archivar el dibujo. Actualizá la galería e intentá de nuevo.");
+      } else if (!response.ok) {
+        throw new Error("No se pudo archivar el dibujo. Revisá tus permisos e intentá de nuevo.");
+      }
+
+      completed = true;
+      await refresh();
+      if (collectionId && !await loadCollection(collectionId, false)) throw new Error("No se pudo actualizar la colección.");
+      setSelected(null);
+      setMessage(alreadyArchived ? "El dibujo ya estaba archivado." : "Dibujo archivado.");
+    } catch (error) {
+      if (completed) {
+        setSelected(null);
+        setMessage("El dibujo se archivó, pero no se pudieron actualizar todas las vistas. Volvé a cargar la Galería.");
+      } else setMessage(error instanceof Error ? error.message : "No se pudo archivar el dibujo. Intentá de nuevo.");
+    } finally {
+      setArchivingId(null);
+    }
   }
 
   async function createCollection(event: React.FormEvent<HTMLFormElement>) {
@@ -302,7 +342,7 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
       <section className={styles.intro}>
         <p className={styles.eyebrow}>CREATIVIDAD EN FAMILIA</p>
         <div className={styles.titleRow}>
-          <div><h1>Galería</h1><p>Tus dibujos y los que comparten en familia.</p></div>
+          <div><h1 tabIndex={-1} data-gallery-focus-fallback>Galería</h1><p>Tus dibujos y los que comparten en familia.</p></div>
           <label className={styles.uploadButton}>
             <span>{uploading ? progress : "Agregar dibujos"}</span>
             <input type="file" accept="image/png,image/jpeg" multiple disabled={uploading} onChange={event => { void handleFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
@@ -361,7 +401,7 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
           <label>Descripción <input value={editingDescription} onChange={event => setEditingDescription(event.target.value)} maxLength={500} /></label>
           <button type="submit" className={styles.uploadButton}>Guardar cambios</button>
         </form>}
-        <div className={styles.grid}>{openCollection.drawings.map((item, index) => <button className={styles.card} type="button" key={item.id} onClick={event => openDrawing(item, event.currentTarget)} aria-label={`Abrir dibujo ${index + 1}`}><Image src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" width={384} height={384} unoptimized /></button>)}</div>
+        <div className={styles.grid}>{openCollection.drawings.map((item, index) => <button data-gallery-drawing-id={item.id} className={styles.card} type="button" key={item.id} onClick={event => openDrawing(item, event.currentTarget)} aria-label={`Abrir dibujo ${index + 1}`}><Image src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" width={384} height={384} unoptimized /></button>)}</div>
       </section>}
       {!openCollection && (loading ? <p className={styles.empty}>Cargando dibujos…</p> : items.length === 0 ? (
         <section className={styles.emptyState}>
@@ -371,25 +411,45 @@ export default function GalleryApp({ currentMemberId, canManageAll, canShareTemp
         </section>
       ) : (
         <section className={styles.grid} aria-label="Dibujos de la familia">
-          {items.map((item, index) => <button className={styles.card} type="button" key={item.id} onClick={event => openDrawing(item, event.currentTarget)} aria-label={`Abrir dibujo ${index + 1}`}>
+          {items.map((item, index) => <button data-gallery-drawing-id={item.id} className={styles.card} type="button" key={item.id} onClick={event => openDrawing(item, event.currentTarget)} aria-label={`Abrir dibujo ${index + 1}`}>
             <Image src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" width={384} height={384} unoptimized />
           </button>)}
         </section>
       ))}
-      <dialog ref={dialogRef} className={styles.dialog} aria-label="Detalle del dibujo" onCancel={event => { event.preventDefault(); setSelected(null); }} onClick={event => { if (event.target === dialogRef.current) setSelected(null); }}>
+      <dialog ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-label="Detalle del dibujo" onCancel={event => { event.preventDefault(); setSelected(null); }} onKeyDown={event => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, [contenteditable='true']"))) return;
+        event.preventDefault();
+        moveFamilyDrawing(event.key === "ArrowLeft" ? -1 : 1);
+      }} onClick={event => { if (event.target === dialogRef.current) setSelected(null); }}>
         {selected && <div className={styles.detail}>
-          <button className={styles.close} type="button" onClick={() => setSelected(null)} aria-label="Cerrar dibujo">×</button>
-          <button type="button" className={styles.viewerPrev} onClick={() => moveFamilyDrawing(-1)} disabled={(openCollection?.drawings ?? items).findIndex(item => item.id === selected.id) <= 0} aria-label="Dibujo anterior">‹</button>
-          <Image src={selected.displayUrl} alt="Dibujo familiar ampliado" width={selected.width} height={selected.height} unoptimized />
-          <button type="button" className={styles.viewerNext} onClick={() => moveFamilyDrawing(1)} disabled={(openCollection?.drawings ?? items).findIndex(item => item.id === selected.id) >= (openCollection?.drawings ?? items).length - 1} aria-label="Dibujo siguiente">›</button>
-          <p aria-live="polite">Dibujo {(openCollection?.drawings ?? items).findIndex(item => item.id === selected.id) + 1} de {(openCollection?.drawings ?? items).length}</p>
-          {(canManageAll || selected.authorMemberId === currentMemberId) && <button className={styles.archive} type="button" onClick={() => void archive(selected)}>Archivar dibujo</button>}
-          {collections.filter(collection => collection.ownerMemberId === selected.authorMemberId).length > 0 && <label className={styles.collectionPicker}>Agregar a colección
-            <select defaultValue="" onChange={event => { if (event.currentTarget.value) void addDrawingToCollection(selected, event.currentTarget.value); }}><option value="">Elegir colección…</option>
-              {collections.filter(collection => collection.ownerMemberId === selected.authorMemberId).map(collection => <option key={collection.id} value={collection.id}>{collection.title}</option>)}
-            </select>
-          </label>}
-          {openCollection?.drawings.some(item => item.id === selected.id) && <button className={styles.archive} type="button" onClick={() => void removeDrawingFromCollection(selected)}>Quitar de esta colección</button>}
+          <div className={styles.viewerHeader}><button className={styles.close} type="button" onClick={() => setSelected(null)} aria-label="Cerrar dibujo">×</button></div>
+          <div className={styles.viewerStage} data-testid="gallery-viewer-stage">
+            {selectedImageFailed ? <div><p className={styles.viewerError} role="status">No se pudo cargar el dibujo.</p><button type="button" className={styles.archive} onClick={() => { setSelectedImageFailed(false); setImageAttempt(value => value + 1); }}>Reintentar carga</button></div> : <Image key={`${selected.id}:${imageAttempt}`} src={imageAttempt ? `${selected.displayUrl}&retry=${imageAttempt}` : selected.displayUrl} alt="Dibujo familiar ampliado" width={selected.width} height={selected.height} unoptimized onError={() => setSelectedImageFailed(true)} />}
+          </div>
+          {(() => {
+            const visible = openCollection?.drawings ?? items;
+            const index = visible.findIndex(item => item.id === selected.id);
+            const previousDisabled = index <= 0 || !!archivingId;
+            const nextDisabled = index < 0 || index >= visible.length - 1 || !!archivingId;
+            return <div className={styles.viewerControls} data-testid="gallery-viewer-controls">
+              <button type="button" className={styles.viewerPrev} onClick={() => !previousDisabled && moveFamilyDrawing(-1)} aria-disabled={previousDisabled} aria-label="Dibujo anterior">‹</button>
+              <p aria-live="polite">Dibujo {Math.max(index + 1, 1)} de {visible.length}</p>
+              <button type="button" className={styles.viewerNext} onClick={() => !nextDisabled && moveFamilyDrawing(1)} aria-disabled={nextDisabled} aria-label="Dibujo siguiente">›</button>
+            </div>;
+          })()}
+          {message && <p className={styles.viewerError} role="status">{message}</p>}
+          <div className={styles.viewerActions}>
+            {(canManageAll || selected.authorMemberId === currentMemberId) && <button className={styles.archive} type="button" disabled={archivingId === selected.id} onClick={() => void archive(selected)}>{archivingId === selected.id ? "Archivando…" : "Archivar dibujo"}</button>}
+            {collections.filter(collection => collection.ownerMemberId === selected.authorMemberId).length > 0 && <label className={styles.collectionPicker}>Agregar a colección
+              <select disabled={!!archivingId} defaultValue="" onChange={event => { if (event.currentTarget.value) void addDrawingToCollection(selected, event.currentTarget.value); }}><option value="">Elegir colección…</option>
+                {collections.filter(collection => collection.ownerMemberId === selected.authorMemberId).map(collection => <option key={collection.id} value={collection.id}>{collection.title}</option>)}
+              </select>
+            </label>}
+            {openCollection?.drawings.some(item => item.id === selected.id) && <button className={styles.archive} type="button" disabled={!!archivingId} onClick={() => void removeDrawingFromCollection(selected)}>Quitar de esta colección</button>}
+          </div>
         </div>}
       </dialog>
     </main>

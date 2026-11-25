@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../gallery.module.css";
+import { useViewerScrollLock } from "../useViewerScrollLock";
 
 type SharedDrawing = { id: string; width: number; height: number; version: number; position: number; thumbnailUrl: string; displayUrl: string };
 type SharedPage = { share: { title: string; expiresAt: string; serverNow: string }; drawings: SharedDrawing[]; total: number; nextCursor: string | null };
@@ -61,12 +62,14 @@ export default function SharedGallery() {
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<SharedDrawing | null>(null);
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [displayFailed, setDisplayFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [needsEntry, setNeedsEntry] = useState(true);
   const [expired, setExpired] = useState(false);
   const [paused, setPaused] = useState(false);
   const [message, setMessage] = useState("");
   const [manualLink, setManualLink] = useState("");
+  useViewerScrollLock(selected !== null);
 
   useEffect(() => () => { if (displayUrl) URL.revokeObjectURL(displayUrl); }, [displayUrl]);
 
@@ -89,7 +92,7 @@ export default function SharedGallery() {
     setMessage(notice);
   }, []);
 
-  const fetchWithRetries = useCallback(async (url: string, signal?: AbortSignal, init: RequestInit = {}) => {
+  const fetchWithRetries = useCallback(async (url: string, signal?: AbortSignal, init: RequestInit = {}, preserveViewerOnFailure = false) => {
     const waits = [0, 2_000, 5_000, 15_000];
     let lastError: unknown;
     for (let attempt = 0; attempt < waits.length; attempt++) {
@@ -109,6 +112,7 @@ export default function SharedGallery() {
         lastError = error;
       }
     }
+    if (preserveViewerOnFailure) return null;
     setPaused(true);
     setMessage(lastError instanceof Error ? `${lastError.message} Podés reintentar cuando quieras.` : "No se pudo conectar. Podés reintentar cuando quieras.");
     selectedImageController.current?.abort();
@@ -186,7 +190,7 @@ export default function SharedGallery() {
         signal.addEventListener("abort", () => { window.clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
       });
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      const response = await fetchWithRetries(url, signal);
+      const response = await fetchWithRetries(url, signal, {}, true);
       // Pace from completion so request processing time cannot squeeze the
       // server's global 200 ms interval below its limit.
       lastImageRequestAt.current = Date.now();
@@ -231,7 +235,8 @@ export default function SharedGallery() {
     if (selected && !dialog.open) dialog.showModal();
     if (!selected && dialog.open) {
       dialog.close();
-      selectedOpener.current?.focus();
+      if (selectedOpener.current?.isConnected) selectedOpener.current.focus();
+      else document.querySelector<HTMLElement>(".publicGrid")?.focus();
       selectedOpener.current = null;
     }
   }, [selected]);
@@ -265,11 +270,15 @@ export default function SharedGallery() {
   }
 
   async function openDrawing(drawing: SharedDrawing, button: HTMLButtonElement) {
-    const generation = generationRef.current;
     selectedOpener.current = button;
+    await showDrawing(drawing);
+  }
+
+  async function showDrawing(drawing: SharedDrawing) {
+    const generation = generationRef.current;
     selectedImageController.current?.abort();
     if (displayUrl) URL.revokeObjectURL(displayUrl);
-    setSelected(drawing);
+    setSelected(drawing); setDisplayUrl(null); setDisplayFailed(false);
     const controller = new AbortController();
     selectedImageController.current = controller;
     activeRequests.current.add(controller);
@@ -277,7 +286,8 @@ export default function SharedGallery() {
       const url = await loadImage(drawing.displayUrl, controller.signal);
       if (url && !controller.signal.aborted && generation === generationRef.current) setDisplayUrl(url);
       else if (url) URL.revokeObjectURL(url);
-    } catch { if (!controller.signal.aborted) setMessage("No se pudo cargar el dibujo. Podés volver a intentarlo."); }
+      else if (!controller.signal.aborted && generation === generationRef.current) setDisplayFailed(true);
+    } catch { if (!controller.signal.aborted && generation === generationRef.current) setDisplayFailed(true); }
     finally { activeRequests.current.delete(controller); }
   }
 
@@ -286,29 +296,19 @@ export default function SharedGallery() {
     selectedImageController.current = null;
     setSelected(null);
     if (displayUrl) URL.revokeObjectURL(displayUrl);
-    setDisplayUrl(null);
+    setDisplayUrl(null); setDisplayFailed(false);
   }
 
   const moveSelection = async (direction: -1 | 1) => {
     if (!selected) return;
     const index = drawings.findIndex(drawing => drawing.id === selected.id);
+    if ((direction < 0 && index <= 0) || (direction > 0 && !nextCursor && index >= drawings.length - 1)) return;
     let next: SharedDrawing | undefined = drawings[index + direction] ?? undefined;
     if (!next && direction > 0 && nextCursor && shareId) {
       const page = await loadPage(shareId, nextCursor, true);
       next = page?.drawings[0] ?? undefined;
     }
-    if (next) {
-      const generation = generationRef.current;
-      selectedImageController.current?.abort();
-      if (displayUrl) URL.revokeObjectURL(displayUrl);
-      setSelected(next); setDisplayUrl(null);
-      const controller = new AbortController(); selectedImageController.current = controller;
-      void loadImage(next.displayUrl, controller.signal).then(url => {
-        if (!url) return;
-        if (!controller.signal.aborted && generation === generationRef.current) setDisplayUrl(url);
-        else URL.revokeObjectURL(url);
-      }).catch(() => undefined);
-    }
+    if (next) void showDrawing(next);
   };
 
   const expireNotice = expired;
@@ -335,23 +335,32 @@ export default function SharedGallery() {
       {paused && <section className={styles.pausedNotice} role="status"><p>La galería está pausada mientras comprobamos la conexión.</p><button type="button" className={styles.archive} onClick={() => void revalidate()}>Reintentar</button></section>}
       {expireNotice ? <p className={styles.empty}>Este enlace venció o fue revocado.</p> : <>
         {loading && <p className={styles.status} role="status">Cargando dibujos…</p>}
-        {!paused && <section className={styles.publicGrid} aria-label="Dibujos compartidos">
+        {!paused && <section className={styles.publicGrid} tabIndex={-1} data-gallery-focus-fallback aria-label="Dibujos compartidos">
           {drawings.map(drawing => <SharedDrawingCard key={drawing.id} drawing={drawing} load={loadImage} onOpen={button => void openDrawing(drawing, button)} />)}
         </section>}
         {nextCursor && <button type="button" className={styles.moreButton} disabled={loading || paused} onClick={() => shareId && void loadPage(shareId, nextCursor, true)}>Ver los siguientes dibujos</button>}
         {!loading && drawings.length === 0 && <p className={styles.empty}>No hay dibujos disponibles en este enlace.</p>}
       </>}
     </div>
-    <dialog ref={dialogRef} className={styles.dialog} aria-label="Dibujo compartido" onCancel={event => { event.preventDefault(); closeDrawing(); }} onKeyDown={event => {
-      if (event.key === "ArrowLeft") { event.preventDefault(); void moveSelection(-1); }
-      if (event.key === "ArrowRight") { event.preventDefault(); void moveSelection(1); }
+    <dialog ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-label="Dibujo compartido" onCancel={event => { event.preventDefault(); closeDrawing(); }} onKeyDown={event => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, [contenteditable='true']"))) return;
+      event.preventDefault();
+      void moveSelection(event.key === "ArrowLeft" ? -1 : 1);
     }} onClick={event => { if (event.target === dialogRef.current) closeDrawing(); }}>
       {selected && <div className={styles.detail}>
-        <button className={styles.close} type="button" onClick={closeDrawing} aria-label="Cerrar dibujo">×</button>
-        <button type="button" className={styles.viewerPrev} disabled={selected.position === drawings[0]?.position} onClick={() => moveSelection(-1)} aria-label="Dibujo anterior">‹</button>
-        {displayUrl ? <Image src={displayUrl} alt={`Dibujo ${selected.position + 1} de ${total}`} width={selected.width} height={selected.height} unoptimized /> : <span className={styles.skeleton} role="status" aria-label="Cargando dibujo" />}
-        <button type="button" className={styles.viewerNext} disabled={!nextCursor && selected.position === drawings.at(-1)?.position} onClick={() => moveSelection(1)} aria-label="Dibujo siguiente">›</button>
-        <p aria-live="polite">Dibujo {selected.position + 1} de {total}</p>
+        <div className={styles.viewerHeader}><button className={styles.close} type="button" onClick={closeDrawing} aria-label="Cerrar dibujo">×</button></div>
+        <div className={styles.viewerStage} data-testid="gallery-viewer-stage">
+          {displayUrl ? <Image src={displayUrl} alt={`Dibujo ${selected.position + 1} de ${total}`} width={selected.width} height={selected.height} unoptimized onError={() => { setDisplayUrl(null); setDisplayFailed(true); }} /> : displayFailed ? <div><p className={styles.viewerError} role="status">No se pudo cargar el dibujo.</p><button type="button" className={styles.archive} onClick={() => void showDrawing(selected)}>Reintentar carga</button></div> : <span className={styles.skeleton} role="status" aria-label="Cargando dibujo" />}
+        </div>
+        <div className={styles.viewerControls} data-testid="gallery-viewer-controls">
+          <button type="button" className={styles.viewerPrev} aria-disabled={selected.position === drawings[0]?.position} onClick={() => { if (selected.position !== drawings[0]?.position) void moveSelection(-1); }} aria-label="Dibujo anterior">‹</button>
+          <p aria-live="polite">Dibujo {selected.position + 1} de {total}</p>
+          <button type="button" className={styles.viewerNext} aria-disabled={!nextCursor && selected.position === drawings.at(-1)?.position} onClick={() => { if (nextCursor || selected.position !== drawings.at(-1)?.position) void moveSelection(1); }} aria-label="Dibujo siguiente">›</button>
+        </div>
+        <div className={styles.viewerActions} />
       </div>}
     </dialog>
   </main>;

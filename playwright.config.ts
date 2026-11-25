@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [
     { name: "iPhone viewport", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
     { name: "Android viewport", use: { ...devices["Pixel 7"], defaultBrowserType: "chromium" } },
-    { name: "WebKit iPhone viewport", testMatch: /library\.spec\.ts/, use: { ...devices["iPhone 13"], defaultBrowserType: "webkit" } },
+    { name: "WebKit iPhone viewport", testMatch: /(library|gallery-shared)\.spec\.ts/, use: { ...devices["iPhone 13"], defaultBrowserType: "webkit" } },
     { name: "Desktop Chromium", testMatch: /sports\.spec\.ts/, use: { viewport: { width: 1365, height: 900 }, defaultBrowserType: "chromium" } },
   ],
   webServer: {

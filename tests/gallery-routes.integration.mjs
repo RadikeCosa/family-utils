@@ -57,9 +57,9 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
     await pool.query("INSERT INTO member_devices(member_id,auth_user_id) VALUES($1,$2)", [member.id, session.user.id]);
     return { cookie, id: member.id };
   }
-  const request = async (person, path, method = "GET", body) => {
+  const request = async (person, path, method = "GET", body, ip = "192.0.2.240") => {
     const response = await fetch(`${origin}${path}`, { method, headers: {
-      Cookie: person?.cookie ?? "", Origin: origin, "x-real-ip": "192.0.2.240",
+      Cookie: person?.cookie ?? "", Origin: origin, "x-real-ip": ip,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     }, body: body === undefined ? undefined : JSON.stringify(body) });
     const json = await response.json().catch(() => null);
@@ -306,6 +306,63 @@ test("gallery routes gate access, preserve family/authorship rules, and revoke g
       throw error;
     } finally { revokeTransaction.release(); }
     await pool.query("DELETE FROM gallery_drawings WHERE id=ANY($1::uuid[])", [paginationDrawings]);
+
+    const archiveAdministrator = await identity(familyId, "Gallery administrator", "administrator");
+    const archiveTarget = await drawing(owner.id, "e".repeat(64));
+    const adminTarget = await drawing(other.id, "f".repeat(64));
+    const archiveCollectionResult = await request(owner, "/api/gallery/collections", "POST", { title: "Archive fixture", description: "Synthetic archive test" });
+    assert.equal(archiveCollectionResult.status, 201);
+    const archiveCollectionId = archiveCollectionResult.body.collection.id;
+    assert.equal((await request(owner, `/api/gallery/collections/${archiveCollectionId}/drawings`, "POST", { action: "add", drawingIds: [archiveTarget] })).status, 200);
+    const archiveInvitation = await request(owner, `/api/gallery/collections/${archiveCollectionId}/invitations`, "POST", {}, "198.51.100.41");
+    assert.equal(archiveInvitation.status, 201);
+    const archiveGuestToken = new URLSearchParams(new URL(archiveInvitation.body.url).hash.slice(1)).get("token");
+    const archiveGuestEntry = await request(null, "/api/gallery/guest/redeem", "POST", { token: archiveGuestToken }, "198.51.100.41");
+    assert.equal(archiveGuestEntry.status, 200);
+    const archiveGuestCookie = archiveGuestEntry.response.headers.getSetCookie().find(value => value.startsWith("fu_gallery_guest="))?.split(";", 1)[0];
+    assert.ok(archiveGuestCookie);
+    const archiveGuest = { cookie: archiveGuestCookie };
+    await delay(250);
+    assert.equal((await request(archiveGuest, "/api/gallery/guest/collection", "GET", undefined, "198.51.100.41")).body.drawings.length, 1);
+    const oldShare = await request(owner, "/api/gallery/shares", "POST", { collectionId: archiveCollectionId, duration: "1h" }, "198.51.100.41");
+    assert.equal(oldShare.status, 201);
+    const oldShareToken = new URLSearchParams(new URL(oldShare.body.url).hash.slice(1)).get("token");
+    const oldShareEntry = await request(null, "/api/gallery/public/enter", "POST", { token: oldShareToken }, "198.51.100.41");
+    assert.equal(oldShareEntry.status, 200);
+    const oldShareCookie = oldShareEntry.response.headers.getSetCookie().find(value => value.startsWith(`fu_gallery_session_dev_${oldShare.body.id}=`))?.split(";", 1)[0];
+    assert.ok(oldShareCookie);
+    const oldShareGuest = { cookie: oldShareCookie };
+    await delay(250);
+    assert.equal((await request(oldShareGuest, `/api/gallery/public/shares/${oldShare.body.id}`, "GET", undefined, "198.51.100.41")).body.drawings.length, 1);
+
+    assert.equal((await request(null, `/api/gallery/drawings/${archiveTarget}`, "PATCH", { archived: true })).status, 401, "anonymous users cannot archive drawings");
+    assert.equal((await request(other, `/api/gallery/drawings/${archiveTarget}`, "PATCH", { archived: true })).status, 404, "another family member cannot archive someone else's drawing");
+    assert.equal((await request(outsider, `/api/gallery/drawings/${archiveTarget}`, "PATCH", { archived: true })).status, 404, "another family cannot archive this drawing");
+    assert.equal((await request(archiveGuest, `/api/gallery/drawings/${archiveTarget}`, "PATCH", { archived: true })).status, 401, "an invited viewer cannot archive a drawing");
+    assert.equal((await request(archiveAdministrator, `/api/gallery/drawings/${adminTarget}`, "PATCH", { archived: true })).status, 200, "an administrator can archive a family drawing");
+    assert.equal((await request(owner, `/api/gallery/drawings/${archiveTarget}`, "PATCH", { archived: true })).status, 200, "the author can archive the drawing");
+    assert.equal((await request(owner, `/api/gallery/drawings/${archiveTarget}`, "PATCH", { archived: true })).status, 409, "repeating an archive request reports the existing archived state");
+    assert.equal((await request(owner, `/api/gallery/drawings/${archiveTarget}?variant=display`)).status, 404, "the authenticated image route no longer serves an archived drawing");
+    assert.equal((await request(owner, "/api/gallery")).body.items.some(item => item.id === archiveTarget), false);
+    assert.equal((await request(owner, `/api/gallery/collections/${archiveCollectionId}`)).body.drawings.length, 0);
+    assert.equal((await request(owner, "/api/gallery/collections")).body.collections.find(item => item.id === archiveCollectionId).drawingCount, 0);
+    await delay(250);
+    assert.equal((await request(archiveGuest, "/api/gallery/guest/collection", "GET", undefined, "198.51.100.41")).body.drawings.length, 0, "an existing invitation no longer exposes an archived drawing");
+    await delay(250);
+    assert.equal((await request(archiveGuest, `/api/gallery/guest/images/${archiveTarget}?variant=display`, "GET", undefined, "198.51.100.41")).status, 404, "the invited image URL stops serving the archived drawing");
+    await delay(250);
+    assert.equal((await request(oldShareGuest, `/api/gallery/public/shares/${oldShare.body.id}`, "GET", undefined, "198.51.100.41")).body.drawings.length, 0, "an existing timed share no longer lists the archived drawing");
+    await delay(250);
+    assert.equal((await request(oldShareGuest, `/api/gallery/public/shares/${oldShare.body.id}/images/${archiveTarget}?variant=display`, "GET", undefined, "198.51.100.41")).status, 410, "a previously shared image URL is unavailable after archival");
+    await delay(250);
+    const newShare = await request(owner, "/api/gallery/shares", "POST", { duration: "1h" }, "198.51.100.41");
+    assert.equal(newShare.status, 201);
+    const newShareToken = new URLSearchParams(new URL(newShare.body.url).hash.slice(1)).get("token");
+    const newShareEntry = await request(null, "/api/gallery/public/enter", "POST", { token: newShareToken }, "198.51.100.41");
+    assert.equal(newShareEntry.status, 200);
+    const newShareCookie = newShareEntry.response.headers.getSetCookie().find(value => value.startsWith(`fu_gallery_session_dev_${newShare.body.id}=`))?.split(";", 1)[0];
+    await delay(250);
+    assert.equal((await request({ cookie: newShareCookie }, `/api/gallery/public/shares/${newShare.body.id}`, "GET", undefined, "198.51.100.41")).body.drawings.some(item => item.id === archiveTarget), false, "a new family share excludes an archived drawing");
   } finally {
     server.kill();
     if (families.length) await pool.query("DELETE FROM families WHERE id=ANY($1::uuid[])", [families]);
