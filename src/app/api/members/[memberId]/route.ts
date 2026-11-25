@@ -1,8 +1,9 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { accessCodes, auditEvents, authAccount, authSession, authUser, families, memberDevices, members } from "@/db/schema";
+import { accessCodes, auditEvents, authAccount, authSession, authUser, families, galleryGuestSessions, galleryInvitations, galleryShareSessions, galleryShares, memberDevices, members } from "@/db/schema";
 import { getMemberContext } from "@/lib/auth/context";
+import { galleryNow } from "@/lib/gallery/clock";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ memberId: string }> };
@@ -70,7 +71,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       const name = typeof input.name === "string" ? input.name.trim() : target.name;
       if (!name || name.length > 100) return { kind: "invalid-name" as const };
-      const now = new Date();
+      const now = galleryNow();
       const [updated] = await tx.update(members).set({
         name,
         role,
@@ -103,7 +104,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion !== target.version) return { kind: "conflict" as const };
     if (action === "archive" && target.role === "administrator" && (recoverableAdminIds.size === 0 || (recoverableAdminIds.has(target.id) && recoverableAdminIds.size <= 1))) return { kind: "last-admin" as const };
 
-    const now = new Date();
+    const now = galleryNow();
     const [updated] = await tx.update(members)
       .set({ archivedAt: action === "archive" ? now : null, version: target.version + 1, updatedAt: now })
       .where(and(eq(members.id, memberId), eq(members.familyId, actor.familyId), eq(members.version, target.version)))
@@ -119,6 +120,28 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
       await tx.update(accessCodes).set({ revokedAt: now })
         .where(and(eq(accessCodes.memberId, memberId), isNull(accessCodes.consumedAt), isNull(accessCodes.revokedAt)));
+      const shares = await tx.select({ id: galleryShares.id, collectionId: galleryShares.collectionId, familyId: galleryShares.familyId }).from(galleryShares).where(and(
+        eq(galleryShares.familyId, actor.familyId), isNull(galleryShares.revokedAt),
+        or(eq(galleryShares.createdByMemberId, memberId), eq(galleryShares.collectionOwnerMemberId, memberId)),
+      ));
+      if (shares.length) {
+        const shareIds = shares.map(share => share.id);
+        await tx.update(galleryShares).set({ revokedAt: now }).where(inArray(galleryShares.id, shareIds));
+        await tx.update(galleryShareSessions).set({ revokedAt: now }).where(and(inArray(galleryShareSessions.shareId, shareIds), isNull(galleryShareSessions.revokedAt)));
+        for (const share of shares) await tx.insert(auditEvents).values({
+          familyId: share.familyId, actorMemberId: actor.memberId, entityType: "gallery_share", entityId: share.id,
+          action: "revoked", after: { scope: share.collectionId ? "collection" : "gallery", reason: "creator_archived" },
+        });
+      }
+      const invitations = await tx.select({ id: galleryInvitations.id }).from(galleryInvitations).where(and(
+        eq(galleryInvitations.familyId, actor.familyId), isNull(galleryInvitations.revokedAt),
+        or(eq(galleryInvitations.createdByMemberId, memberId), eq(galleryInvitations.ownerMemberId, memberId)),
+      ));
+      if (invitations.length) {
+        const invitationIds = invitations.map(invitation => invitation.id);
+        await tx.update(galleryInvitations).set({ revokedAt: now }).where(inArray(galleryInvitations.id, invitationIds));
+        await tx.update(galleryGuestSessions).set({ revokedAt: now }).where(and(inArray(galleryGuestSessions.invitationId, invitationIds), isNull(galleryGuestSessions.revokedAt)));
+      }
     }
 
     await tx.insert(auditEvents).values({

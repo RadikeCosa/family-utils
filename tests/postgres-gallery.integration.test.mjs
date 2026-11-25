@@ -15,6 +15,17 @@ async function expectSqlFailure(client, query, params, code) {
   await client.query(`RELEASE SAVEPOINT ${savepoint}`);
 }
 
+async function ensureTimedShareSchema(client, migration) {
+  const { rows: [row] } = await client.query(`
+    SELECT count(*)::int AS count
+    FROM information_schema.tables
+    WHERE table_schema='public'
+      AND table_name = ANY(ARRAY['gallery_shares','gallery_share_drawings','gallery_share_sessions'])
+  `);
+  if (row.count === 0) await client.query(migration);
+  else assert.equal(row.count, 3, "timed-share tables must be created together");
+}
+
 test("gallery schema isolates authorship, family rows, hashes, and private invitation credentials", { skip: !connectionString, timeout: 30_000 }, async () => {
   const client = new pg.Client({ connectionString });
   await client.connect();
@@ -55,7 +66,7 @@ test("gallery schema isolates authorship, family rows, hashes, and private invit
   }
 });
 
-test("gallery tables are readable by the encrypted-backup role", { skip: !connectionString, timeout: 30_000 }, async () => {
+test("all gallery tables are readable by the encrypted-backup role", { skip: !connectionString, timeout: 30_000 }, async () => {
   const client = new pg.Client({ connectionString });
   await client.connect();
   try {
@@ -63,13 +74,62 @@ test("gallery tables are readable by the encrypted-backup role", { skip: !connec
     const exists = (await client.query("SELECT 1 FROM pg_roles WHERE rolname='family_utils_backup_reader'")).rowCount > 0;
     if (!exists) await client.query("CREATE ROLE family_utils_backup_reader");
     const migration = await readFile(new URL("../drizzle/0070_gallery_backup_reader.sql", import.meta.url), "utf8");
+    const timedSharesMigration = await readFile(new URL("../drizzle/0071_gallery_timed_shares.sql", import.meta.url), "utf8");
     await client.query(migration);
+    await ensureTimedShareSchema(client, timedSharesMigration);
+    await client.query(timedSharesMigration.slice(timedSharesMigration.lastIndexOf("DO $$")));
     const privileges = await client.query(`
       SELECT table_name, has_table_privilege('family_utils_backup_reader', format('public.%I', table_name), 'SELECT') AS can_read
-      FROM unnest(ARRAY['gallery_drawings','gallery_collections','gallery_collection_drawings','gallery_invitations','gallery_guest_sessions']) AS table_name
+      FROM unnest(ARRAY['gallery_drawings','gallery_collections','gallery_collection_drawings','gallery_invitations','gallery_guest_sessions','gallery_shares','gallery_share_drawings','gallery_share_sessions','audit_events']) AS table_name
     `);
-    assert.equal(privileges.rowCount, 5);
+    assert.equal(privileges.rowCount, 9);
     assert.ok(privileges.rows.every(row => row.can_read), "backup role must read every Gallery table");
+  } finally {
+    await client.query("ROLLBACK");
+    await client.end();
+  }
+});
+
+test("timed shares enforce family scoped snapshots and sessions", { skip: !connectionString, timeout: 30_000 }, async () => {
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    await client.query("BEGIN");
+    const migration = await readFile(new URL("../drizzle/0071_gallery_timed_shares.sql", import.meta.url), "utf8");
+    await ensureTimedShareSchema(client, migration);
+    const familyId = (await client.query("INSERT INTO families(name) VALUES('Timed share fixture') RETURNING id")).rows[0].id;
+    const otherFamilyId = (await client.query("INSERT INTO families(name) VALUES('Other timed share fixture') RETURNING id")).rows[0].id;
+    const memberId = (await client.query("INSERT INTO members(family_id,name) VALUES($1,'Share author') RETURNING id", [familyId])).rows[0].id;
+    const otherMemberId = (await client.query("INSERT INTO members(family_id,name) VALUES($1,'Outside member') RETURNING id", [otherFamilyId])).rows[0].id;
+    const drawingId = (await client.query(
+      "INSERT INTO gallery_drawings(family_id,author_member_id,original_name,original_sha256,original_bytes,source_mime_type) VALUES($1,$2,'fake.png',$3,100,'image/png') RETURNING id",
+      [familyId, memberId, "f".repeat(64)],
+    )).rows[0].id;
+    const otherDrawingId = (await client.query(
+      "INSERT INTO gallery_drawings(family_id,author_member_id,original_name,original_sha256,original_bytes,source_mime_type) VALUES($1,$2,'other-fake.png',$3,100,'image/png') RETURNING id",
+      [otherFamilyId, otherMemberId, "9".repeat(64)],
+    )).rows[0].id;
+    const shareId = (await client.query(
+      "INSERT INTO gallery_shares(family_id,created_by_member_id,token_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour') RETURNING id",
+      [familyId, memberId, "1".repeat(64)],
+    )).rows[0].id;
+    await client.query(
+      "INSERT INTO gallery_share_drawings(share_id,family_id,author_member_id,drawing_id,position) VALUES($1,$2,$3,$4,0)",
+      [shareId, familyId, memberId, drawingId],
+    );
+    await client.query(
+      "INSERT INTO gallery_share_sessions(family_id,share_id,session_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",
+      [familyId, shareId, "2".repeat(64)],
+    );
+    await expectSqlFailure(client,
+      "INSERT INTO gallery_share_drawings(share_id,family_id,author_member_id,drawing_id,position) VALUES($1,$2,$3,$4,1)",
+      [shareId, otherFamilyId, otherMemberId, otherDrawingId], "23503");
+    await expectSqlFailure(client,
+      "INSERT INTO gallery_share_sessions(family_id,share_id,session_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",
+      [otherFamilyId, shareId, "3".repeat(64)], "23503");
+    await client.query("DELETE FROM gallery_shares WHERE id=$1", [shareId]);
+    assert.equal((await client.query("SELECT 1 FROM gallery_share_drawings WHERE share_id=$1", [shareId])).rowCount, 0);
+    assert.equal((await client.query("SELECT 1 FROM gallery_share_sessions WHERE share_id=$1", [shareId])).rowCount, 0);
   } finally {
     await client.query("ROLLBACK");
     await client.end();

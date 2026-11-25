@@ -428,6 +428,13 @@
       "when": 1795539423830,
       "tag": "0070_gallery_backup_reader",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795563136458,
+      "tag": "0071_gallery_timed_shares",
+      "breakpoints": true
     }
   ]
 }
